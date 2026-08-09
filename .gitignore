@@ -1,0 +1,70 @@
+# Binaries
+bin/
+tmp/
+
+# Go build
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# IDE
+.vscode/
+.idea/
+
+# Dependencies
+vendor/
+
+# nodejs
+node_modules/
+
+# Mac
+.DS_Store
+
+# Terraform generated files and directories
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+crash.log
+terraform.tfstate
+terraform.tfstate.backup
+terraform.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.tfplan
+
+# Variables de entorno con credenciales
+.env.local
+.env.*.local
+services/**/.env
+
+# Claves SSH
+*.pem
+*.key
+!*.pub
+
+# Variables de entorno
+configs/.env.*
+!configs/.env.example
+
+# Auto-generados por scripts
+infra/aws/environments/*_env.auto.tfvars
+infra/aws/*_env.auto.tfvars
+
+# IA
+CLAUDE.md
+.claude/*
+.claude/
+.claude
+GEMINI.md
+
+**/**/.serverless-artifacts
+**/**/.serverless
+
+.history

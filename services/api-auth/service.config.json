@@ -1,0 +1,17 @@
+{
+  "name": "api-auth",
+  "localPort": 8080,
+  "localEntrypoint": "./cmd/local-api",
+  "defaultArtifactDir": ".serverless-artifacts",
+  "requiredEnvironment": [
+    "APP_NAME",
+    "APP_STAGE",
+    "APP_REGION"
+  ],
+  "functions": [
+    {
+      "name": "hello-world-v1",
+      "entrypoint": "./cmd/fn-hello-world-v1"
+    }
+  ]
+}
