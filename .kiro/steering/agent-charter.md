@@ -10,8 +10,8 @@ description: Reglas de rol, idioma y seguridad para agentes IA
 ## Contexto
 
 - **Producto**: Indomito Hub — plataforma de gestion de giras, artistas y eventos musicales
-- **Arquitectura**: multi-repo con orquestador centralizado (`orc-hub-gh`)
-- **Repos**: `app-ngx-gh` (Angular), `api-gox-gh` (Go servicios), `ifr-sls-gh` (infra AWS)
+- **Arquitectura**: multi-repo con orquestador centralizado (`orchestrator`)
+- **Repos**: `application` (Angular), `services` (Go servicios), `infrastructure` (infra AWS)
 
 ## Comportamiento
 
@@ -41,6 +41,6 @@ description: Reglas de rol, idioma y seguridad para agentes IA
 
 | Repo       | Modulo referencia   | Paradigma             |
 | ---------- | ------------------- | --------------------- |
-| app-ngx-gh | (por definir)       | Stores, servicios     |
-| api-gox-gh | services/api-auth/  | Endpoint-per-function |
-| ifr-sls-gh | ddb/, s3/, common/  | Modulos Serverless    |
+| application | (por definir)       | Stores, servicios     |
+| services | services/api-auth/  | Endpoint-per-function |
+| infrastructure | ddb/, s3/, common/  | Modulos Serverless    |

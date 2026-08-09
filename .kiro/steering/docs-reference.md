@@ -8,7 +8,7 @@ description: Referencias de documentacion oficial de los stacks del proyecto
 > Links y versiones oficiales de cada stack. Usar como punto de partida para busquedas web.
 > Inclusion manual: cargar con `#docs-reference` cuando se necesite consultar documentacion.
 
-## Frontend (app-ngx-gh)
+## Frontend (application)
 
 | Libreria            | Version | Documentacion oficial                     |
 | ------------------- | ------- | ----------------------------------------- |
@@ -20,10 +20,10 @@ description: Referencias de documentacion oficial de los stacks del proyecto
 | RxJS                | 7.x     | https://rxjs.dev                          |
 | TypeScript          | 5.x     | https://www.typescriptlang.org/docs       |
 
-## Backend Servicios (api-gox-gh)
+## Backend Servicios (services)
 
 | Libreria             | Version | Documentacion oficial                      |
-| -------------------- | ------- | ------------------------------------------ |
+| ----------------------| ---------| --------------------------------------------|
 | Go                   | 1.25    | https://pkg.go.dev/std                     |
 | Echo                 | v4      | https://echo.labstack.com/docs             |
 | AWS SDK Go v2        | latest  | https://aws.github.io/aws-sdk-go-v2/docs   |

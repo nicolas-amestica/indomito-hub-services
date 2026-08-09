@@ -24,12 +24,12 @@ tipo(scope): descripcion breve en espanol sin tildes (ISSUE-ID)
 
 ### Scopes
 
-| Repo       | Scopes                                                                       |
-| ---------- | ---------------------------------------------------------------------------- |
-| ifr-sls-gh | `ddb`, `s3`, `sqs`, `ssm`, `cdn`, `config`, `deps`                          |
-| app-ngx-gh | `giras`, `artistas`, `eventos`, `auth`, `shared`, `layout`, `config`, `deps` |
-| api-gox-gh | `giras`, `artistas`, `eventos`, `auth`, `config`, `storage`, `infra`, `deps` |
-| orc-hub-gh | `docs`, `tools`, `steering`, `workspace`, `config`                           |
+| Repo           | Scopes                                                                       |
+| ----------------| ------------------------------------------------------------------------------|
+| infrastructure | `ddb`, `s3`, `sqs`, `ssm`, `cdn`, `config`, `deps`                           |
+| application    | `giras`, `artistas`, `eventos`, `auth`, `shared`, `layout`, `config`, `deps` |
+| services       | `giras`, `artistas`, `eventos`, `auth`, `config`, `storage`, `infra`, `deps` |
+| orchestrator   | `docs`, `tools`, `steering`, `workspace`, `config`                           |
 
 ### Ejemplo
 
