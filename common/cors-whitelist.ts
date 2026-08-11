@@ -11,12 +11,6 @@ export const CORS_WHITELIST: Record<Environment, string[]> = {
     'http://localhost:4200',
     'http://localhost:3000',
   ],
-  qa: [
-    'https://app.qa.indomitohub.cl',
-    'https://api.qa.indomitohub.cl',
-    'http://localhost:4200',
-    'http://localhost:3000',
-  ],
   prd: [
     'https://app.indomitohub.cl',
     'https://api.indomitohub.cl',

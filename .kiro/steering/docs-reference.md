@@ -13,7 +13,7 @@ description: Referencias de documentacion oficial de los stacks del proyecto
 | Libreria            | Version | Documentacion oficial                     |
 | ------------------- | ------- | ----------------------------------------- |
 | Angular             | 21.x    | https://angular.dev                       |
-| @ngrx/signals       | 19.x    | https://ngrx.io/guide/signals             |
+| @ngrx/signals       | 21.x    | https://ngrx.io/guide/signals             |
 | PrimeNG             | ^21.1.1 | https://primeng.org                       |
 | TailwindCSS         | 4.x     | https://tailwindcss.com/docs              |
 | tailwindcss-primeui | —       | https://github.com/primefaces/tailwindcss-primeui |
@@ -39,7 +39,6 @@ description: Referencias de documentacion oficial de los stacks del proyecto
 | API Gateway         | https://docs.aws.amazon.com/apigateway                   |
 | DynamoDB            | https://docs.aws.amazon.com/amazondynamodb               |
 | S3                  | https://docs.aws.amazon.com/s3                           |
-| SES                 | https://docs.aws.amazon.com/ses                          |
 | SSM Parameter Store | https://docs.aws.amazon.com/systems-manager/latest/userguide |
 
 ## Notas de Uso

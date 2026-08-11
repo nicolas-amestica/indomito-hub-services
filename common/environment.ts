@@ -1,7 +1,6 @@
-export type Environment = 'dev' | 'qa' | 'prd';
+export type Environment = 'dev' | 'prd';
 
 export const ENVIRONMENTS = {
-  qa: 'qa',
   prd: 'prd',
   dev: 'dev',
 };

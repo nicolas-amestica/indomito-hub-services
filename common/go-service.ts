@@ -4,7 +4,7 @@ import { buildResourceTags } from './aws-service-tags';
 import { HTTP_API_AUTHORIZER } from './lambda-authorizer';
 
 /**
- * Evento personalizado para una función Lambda (EventBridge, SQS, DynamoDB Stream, etc.).
+ * Evento personalizado para una función Lambda (EventBridge, DynamoDB Stream, etc.).
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type GoFunctionEvent = Record<string, any>;

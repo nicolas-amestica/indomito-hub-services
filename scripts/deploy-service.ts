@@ -3,7 +3,6 @@ import { resolve } from 'node:path';
 
 const AWS_PROFILES: Record<string, string> = {
   dev: 'pa-dev',
-  qa: 'pa-qa',
   prd: 'pa-prd',
 };
 

@@ -15,10 +15,6 @@ export const RATE_LIMITS: Record<Environment, RateLimitConfig> = {
     maxRequestsPerSecond: 10,
     burstLimit: 20,
   },
-  qa: {
-    maxRequestsPerSecond: 10,
-    burstLimit: 20,
-  },
   prd: {
     maxRequestsPerSecond: 100,
     burstLimit: 400,
