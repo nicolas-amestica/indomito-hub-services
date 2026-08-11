@@ -62,6 +62,8 @@ function getCmdFnDirectories(servicePath: string): string[] {
     });
 }
 
+async function main() {
+
 const servicePath = resolve(getArg('service'));
 const stage = getArg('stage', 'dev');
 const region = getArg('region', 'us-east-1');
@@ -223,3 +225,7 @@ if (errors.length > 0) {
 }
 
 console.log(`✓ Validación correcta para ${serviceConfig.name} (14 checks), stage=${stage}, region=${region}`);
+
+}
+
+main();
