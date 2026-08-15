@@ -1,5 +1,5 @@
 import type { AWS } from '@serverless/typescript';
-import { CORS_ORIGINS, RATE_LIMIT, REGION, REGION_CODE, STAGE } from './custom-parameters';
+import { CORS_ORIGINS, DEPLOYMENT_BUCKET, RATE_LIMIT, REGION, REGION_CODE, STAGE } from './custom-parameters';
 import { buildResourceTags } from './aws-service-tags';
 import { HTTP_API_AUTHORIZER } from './lambda-authorizer';
 
@@ -76,7 +76,6 @@ const httpApiAccessLogFormat = JSON.stringify({
  */
 export function buildGoServiceServerless(service: string, endpoints: GoHttpEndpoint[], extraEnv?: Record<string, string>): AWS {
   const tags = buildResourceTags(service);
-  const deploymentBucket = `ind-hub-${STAGE}-deploys-s3-${STAGE}-pri-${REGION_CODE}`;
 
   const functions = Object.fromEntries(
     endpoints.map(endpoint => {
@@ -128,7 +127,7 @@ export function buildGoServiceServerless(service: string, endpoints: GoHttpEndpo
       logRetentionInDays: 90,
       tags,
       stackTags: tags,
-      deploymentBucket: { name: deploymentBucket },
+      deploymentBucket: { name: DEPLOYMENT_BUCKET },
       tracing: {
         lambda: true,
       },

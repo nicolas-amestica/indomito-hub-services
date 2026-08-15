@@ -1,0 +1,15 @@
+{
+  "name": "iam-auth",
+  "defaultArtifactDir": ".serverless-artifacts",
+  "requiredEnvironment": [
+    "APP_NAME",
+    "APP_STAGE",
+    "APP_REGION"
+  ],
+  "functions": [
+    {
+      "name": "authorize-v1",
+      "entrypoint": "./cmd/fn-authorize-v1"
+    }
+  ]
+}
