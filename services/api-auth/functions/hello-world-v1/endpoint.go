@@ -12,8 +12,11 @@ import (
 )
 
 // Register registers the local Echo route for this endpoint.
+// Debe coincidir con el path declarado en serverless.ts para este endpoint
+// (ver `endpoints` en services/api-auth/serverless.ts) — de lo contrario el
+// servidor local (RunLocal) y el despliegue real en AWS quedan desincronizados.
 func Register(e *echo.Echo, _ *zap.Logger) {
-	e.POST("/v1/autenticacion/hello", echoHandler)
+	e.POST("/v1/autenticacion/iniciar-sesion", echoHandler)
 }
 
 // echoHandler adapts the Lambda handler into an Echo handler for local dev.

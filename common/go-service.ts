@@ -1,7 +1,19 @@
 import type { AWS } from '@serverless/typescript';
-import { CORS_ORIGINS, DEPLOYMENT_BUCKET, RATE_LIMIT, REGION, REGION_CODE, STAGE } from './custom-parameters';
+import { DEPLOYMENT_BUCKET, REGION, STAGE } from './custom-parameters';
 import { buildResourceTags } from './aws-service-tags';
-import { HTTP_API_AUTHORIZER } from './lambda-authorizer';
+
+/**
+ * ID y Authorizer ID del HTTP API Gateway compartido, desplegado en
+ * ind-hub-inf-aws-sls-pri-gh (modulo `api-gateway/`). Todos los microservicios
+ * Go registran sus rutas en este mismo Gateway — no crean uno propio — para
+ * exponer un solo dominio (api.dev.girasindomito.cl / api.girasindomito.cl)
+ * sin prefijo de servicio en los paths (ver docs/standards/global/api-design.md).
+ *
+ * Orden de despliegue: iam-auth (este repo) → api-gateway (infra) → resto de
+ * microservicios (este repo). Ver comentario en infra/api-gateway/serverless.ts.
+ */
+const SHARED_HTTP_API_ID = `\${cf:indomito-hub-infra-api-gateway-${STAGE}.HttpApiId}`;
+const SHARED_HTTP_API_AUTHORIZER_ID = `\${cf:indomito-hub-infra-api-gateway-${STAGE}.HttpApiAuthorizerId}`;
 
 /**
  * Evento personalizado para una función Lambda (EventBridge, DynamoDB Stream, etc.).
@@ -30,48 +42,17 @@ export type GoHttpEndpoint = {
 };
 
 /**
- * Configuración global de CORS para HTTP API Gateway v2.
- */
-const httpApiCorsConfig = {
-  allowedOrigins: CORS_ORIGINS,
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id', 'X-Correlation-Id'],
-  allowedMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowCredentials: true,
-  maxAge: 86400,
-};
-
-/**
- * Formato JSON para access logs de API Gateway HTTP API.
- */
-const httpApiAccessLogFormat = JSON.stringify({
-  requestId: '$context.requestId',
-  routeKey: '$context.routeKey',
-  status: '$context.status',
-  httpMethod: '$context.httpMethod',
-  path: '$context.path',
-  protocol: '$context.protocol',
-  responseLength: '$context.responseLength',
-  responseLatency: '$context.responseLatency',
-  integrationStatus: '$context.integrationStatus',
-  integrationLatency: '$context.integrationLatency',
-  integrationErrorMessage: '$context.integrationErrorMessage',
-  ip: '$context.identity.sourceIp',
-  userAgent: '$context.identity.userAgent',
-  requestTime: '$context.requestTime',
-});
-
-/**
  * Genera la configuración de Serverless Framework para un microservicio en Go.
  *
  * Arquitectura:
  * - AWS Lambda con runtime provided.al2023.
- * - API Gateway HTTP API v2.
- * - URL por defecto de AWS (sin custom domain por ahora).
- * - CORS restrictivo.
+ * - Registra sus rutas en el HTTP API Gateway v2 COMPARTIDO (ver
+ *   ind-hub-inf-aws-sls-pri-gh/api-gateway/) — no crea un Gateway propio.
+ *   CORS, throttling, dominio personalizado y el Lambda Authorizer viven
+ *   en ese stack compartido, no aquí (API Gateway externo no permite
+ *   configurarlos por servicio — ver EXTERNAL_HTTP_API_CORS_CONFIG /
+ *   EXTERNAL_HTTP_API_AUTHORIZERS_CONFIG en la documentación de Serverless).
  * - X-Ray en Lambda.
- * - Métricas detalladas en API Gateway.
- * - Throttling global del stage.
- * - Access logs de API Gateway.
  * - Región: us-east-1 (Norte de Virginia).
  */
 export function buildGoServiceServerless(service: string, endpoints: GoHttpEndpoint[], extraEnv?: Record<string, string>): AWS {
@@ -80,7 +61,7 @@ export function buildGoServiceServerless(service: string, endpoints: GoHttpEndpo
   const functions = Object.fromEntries(
     endpoints.map(endpoint => {
       const httpApiEvent = endpoint.method && endpoint.path
-        ? { method: endpoint.method, path: endpoint.path, ...(!endpoint.public && { authorizer: { name: 'iamAuth' } }) }
+        ? { method: endpoint.method, path: endpoint.path, ...(!endpoint.public && { authorizer: { id: SHARED_HTTP_API_AUTHORIZER_ID } }) }
         : null;
       const defaultEvents: GoFunctionEvent[] = httpApiEvent ? [{ httpApi: httpApiEvent }] : [];
 
@@ -132,10 +113,7 @@ export function buildGoServiceServerless(service: string, endpoints: GoHttpEndpo
         lambda: true,
       },
       httpApi: {
-        metrics: true,
-        cors: httpApiCorsConfig,
-        useProviderTags: true,
-        authorizers: HTTP_API_AUTHORIZER,
+        id: SHARED_HTTP_API_ID,
       },
       environment: {
         APP_NAME: service,
@@ -145,40 +123,9 @@ export function buildGoServiceServerless(service: string, endpoints: GoHttpEndpo
         LOG_LEVEL: '${env:LOG_LEVEL, "info"}',
         PORT: '${env:PORT, "8080"}',
         AWS_XRAY_CONTEXT_MISSING: 'LOG_ERROR',
-        CORS_ORIGINS: CORS_ORIGINS.find(origin => !origin.includes('localhost')) ?? CORS_ORIGINS[0] ?? '',
         ...extraEnv
       }
     },
     functions,
-
-    resources: {
-      extensions: {
-        HttpApiStage: {
-          Properties: {
-            DefaultRouteSettings: {
-              DetailedMetricsEnabled: true,
-              ThrottlingBurstLimit: RATE_LIMIT.burstLimit,
-              ThrottlingRateLimit: RATE_LIMIT.maxRequestsPerSecond,
-            },
-            AccessLogSettings: {
-              DestinationArn: {
-                'Fn::GetAtt': ['HttpApiAccessLogGroup', 'Arn'],
-              },
-              Format: httpApiAccessLogFormat,
-            },
-          },
-        },
-      },
-      Resources: {
-        HttpApiAccessLogGroup: {
-          Type: 'AWS::Logs::LogGroup',
-          Properties: {
-            LogGroupName: `/aws/apigateway/${service}-${STAGE}`,
-            RetentionInDays: 90,
-            Tags: tags,
-          },
-        },
-      },
-    } as AWS['resources'],
   };
 }

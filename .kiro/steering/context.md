@@ -7,7 +7,7 @@ description: Stack, paradigma endpoint-per-function y reglas criticas del backen
 
 - **Stack**: Go 1.25, Echo v4, DynamoDB, Serverless Framework v4, Lambda ZIP ARM64
 - **Arquitectura**: Multi-servicio con Go workspace (`go.work`). Cada servicio es un modulo Go independiente.
-- **Responsabilidad**: API de autenticacion, giras, artistas, eventos
+- **Responsabilidad**: API de autenticacion, viajes, pasajeros, cotizaciones, contratos, destinos
 - **Patron referencia**: `services/api-auth/`
 
 ## Paradigma: Endpoint-per-Function
