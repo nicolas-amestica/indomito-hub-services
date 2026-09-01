@@ -142,10 +142,23 @@ export function buildGoServiceServerless(service: string, endpoints: GoHttpEndpo
       stage: STAGE,
       timeout: 6,
       memorySize: 128,
-      logRetentionInDays: 90,
+      // 14 dias: la ingesta y el almacenamiento de CloudWatch Logs se cobran por
+      // GB. Dos semanas cubren el diagnostico de incidentes recientes, que es
+      // para lo que se usan estos logs.
+      logRetentionInDays: 14,
+      // Sin versiones publicadas de Lambda. No usamos alias, despliegues canary
+      // ni concurrencia provisionada, asi que cada version publicada solo
+      // acumula una copia inmutable del paquete y consume la cuota de 75 GB de
+      // almacenamiento de codigo por region. El rollback sigue disponible via
+      // los artefactos del bucket de deploys.
+      versionFunctions: false,
       tags,
       stackTags: tags,
-      deploymentBucket: { name: DEPLOYMENT_BUCKET },
+      deploymentBucket: {
+        name: DEPLOYMENT_BUCKET,
+        // Poda los directorios de despliegues antiguos en cada deploy.
+        maxPreviousDeploymentArtifacts: 3,
+      },
       tracing: {
         lambda: true,
       },
