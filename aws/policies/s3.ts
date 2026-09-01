@@ -1,4 +1,4 @@
-import type { IamStatement } from './types';
+import type { IamStatement } from './types.js';
 
 /**
  * Grants PutObject, GetObject, and DeleteObject on an S3 bucket path.

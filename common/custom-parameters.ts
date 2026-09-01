@@ -1,5 +1,5 @@
-import { REGION_CODES, REGIONS_ALLOWED, SELECTED_REGION } from './aws-regions-allowed';
-import { type Environment, SELECTED_ENVIRONMENT } from './environment';
+import { REGION_CODES, REGIONS_ALLOWED, SELECTED_REGION } from './aws-regions-allowed.js';
+import { type Environment, SELECTED_ENVIRONMENT } from './environment.js';
 
 export const REGION = SELECTED_REGION;
 export const STAGE = SELECTED_ENVIRONMENT as Environment;

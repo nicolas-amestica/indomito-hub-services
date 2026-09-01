@@ -1,4 +1,4 @@
-import type { IamResource, IamStatement } from './types';
+import type { IamResource, IamStatement } from './types.js';
 
 /**
  * Grants full CRUD operations on a DynamoDB table and its GSI indexes.

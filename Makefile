@@ -6,17 +6,19 @@ region ?= us-east-1
 
 help:
 	@echo ""
-	@echo "Comandos disponibles:"
+	@echo "Comandos disponibles (reemplaza <nombre> por el servicio, ej: api-viajes)"
 	@echo ""
 	@echo "  make install"
-	@echo "  make dev service=services/api-auth stage=local region=us-east-1"
-	@echo "  make build service=services/api-auth"
-	@echo "  make validate service=services/api-auth stage=dev region=us-east-1"
-	@echo "  make deploy service=services/api-auth stage=dev region=us-east-1"
-	@echo "  make deploy-quick service=services/api-auth stage=dev region=us-east-1"
-	@echo "  make package service=services/api-auth stage=dev region=us-east-1"
-	@echo "  make clean service=services/api-auth"
-	@echo "  make remove service=services/api-auth stage=dev region=us-east-1"
+	@echo "  make dev service=services/<nombre> stage=local region=us-east-1"
+	@echo "  make build service=services/<nombre>"
+	@echo "  make validate service=services/<nombre> stage=dev region=us-east-1"
+	@echo "  make deploy service=services/<nombre> stage=dev region=us-east-1"
+	@echo "  make deploy-quick service=services/<nombre> stage=dev region=us-east-1"
+	@echo "  make package service=services/<nombre> stage=dev region=us-east-1"
+	@echo "  make clean service=services/<nombre>"
+	@echo "  make remove service=services/<nombre> stage=dev region=us-east-1"
+	@echo ""
+	@echo "  Ver README.md para crear un servicio nuevo desde cero."
 	@echo ""
 
 install:
@@ -24,7 +26,7 @@ install:
 
 check-service:
 	@if [ -z "$(service)" ]; then \
-		echo "Error: debes indicar service=services/api-auth"; \
+		echo "Error: debes indicar service=services/<nombre>"; \
 		exit 1; \
 	fi
 	@if [ ! -d "$(service)" ]; then \
@@ -63,4 +65,4 @@ clean: check-service
 	rm -rf $(service)/.serverless-artifacts
 
 remove: check-service
-	cd $(service) && NODE_OPTIONS='--disable-warning=DEP0169' npx serverless remove --stage $(stage) --region $(region)
+	npx tsx scripts/deploy-service.ts --service $(service) --stage $(stage) --region $(region) --remove

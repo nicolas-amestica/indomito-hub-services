@@ -1,4 +1,4 @@
-import { STAGE } from './custom-parameters';
+import { STAGE } from './custom-parameters.js';
 
 /**
  * Tags estándar para todos los recursos AWS de Indómito Hub.

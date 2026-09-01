@@ -1,7 +1,13 @@
 go 1.25.0
 
+// Cada microservicio en services/<nombre>/ es un modulo Go independiente y
+// debe agregarse a este bloque `use` para que el workspace lo compile.
+// Ejemplo al crear services/api-viajes/:
+//
+//   use (
+//     .
+//     ./services/api-viajes
+//   )
 use (
 	.
-	./services/api-auth
-	./services/iam-auth
 )

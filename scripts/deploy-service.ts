@@ -118,6 +118,12 @@ const stage = getArg('stage', 'dev');
 const region = getArg('region', 'us-east-1');
 const skipBuild = hasFlag('skip-build');
 const skipValidate = hasFlag('skip-validate');
+// En modo --remove se omiten build y validate: no se compila nada para borrar
+// un stack. Este script se encarga del remove (y no un `npx serverless remove`
+// directo en el Makefile) porque hay que exportar las credenciales SSO primero,
+// igual que en el deploy — sin eso, Serverless no puede resolver las variables
+// `${cf:...}` del stack y el remove falla con InvalidClientTokenId.
+const isRemove = hasFlag('remove');
 
 const servicePath = resolve(service);
 const profile = AWS_PROFILES[stage];
@@ -128,7 +134,7 @@ if (!profile) {
 }
 
 console.log('');
-log('cyan', '🚀', `Deploy: ${service} → stage=${stage}, region=${region}, profile=${profile}`);
+log('cyan', isRemove ? '🗑️' : '🚀', `${isRemove ? 'Remove' : 'Deploy'}: ${service} → stage=${stage}, region=${region}, profile=${profile}`);
 console.log('');
 
 // 1. Verificar AWS CLI
@@ -149,37 +155,43 @@ log('green', '✓', `Credenciales válidas — Account: ${identity.account}`);
 log('green', ' ', `ARN: ${identity.arn}`);
 console.log('');
 
-// 4. Build
-if (!skipBuild) {
-  log('cyan', '⟳', 'Compilando servicio...');
-  execFileSync('npx', ['tsx', 'scripts/build-service.ts', '--service', service], {
-    cwd: resolve('.'),
-    stdio: 'inherit',
-    env: { ...process.env, ...awsCredentials },
-  });
-  log('green', '✓', 'Build completado');
+// 4. Build (no aplica en --remove)
+if (isRemove) {
+  log('yellow', '⊘', 'Build y validacion omitidos (--remove)');
   console.log('');
 } else {
-  log('yellow', '⊘', 'Build omitido (--skip-build)');
+  if (!skipBuild) {
+    log('cyan', '⟳', 'Compilando servicio...');
+    execFileSync('npx', ['tsx', 'scripts/build-service.ts', '--service', service], {
+      cwd: resolve('.'),
+      stdio: 'inherit',
+      env: { ...process.env, ...awsCredentials },
+    });
+    log('green', '✓', 'Build completado');
+    console.log('');
+  } else {
+    log('yellow', '⊘', 'Build omitido (--skip-build)');
+  }
+
+  // 5. Validate
+  if (!skipValidate) {
+    log('cyan', '⟳', 'Validando servicio...');
+    execFileSync('npx', ['tsx', 'scripts/validate-service.ts', '--service', service, '--stage', stage, '--region', region], {
+      cwd: resolve('.'),
+      stdio: 'inherit',
+      env: { ...process.env, ...awsCredentials, AWS_PROFILE: '' },
+    });
+    console.log('');
+  } else {
+    log('yellow', '⊘', 'Validación omitida (--skip-validate)');
+  }
 }
 
-// 5. Validate
-if (!skipValidate) {
-  log('cyan', '⟳', 'Validando servicio...');
-  execFileSync('npx', ['tsx', 'scripts/validate-service.ts', '--service', service, '--stage', stage, '--region', region], {
-    cwd: resolve('.'),
-    stdio: 'inherit',
-    env: { ...process.env, ...awsCredentials, AWS_PROFILE: '' },
-  });
-  console.log('');
-} else {
-  log('yellow', '⊘', 'Validación omitida (--skip-validate)');
-}
+// 6. Deploy o Remove con Serverless Framework
+const slsCommand = isRemove ? 'remove' : 'deploy';
+log('cyan', '⟳', `${isRemove ? 'Removiendo' : 'Desplegando'} con Serverless Framework...`);
 
-// 6. Deploy con Serverless Framework
-log('cyan', '⟳', 'Desplegando con Serverless Framework...');
-
-execFileSync('npx', ['serverless', 'deploy', '--stage', stage, '--region', region], {
+execFileSync('npx', ['serverless', slsCommand, '--stage', stage, '--region', region], {
   cwd: servicePath,
   stdio: 'inherit',
   env: {
@@ -192,5 +204,5 @@ execFileSync('npx', ['serverless', 'deploy', '--stage', stage, '--region', regio
 });
 
 console.log('');
-log('green', '✓', `Deploy exitoso: ${service} → ${stage} (${region})`);
+log('green', '✓', `${isRemove ? 'Remove' : 'Deploy'} exitoso: ${service} → ${stage} (${region})`);
 console.log('');

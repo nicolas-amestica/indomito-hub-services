@@ -1,4 +1,4 @@
-import type { IamStatement } from './types';
+import type { IamStatement } from './types.js';
 
 /**
  * Generates an IAM statement to allow invoking a Lambda function.

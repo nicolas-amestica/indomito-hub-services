@@ -1,6 +1,6 @@
 import type { AWS } from '@serverless/typescript';
-import { DEPLOYMENT_BUCKET, REGION, STAGE } from './custom-parameters';
-import { buildResourceTags } from './aws-service-tags';
+import { DEPLOYMENT_BUCKET, REGION, STAGE } from './custom-parameters.js';
+import { buildResourceTags } from './aws-service-tags.js';
 
 /**
  * ID y Authorizer ID del HTTP API Gateway compartido, desplegado en
@@ -9,11 +9,31 @@ import { buildResourceTags } from './aws-service-tags';
  * exponer un solo dominio (api.dev.girasindomito.cl / api.girasindomito.cl)
  * sin prefijo de servicio en los paths (ver docs/standards/global/api-design.md).
  *
- * Orden de despliegue: iam-auth (este repo) → api-gateway (infra) → resto de
- * microservicios (este repo). Ver comentario en infra/api-gateway/serverless.ts.
+ * Orden de despliegue: api-gateway (infra) → microservicios (este repo).
+ * Ver comentario en infra/api-gateway/serverless.ts.
+ *
+ * Cuando exista de nuevo un servicio authorizer, este debe desplegarse antes
+ * de `api-gateway` (ver SHARED_AUTHORIZER_ENABLED mas abajo).
  */
 const SHARED_HTTP_API_ID = `\${cf:indomito-hub-infra-api-gateway-${STAGE}.HttpApiId}`;
 const SHARED_HTTP_API_AUTHORIZER_ID = `\${cf:indomito-hub-infra-api-gateway-${STAGE}.HttpApiAuthorizerId}`;
+
+/**
+ * Indica si el Gateway compartido tiene un Lambda Authorizer desplegado.
+ *
+ * Debe reflejar el valor de `authorizerEnabled` en
+ * ind-hub-inf-aws-sls-pri-gh/api-gateway/api-gateway-config.ts.
+ *
+ * En `false` (2026-08-31): el servicio authorizer se elimino junto con los
+ * endpoints de prueba y se reconstruira desde cero. Mientras siga en `false`,
+ * todo endpoint debe declararse `public: true` — el Gateway no tiene con que
+ * autorizar un endpoint protegido.
+ *
+ * Para reactivar: desplegar el nuevo servicio authorizer, poner
+ * `authorizerEnabled: true` en infra, desplegar `api-gateway`, y poner esta
+ * constante en `true`.
+ */
+const SHARED_AUTHORIZER_ENABLED = false;
 
 /**
  * Evento personalizado para una función Lambda (EventBridge, DynamoDB Stream, etc.).
@@ -60,8 +80,23 @@ export function buildGoServiceServerless(service: string, endpoints: GoHttpEndpo
 
   const functions = Object.fromEntries(
     endpoints.map(endpoint => {
-      const httpApiEvent = endpoint.method && endpoint.path
-        ? { method: endpoint.method, path: endpoint.path, ...(!endpoint.public && { authorizer: { id: SHARED_HTTP_API_AUTHORIZER_ID } }) }
+      const isHttpEndpoint = Boolean(endpoint.method && endpoint.path);
+      const needsAuthorizer = isHttpEndpoint && !endpoint.public;
+
+      if (needsAuthorizer && !SHARED_AUTHORIZER_ENABLED) {
+        throw new Error(
+          `[${service}] El endpoint "${endpoint.name}" requiere authorizer, pero el Gateway compartido no tiene uno desplegado.\n` +
+          `  Hoy no existe servicio authorizer (se elimino junto con los endpoints de prueba).\n` +
+          `  Opciones:\n` +
+          `    1. Marcar el endpoint como publico: { ..., public: true }\n` +
+          `    2. Desplegar el nuevo servicio authorizer, activar authorizerEnabled en\n` +
+          `       ind-hub-inf-aws-sls-pri-gh/api-gateway/api-gateway-config.ts, desplegar\n` +
+          `       api-gateway, y poner SHARED_AUTHORIZER_ENABLED = true en common/go-service.ts`,
+        );
+      }
+
+      const httpApiEvent = isHttpEndpoint
+        ? { method: endpoint.method, path: endpoint.path, ...(needsAuthorizer && { authorizer: { id: SHARED_HTTP_API_AUTHORIZER_ID } }) }
         : null;
       const defaultEvents: GoFunctionEvent[] = httpApiEvent ? [{ httpApi: httpApiEvent }] : [];
 

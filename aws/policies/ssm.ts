@@ -1,4 +1,4 @@
-import type { IamStatement } from './types';
+import type { IamStatement } from './types.js';
 
 /**
  * Grants ssm:GetParameter on the specified parameter path pattern.
