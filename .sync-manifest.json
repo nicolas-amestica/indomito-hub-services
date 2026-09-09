@@ -1,19 +1,6 @@
 {
-  "generatedAt": "2026-09-01T14:18:08.123Z",
   "engineVersion": "1.0.0",
   "files": [
-    {
-      "sourcePaths": [
-        "ai/source/global-context/agent-charter.md",
-        "ai/source/global-context/output-style.md",
-        "ai/source/global-context/repo-routing.md",
-        "ai/source/global-context/spec-lifecycle.md",
-        "ai/source/repo-overrides/ind-hub-api.md"
-      ],
-      "outputPath": "ai/generated/ind-hub-api/CLAUDE.md",
-      "targetPath": ".claude/CLAUDE.md",
-      "checksum": "sha256:6b078d317ee9fc036f9a2190be6f690378b3803691a8e41c630c325c1124ba07"
-    },
     {
       "sourcePaths": [
         "ai/source/global-context/agent-charter.md",
@@ -23,7 +10,7 @@
       ],
       "outputPath": "ai/generated/ind-hub-api/.claude/rules/global-rules.md",
       "targetPath": ".claude/rules/global-rules.md",
-      "checksum": "sha256:2a234ea0a3615b4bb2b5957a08624baf64a5e80e69e72a962e9b312777a141b0"
+      "checksum": "sha256:a6aaabb587e01c973743ca147c623485d162750f99a757f6c29ed55119a8005b"
     },
     {
       "sourcePaths": [
@@ -31,19 +18,15 @@
       ],
       "outputPath": "ai/generated/ind-hub-api/.claude/rules/repo-rules.md",
       "targetPath": ".claude/rules/repo-rules.md",
-      "checksum": "sha256:0737c03c1f00c7c127f84d8d9dd70a6564c744b8de620f8a3bc9b019dffbfd25"
+      "checksum": "sha256:de736757f299ac37e513cf053104a18d24dc92d48456d93a4e7d197fb90a2468"
     },
     {
       "sourcePaths": [
-        "ai/source/global-context/agent-charter.md",
-        "ai/source/global-context/output-style.md",
-        "ai/source/global-context/repo-routing.md",
-        "ai/source/global-context/spec-lifecycle.md",
         "ai/source/repo-overrides/ind-hub-api.md"
       ],
-      "outputPath": "ai/generated/ind-hub-api/GEMINI.md",
-      "targetPath": ".gemini/GEMINI.md",
-      "checksum": "sha256:bc5e1759b8819f3f1045bec39ee151649f2dc9e72bf7b280a71b6614280f6670"
+      "outputPath": "ai/generated/ind-hub-api/.kiro/steering/domain-context.md",
+      "targetPath": ".kiro/steering/domain-context.md",
+      "checksum": "sha256:fb57d27e3b9be17fec4b24370a40bd73957200ee30e2fb130952689e98a0267f"
     },
     {
       "sourcePaths": [
@@ -51,7 +34,7 @@
       ],
       "outputPath": "ai/generated/ind-hub-api/.kiro/steering/repo-routing.md",
       "targetPath": ".kiro/steering/repo-routing.md",
-      "checksum": "sha256:877b0ebd371dcfbd4805c17ad36eea9b160722933c2f2f683071ed10b1619a62"
+      "checksum": "sha256:bf1fd63bd71b097364254a91862f6b52ef848d1108bc6c940be5f5f4f98063cb"
     },
     {
       "sourcePaths": [
@@ -59,13 +42,14 @@
       ],
       "outputPath": "ai/generated/ind-hub-api/.kiro/steering/spec-lifecycle.md",
       "targetPath": ".kiro/steering/spec-lifecycle.md",
-      "checksum": "sha256:d411878eff319aa2987ab26f97071827334eb44a292887fae8ba7962bfbe0ac5"
+      "checksum": "sha256:ad94e79cf3b9fe9ecfb4774d14d88860ec8a8a980facb55dcf65312f12517a6e"
     },
     {
       "sourcePaths": [
         "docs/standards/architecture/auth-flow.md",
         "docs/standards/architecture/contracts-policy.md",
         "docs/standards/architecture/environment-definitions.md",
+        "docs/standards/architecture/legacy-systems.md",
         "docs/standards/architecture/repo-map.md",
         "docs/standards/architecture/system-overview.md",
         "docs/standards/backend/common-backend-rules.md",
@@ -91,15 +75,7 @@
       ],
       "outputPath": "ai/generated/ind-hub-api/.kiro/steering/standards-ref.md",
       "targetPath": ".kiro/steering/standards-ref.md",
-      "checksum": "sha256:349ffc80885f83aa3f21bbbbc4b4677fb7d84f4c519b0e7d08d395929d6bea7c"
-    },
-    {
-      "sourcePaths": [
-        "ai/source/repo-overrides/ind-hub-api.md"
-      ],
-      "outputPath": "ai/generated/ind-hub-api/.kiro/steering/domain-context.md",
-      "targetPath": ".kiro/steering/domain-context.md",
-      "checksum": "sha256:aa948187428ad6d40139516897151519a4318b6955e947cadb83f7c1316fc092"
+      "checksum": "sha256:286e97c325d58da2ff3d59a1250479b8e5ab65d6f245742a2a6194dd48b00f8c"
     },
     {
       "sourcePaths": [
@@ -111,48 +87,40 @@
       ],
       "outputPath": "ai/generated/ind-hub-api/AGENTS.md",
       "targetPath": "AGENTS.md",
-      "checksum": "sha256:d2e8451e66cc5751934e84732a4607a705806602049ad828999b8d981d743ad6"
+      "checksum": "sha256:936d0576f7428f19ac2a76cbab98ace5dede290489b3b268bebb8eadee1c7581"
     },
     {
       "sourcePaths": [
-        "ai/source/skills/api-contract-review.md"
+        "ai/source/global-context/agent-charter.md",
+        "ai/source/global-context/output-style.md",
+        "ai/source/global-context/repo-routing.md",
+        "ai/source/global-context/spec-lifecycle.md",
+        "ai/source/repo-overrides/ind-hub-api.md"
       ],
-      "outputPath": "ai/generated/ind-hub-api/skills/kiro/api-contract-review.md",
-      "targetPath": ".kiro/skills/api-contract-review.md",
-      "checksum": "sha256:53cf4a8d92b255ab280eb6eaaa037da664ee04f4476998116095a9fad72c7e1a"
+      "outputPath": "ai/generated/ind-hub-api/CLAUDE.md",
+      "targetPath": ".claude/CLAUDE.md",
+      "checksum": "sha256:73986d40761652a8addfebad1861c06304e22124034327ab1a7107da8939d567"
     },
     {
       "sourcePaths": [
-        "ai/source/skills/api-contract-review.md"
+        "ai/source/global-context/agent-charter.md",
+        "ai/source/global-context/output-style.md",
+        "ai/source/global-context/repo-routing.md",
+        "ai/source/global-context/spec-lifecycle.md",
+        "ai/source/repo-overrides/ind-hub-api.md"
       ],
-      "outputPath": "ai/generated/ind-hub-api/skills/claude/api-contract-review.md",
-      "targetPath": ".claude/skills/api-contract-review.md",
-      "checksum": "sha256:53cf4a8d92b255ab280eb6eaaa037da664ee04f4476998116095a9fad72c7e1a"
-    },
-    {
-      "sourcePaths": [
-        "ai/source/skills/aws-naming-review.md"
-      ],
-      "outputPath": "ai/generated/ind-hub-api/skills/kiro/aws-naming-review.md",
-      "targetPath": ".kiro/skills/aws-naming-review.md",
-      "checksum": "sha256:b5ca68e34212586fca285ef92a926390e494cd4769a197d878d05f4c4a346f81"
-    },
-    {
-      "sourcePaths": [
-        "ai/source/skills/aws-naming-review.md"
-      ],
-      "outputPath": "ai/generated/ind-hub-api/skills/claude/aws-naming-review.md",
-      "targetPath": ".claude/skills/aws-naming-review.md",
-      "checksum": "sha256:b5ca68e34212586fca285ef92a926390e494cd4769a197d878d05f4c4a346f81"
+      "outputPath": "ai/generated/ind-hub-api/GEMINI.md",
+      "targetPath": ".gemini/GEMINI.md",
+      "checksum": "sha256:bbbdddd6f56f8ce292eb48ab6248d014c8e2d6994bdcce2741bac9e36c7e4cda"
     },
     {
       "sourcePaths": [
         "ai/source/mcp/shared.json",
         "ai/source/mcp/backend.json"
       ],
-      "outputPath": "ai/generated/ind-hub-api/mcp/mcp.json",
-      "targetPath": "mcp/mcp.json",
-      "checksum": "sha256:52969a32efea09a8e37d6c66dec99df156ddb59743f8a92e45f4a0edcd9384c9"
+      "outputPath": "ai/generated/ind-hub-api/mcp/codex-mcp.toml",
+      "targetPath": "mcp/codex-mcp.toml",
+      "checksum": "sha256:6f79509939df30f895e02c0e28e659554827646a42ddf100fcf508ee6b2aa1f0"
     },
     {
       "sourcePaths": [
@@ -168,9 +136,45 @@
         "ai/source/mcp/shared.json",
         "ai/source/mcp/backend.json"
       ],
-      "outputPath": "ai/generated/ind-hub-api/mcp/codex-mcp.toml",
-      "targetPath": "mcp/codex-mcp.toml",
-      "checksum": "sha256:c15997e0adcbc95aac8e5ffb15b6f65e62901c98f8724258f566bf5894cf37d7"
+      "outputPath": "ai/generated/ind-hub-api/mcp/mcp.json",
+      "targetPath": "mcp/mcp.json",
+      "checksum": "sha256:52969a32efea09a8e37d6c66dec99df156ddb59743f8a92e45f4a0edcd9384c9"
+    },
+    {
+      "sourcePaths": [
+        "ai/source/skills/api-contract-review.md"
+      ],
+      "outputPath": "ai/generated/ind-hub-api/skills/claude/api-contract-review.md",
+      "targetPath": ".claude/skills/api-contract-review.md",
+      "checksum": "sha256:60713e8f63d530882cb81b37db94f6f488b4e82c0f68326b596c37a7e64b3945"
+    },
+    {
+      "sourcePaths": [
+        "ai/source/skills/aws-naming-review.md"
+      ],
+      "outputPath": "ai/generated/ind-hub-api/skills/claude/aws-naming-review.md",
+      "targetPath": ".claude/skills/aws-naming-review.md",
+      "checksum": "sha256:71986852fc56bf70ef830b240328846a046c8d212d7df962bfcc51f6a5734e23"
+    },
+    {
+      "sourcePaths": [
+        "ai/source/skills/api-contract-review.md"
+      ],
+      "outputPath": "ai/generated/ind-hub-api/skills/kiro/api-contract-review.md",
+      "targetPath": ".kiro/skills/api-contract-review.md",
+      "checksum": "sha256:60713e8f63d530882cb81b37db94f6f488b4e82c0f68326b596c37a7e64b3945"
+    },
+    {
+      "sourcePaths": [
+        "ai/source/skills/aws-naming-review.md"
+      ],
+      "outputPath": "ai/generated/ind-hub-api/skills/kiro/aws-naming-review.md",
+      "targetPath": ".kiro/skills/aws-naming-review.md",
+      "checksum": "sha256:71986852fc56bf70ef830b240328846a046c8d212d7df962bfcc51f6a5734e23"
     }
-  ]
+  ],
+  "managedBy": "indomito-context-compiler",
+  "artifactFormatVersion": 1,
+  "sourceCommit": "cbf88576535808bb9beed9241275f3302206bddf",
+  "sourceDirty": true
 }
