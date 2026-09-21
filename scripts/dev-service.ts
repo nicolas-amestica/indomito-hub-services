@@ -69,11 +69,22 @@ if (!existsSync(centralEnvPath)) {
   console.warn(`⚠️  No se encontró ${centralEnvPath}. Copia configs/.env.example como configs/.env.local`);
 }
 
+// Cargar variables propias del servicio desde <servicio>/configs/.env.local.
+// Ganan sobre las centralizadas: el nombre de la tabla que usa api-catalog no
+// tiene por qué existir en la raíz, donde solo viven las variables comunes a
+// todos los servicios (perfil y región de AWS).
+const serviceEnvPath = join(servicePath, 'configs', '.env.local');
+const serviceEnv = parseDotenv(serviceEnvPath);
+
+if (!existsSync(serviceEnvPath)) {
+  console.warn(`⚠️  No se encontró ${serviceEnvPath}. Copia ${serviceConfig.name}/configs/.env.example como ${serviceConfig.name}/configs/.env.local`);
+}
+
 // En stage=local se omite `serverless print` para no depender de credenciales AWS.
 let providerEnvironment: Record<string, string> = {};
 
 if (stage === 'local') {
-  console.log('🏠 Stage local: usando variables de configs/.env.local (sin resolver SSM)');
+  console.log(`🏠 Stage local: usando variables de configs/.env.local (raíz) y ${serviceConfig.name}/configs/.env.local (sin resolver SSM)`);
 } else {
   const rawOutput = execSync(`npx serverless print --stage ${stage} --region ${region}`, {
     cwd: servicePath,
@@ -96,6 +107,7 @@ const child = spawn('go', ['run', serviceConfig.localEntrypoint], {
   env: {
     ...process.env,
     ...centralEnv,
+    ...serviceEnv,
     ...providerEnvironment,
     APP_STAGE: stage,
     APP_REGION: region,

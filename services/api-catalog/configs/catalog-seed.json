@@ -1,0 +1,96 @@
+{
+  "plans": [
+    {
+      "id": "01M2ET1GWJQ9YHHCJP7WQR9RNH",
+      "display": "Gira de estudio",
+      "order": 1,
+      "active": true
+    },
+    {
+      "id": "01M2ET33WXCK31Z62N3AQ6TMM0",
+      "display": "Particular",
+      "order": 2,
+      "active": true
+    }
+  ],
+  "seasons": [
+    { "id": "2025", "display": "2025", "order": 1, "active": true },
+    { "id": "2026", "display": "2026", "order": 2, "active": true },
+    { "id": "2027", "display": "2027", "order": 3, "active": true },
+    { "id": "2028", "display": "2028", "order": 4, "active": true },
+    { "id": "2029", "display": "2029", "order": 5, "active": true },
+    { "id": "2030", "display": "2030", "order": 6, "active": true },
+    { "id": "2031", "display": "2031", "order": 7, "active": true },
+    { "id": "2032", "display": "2032", "order": 8, "active": true },
+    { "id": "2033", "display": "2033", "order": 9, "active": true },
+    { "id": "2034", "display": "2034", "order": 10, "active": true },
+    { "id": "2035", "display": "2035", "order": 11, "active": true },
+    { "id": "2036", "display": "2036", "order": 12, "active": true },
+    { "id": "2037", "display": "2037", "order": 13, "active": true },
+    { "id": "2038", "display": "2038", "order": 14, "active": true },
+    { "id": "2039", "display": "2039", "order": 15, "active": true },
+    { "id": "2040", "display": "2040", "order": 16, "active": true }
+  ],
+  "destinations": [
+    {
+      "id": "PER",
+      "display": "Personalizado",
+      "order": 1,
+      "active": true,
+      "budgetTemplateId": "brochure-default"
+    },
+    {
+      "id": "BRF",
+      "display": "Bariloche Full - Terrestre",
+      "order": 2,
+      "active": true,
+      "budgetTemplateId": "brochure-default"
+    },
+    {
+      "id": "BRE",
+      "display": "Bariloche Eco - Terrestre",
+      "order": 3,
+      "active": true,
+      "budgetTemplateId": "brochure-default"
+    },
+    {
+      "id": "BRX",
+      "display": "Bariloche Express - Terrestre",
+      "order": 4,
+      "active": true,
+      "budgetTemplateId": "brochure-default"
+    },
+    {
+      "id": "BRL",
+      "display": "Bariloche Light - Terrestre",
+      "order": 5,
+      "active": true,
+      "budgetTemplateId": "brochure-default"
+    },
+    {
+      "id": "BRS",
+      "display": "Bariloche y Sur de Chile - Terrestre",
+      "order": 6,
+      "active": true,
+      "budgetTemplateId": "brochure-default"
+    },
+    {
+      "id": "CBU",
+      "display": "Camboriú - Terrestre",
+      "order": 7,
+      "active": true,
+      "budgetTemplateId": "brochure-default"
+    }
+  ],
+  "settings": {
+    "defaultPlanId": "01M2ET1GWJQ9YHHCJP7WQR9RNH",
+    "margin": {
+      "usdIncreaseCLP": 50,
+      "brlIncreaseCLP": 10,
+      "utilityRate": 20,
+      "rechargeRate": 5,
+      "minUtilityRate": 10
+    },
+    "scenarioOffsets": [-10, -5, 0, 5]
+  }
+}

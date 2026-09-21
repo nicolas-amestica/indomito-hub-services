@@ -1,0 +1,30 @@
+{
+  "name": "api-favorite",
+  "localPort": 8082,
+  "localEntrypoint": "./cmd/local-api",
+  "defaultArtifactDir": ".serverless-artifacts",
+  "requiredEnvironment": [
+    "APP_NAME",
+    "APP_STAGE",
+    "APP_REGION",
+    "FAVORITES_TABLE_NAME"
+  ],
+  "functions": [
+    {
+      "name": "fn-listar-favoritos-v1",
+      "entrypoint": "./cmd/fn-listar-favoritos-v1"
+    },
+    {
+      "name": "fn-crear-favorito-v1",
+      "entrypoint": "./cmd/fn-crear-favorito-v1"
+    },
+    {
+      "name": "fn-actualizar-favorito-v1",
+      "entrypoint": "./cmd/fn-actualizar-favorito-v1"
+    },
+    {
+      "name": "fn-eliminar-favorito-v1",
+      "entrypoint": "./cmd/fn-eliminar-favorito-v1"
+    }
+  ]
+}

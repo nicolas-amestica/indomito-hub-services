@@ -1,0 +1,22 @@
+{
+  "name": "api-catalog",
+  "localPort": 8081,
+  "localEntrypoint": "./cmd/local-api",
+  "defaultArtifactDir": ".serverless-artifacts",
+  "requiredEnvironment": [
+    "APP_NAME",
+    "APP_STAGE",
+    "APP_REGION",
+    "CATALOGS_TABLE_NAME"
+  ],
+  "functions": [
+    {
+      "name": "fn-obtener-catalogos-v1",
+      "entrypoint": "./cmd/fn-obtener-catalogos-v1"
+    },
+    {
+      "name": "fn-obtener-tasas-cambio-v1",
+      "entrypoint": "./cmd/fn-obtener-tasas-cambio-v1"
+    }
+  ]
+}

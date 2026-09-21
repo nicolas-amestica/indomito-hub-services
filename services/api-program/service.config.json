@@ -1,0 +1,17 @@
+{
+  "name": "api-program",
+  "localPort": 8083,
+  "localEntrypoint": "./cmd/local-api",
+  "defaultArtifactDir": ".serverless-artifacts",
+  "requiredEnvironment": [
+    "APP_NAME",
+    "APP_STAGE",
+    "APP_REGION"
+  ],
+  "functions": [
+    {
+      "name": "fn-generar-presupuesto-v1",
+      "entrypoint": "./cmd/fn-generar-presupuesto-v1"
+    }
+  ]
+}

@@ -53,6 +53,11 @@ services/**/.env
 configs/.env.*
 !configs/.env.example
 
+# Variables de entorno por servicio (services/<nombre>/configs/)
+# Solo se versiona la plantilla .env.example; el .env.local real queda fuera.
+services/**/configs/.env.*
+!services/**/configs/.env.example
+
 # Auto-generados por scripts
 infra/aws/environments/*_env.auto.tfvars
 infra/aws/*_env.auto.tfvars
