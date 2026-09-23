@@ -43,7 +43,7 @@ type fieldLimits struct {
 // favoritos y el cuerpo del presupuesto respectivamente.
 var FieldLimits = fieldLimits{
 	TotalDays:       Limit{Min: 1, Max: 100, Step: 1},
-	TotalNights:     Limit{Min: 1, Max: 100, Step: 1},
+	TotalNights:     Limit{Min: 0, Max: 100, Step: 1},
 	TotalPassengers: Limit{Min: 1, Max: 100, Step: 1},
 	FreePassengers:  Limit{Min: 0, Max: 99, Step: 1},
 	UsdIncreaseCLP:  Limit{Min: 0, Max: 200, Step: 5},

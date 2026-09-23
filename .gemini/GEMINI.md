@@ -55,12 +55,12 @@
 | Repo           | Módulo referencia        | Paradigma             |
 | -------------- | ------------------------ | --------------------- |
 | application    | `src/app/` (por definir) | Stores, servicios     |
-| services       | (por definir — `services/` vacio) | Endpoint-per-function |
+| services       | `services/api-catalog`, `services/api-favorite`, `services/api-program` | Endpoint-per-function |
 | authorizer     | `src/functions/authorize.ts` | Handler unico + politicas IAM |
 
-> `services/` esta vacio: los endpoints de prueba se eliminaron el 2026-08-31
-> para construir los reales desde cero. La guia para crear un servicio nuevo
-> esta en `ind-hub-api-gox-sls-pri-gh/README.md`.
+> Los servicios reales de catalogos, favoritos y generacion de presupuesto
+> viven en `ind-hub-api-gox-sls-pri-gh/services/`. La guia para crear un servicio
+> nuevo esta en el `README.md` de ese repo.
 
 # Output Style — Indómito Hub
 
@@ -123,13 +123,13 @@ Título: `tipo(scope): descripcion breve sin tildes` (max 70 chars). Descripció
 
 ## Repos
 
-| Alias          | Stack                               | Responsabilidad                                   |
-| -------------- | ----------------------------------- | ------------------------------------------------- |
+| Alias          | Stack                               | Responsabilidad                                           |
+| ----------------| -------------------------------------| -----------------------------------------------------------|
 | infrastructure | TypeScript, Serverless Framework v4 | Infraestructura AWS (DynamoDB, S3, SSM, CDN, API Gateway) |
-| application    | Angular 22, Signals, TailwindCSS    | SPA: viajes, cotizaciones, pasajeros, dashboards  |
-| services       | Go 1.25, Echo v4, DynamoDB          | Backend: viajes, cotizaciones, contratos, destinos|
-| authorizer     | TypeScript, Serverless Framework v4 | Lambda Authorizer compartido (JWT propio HMAC-SHA256) |
-| orchestrator   | —                                   | Documentación centralizada, steering, estándares  |
+| application    | Angular 22, Signals, TailwindCSS    | SPA: viajes, cotizaciones, pasajeros, dashboards          |
+| services       | Go 1.25, Echo v4, DynamoDB          | Backend: viajes, cotizaciones, contratos, destinos        |
+| authorizer     | TypeScript, Serverless Framework v4 | Lambda Authorizer compartido (JWT propio HMAC-SHA256)     |
+| orchestrator   | —                                   | Documentación centralizada, steering, estándares          |
 
 ## Repos Legacy
 
@@ -318,10 +318,10 @@ dominio personalizado y Lambda Authorizer se configuran una sola vez ahi.
 
 Dominios: `api.dev.girasindomito.cl` (dev) / `api.girasindomito.cl` (prd).
 
-**Authorizer desactivado**: no hay servicio authorizer desplegado hoy. Todo
-endpoint debe declararse `public: true` — si no, el build falla con un mensaje
-explicando como reactivarlo (ver `SHARED_AUTHORIZER_ENABLED` en
-`common/go-service.ts`).
+**Authorizer activo en dev**: los endpoints privados usan el Lambda Authorizer
+compartido mediante `SHARED_AUTHORIZER_ENABLED` en `common/go-service.ts`.
+Los endpoints publicos deben declarar `public: true`. La activacion de prd se
+realiza junto con el stack IAM y el Gateway de ese ambiente.
 
 ## Desarrollo Local
 
@@ -335,9 +335,9 @@ make remove service=services/<nombre>     # Eliminar el stack de AWS
 
 ## Patrón de Referencia
 
-No hay servicio de referencia hoy (`services/` esta vacio). La guia paso a paso
-para crear un servicio nuevo con el paradigma endpoint-per-function esta en
-`README.md` del repo, seccion "Crear un servicio nuevo".
+Los servicios `api-catalog`, `api-favorite` y `api-program` son las referencias
+actuales del paradigma endpoint-per-function. La guia paso a paso para crear un
+servicio nuevo esta en `README.md`, seccion "Crear un servicio nuevo".
 
 ## Scopes de Commits
 

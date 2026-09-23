@@ -28,8 +28,7 @@ func sampleContent() FavoriteContent {
 			DepartureCity: "Santiago",
 		},
 		Schedule: program.ScheduleContent{
-			StartDate:       "2026-01-05",
-			EndDate:         "2026-01-12",
+			TotalDays:       8,
 			TotalNights:     7,
 			TotalPassengers: 40,
 			FreePassengers:  2,
@@ -280,9 +279,8 @@ func TestFavoriteItemAttributeNames(t *testing.T) {
 		"content.pricing.rechargeRate",
 		"content.pricing.usdIncreaseCLP",
 		"content.pricing.utilityRate",
-		"content.schedule.endDate",
 		"content.schedule.freePassengers",
-		"content.schedule.startDate",
+		"content.schedule.totalDays",
 		"content.schedule.totalNights",
 		"content.schedule.totalPassengers",
 		"content.services[].chargeType",
@@ -369,7 +367,6 @@ func TestFavoriteContentOmitsTotalsAndExchangeByType(t *testing.T) {
 		"ExchangeSnapshot":  "snapshot de tipo de cambio (Requirement 11.17)",
 		"UsdToClp":          "tasa histórica (Requirements 11.10, 11.17)",
 		"BrlToClp":          "tasa histórica (Requirements 11.10, 11.17)",
-		"TotalDays":         "derivado del rango de fechas (Requirement 17.6)",
 		"PayingPassengers":  "derivado de pasajeros y liberados (Requirement 17.6)",
 		"BaseAmount":        "monto derivado del motor de cálculo",
 		"AmountCLP":         "monto derivado del motor de cálculo",
@@ -423,10 +420,11 @@ func TestFavoriteContentPersistsRequiredGroups(t *testing.T) {
 		}
 	}
 
-	// totalNights es una decisión del usuario y no un derivado, así que a
-	// diferencia de totalDays sí se guarda.
-	if _, present := reflect.TypeOf(program.ScheduleContent{}).FieldByName("TotalNights"); !present {
-		t.Error("ScheduleContent no declara TotalNights, que el favorito debe conservar")
+	// Días y noches son decisiones del usuario y deben conservarse.
+	for _, field := range []string{"TotalDays", "TotalNights"} {
+		if _, present := reflect.TypeOf(program.ScheduleContent{}).FieldByName(field); !present {
+			t.Errorf("ScheduleContent no declara %s, que el favorito debe conservar", field)
+		}
 	}
 }
 

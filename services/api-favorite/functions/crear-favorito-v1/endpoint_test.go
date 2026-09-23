@@ -117,8 +117,7 @@ func validRequest() Request {
 				DepartureCity: "Santiago",
 			},
 			Schedule: program.ScheduleContent{
-				StartDate:       "2027-10-04",
-				EndDate:         "2027-10-10",
+				TotalDays:       7,
 				TotalNights:     5,
 				TotalPassengers: 35,
 				FreePassengers:  2,

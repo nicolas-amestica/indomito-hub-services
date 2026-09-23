@@ -28,15 +28,13 @@ type ProgramGeneral struct {
 	DepartureCity string     `dynamodbav:"departureCity" json:"departureCity" validate:"required"`
 }
 
-// ScheduleContent son las fechas y cantidades que un favorito conserva.
-// Omite los campos derivados de ProgramSchedule (TotalDays y PayingPassengers):
-// se recalculan al cargar el favorito, no se guardan (Requirement 17.6).
+// ScheduleContent es la duración y las cantidades que un favorito conserva.
+// El programa no tiene fechas de calendario; esas pertenecen al contrato.
 type ScheduleContent struct {
-	StartDate       string `dynamodbav:"startDate"       json:"startDate"       validate:"required,datetime=2006-01-02"`
-	EndDate         string `dynamodbav:"endDate"         json:"endDate"         validate:"required,datetime=2006-01-02"`
-	TotalNights     int    `dynamodbav:"totalNights"     json:"totalNights"     validate:"required,min=1,max=100"`
-	TotalPassengers int    `dynamodbav:"totalPassengers" json:"totalPassengers" validate:"required,min=1,max=100"`
-	FreePassengers  int    `dynamodbav:"freePassengers"  json:"freePassengers"  validate:"min=0,max=99"`
+	TotalDays       int `dynamodbav:"totalDays"       json:"totalDays"       validate:"required,min=1,max=100"`
+	TotalNights     int `dynamodbav:"totalNights"     json:"totalNights"     validate:"min=0,max=100"`
+	TotalPassengers int `dynamodbav:"totalPassengers" json:"totalPassengers" validate:"required,min=1,max=100"`
+	FreePassengers  int `dynamodbav:"freePassengers"  json:"freePassengers"  validate:"min=0,max=99"`
 }
 
 // PricingContent son los parámetros de precio que un favorito conserva. No

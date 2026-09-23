@@ -9,7 +9,7 @@ import (
 )
 
 // FavoriteContent es el contenido guardado de un favorito: los datos
-// generales, las fechas y cantidades, los parámetros de precio, la lista de
+// generales, la duración y cantidades, los parámetros de precio, la lista de
 // tripulantes y la lista de servicios del programa (Requirement 11.16).
 //
 // Compone los tipos de libs/domain/program en vez de redeclararlos, que es lo
@@ -20,8 +20,8 @@ import (
 //
 // No hay campo de totales ni de snapshot de tipo de cambio, y esa ausencia es
 // el Requirement 11.17 implementado por tipo y no por convención. Los tipos que
-// compone tampoco los tienen: program.ScheduleContent omite TotalDays y
-// PayingPassengers, y program.PricingContent omite ExchangeSnapshot.
+// compone tampoco los tienen: program.ScheduleContent omite
+// PayingPassengers y program.PricingContent omite ExchangeSnapshot.
 //
 // La diferencia con omitirlos al serializar es que acá el defecto es
 // imposible, no improbable. Al cargar un favorito los montos se recalculan con
@@ -30,9 +30,9 @@ import (
 // alguien la leyera por descuido para cotizar con un dólar de hace tres meses.
 // No guardarla deja al recálculo como el único camino posible.
 //
-// TotalNights sí se guarda, porque no es un derivado: es una decisión del
-// usuario que el formulario deja de precargar en cuanto la toca
-// (Requirement 3.12).
+// TotalDays y TotalNights se guardan porque son decisiones del usuario. Las
+// noches se precargan desde los días y dejan de actualizarse cuando el usuario
+// las edita.
 type FavoriteContent struct {
 	Generals program.ProgramGeneral   `dynamodbav:"generals" json:"generals" validate:"required"`
 	Schedule program.ScheduleContent  `dynamodbav:"schedule" json:"schedule" validate:"required"`

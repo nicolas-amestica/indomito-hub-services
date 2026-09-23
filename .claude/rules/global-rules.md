@@ -55,12 +55,12 @@
 | Repo           | Módulo referencia        | Paradigma             |
 | -------------- | ------------------------ | --------------------- |
 | application    | `src/app/` (por definir) | Stores, servicios     |
-| services       | (por definir — `services/` vacio) | Endpoint-per-function |
+| services       | `services/api-catalog`, `services/api-favorite`, `services/api-program` | Endpoint-per-function |
 | authorizer     | `src/functions/authorize.ts` | Handler unico + politicas IAM |
 
-> `services/` esta vacio: los endpoints de prueba se eliminaron el 2026-08-31
-> para construir los reales desde cero. La guia para crear un servicio nuevo
-> esta en `ind-hub-api-gox-sls-pri-gh/README.md`.
+> Los servicios reales de catalogos, favoritos y generacion de presupuesto
+> viven en `ind-hub-api-gox-sls-pri-gh/services/`. La guia para crear un servicio
+> nuevo esta en el `README.md` de ese repo.
 
 # Output Style — Indómito Hub
 
@@ -123,13 +123,13 @@ Título: `tipo(scope): descripcion breve sin tildes` (max 70 chars). Descripció
 
 ## Repos
 
-| Alias          | Stack                               | Responsabilidad                                   |
-| -------------- | ----------------------------------- | ------------------------------------------------- |
+| Alias          | Stack                               | Responsabilidad                                           |
+| ----------------| -------------------------------------| -----------------------------------------------------------|
 | infrastructure | TypeScript, Serverless Framework v4 | Infraestructura AWS (DynamoDB, S3, SSM, CDN, API Gateway) |
-| application    | Angular 22, Signals, TailwindCSS    | SPA: viajes, cotizaciones, pasajeros, dashboards  |
-| services       | Go 1.25, Echo v4, DynamoDB          | Backend: viajes, cotizaciones, contratos, destinos|
-| authorizer     | TypeScript, Serverless Framework v4 | Lambda Authorizer compartido (JWT propio HMAC-SHA256) |
-| orchestrator   | —                                   | Documentación centralizada, steering, estándares  |
+| application    | Angular 22, Signals, TailwindCSS    | SPA: viajes, cotizaciones, pasajeros, dashboards          |
+| services       | Go 1.25, Echo v4, DynamoDB          | Backend: viajes, cotizaciones, contratos, destinos        |
+| authorizer     | TypeScript, Serverless Framework v4 | Lambda Authorizer compartido (JWT propio HMAC-SHA256)     |
+| orchestrator   | —                                   | Documentación centralizada, steering, estándares          |
 
 ## Repos Legacy
 

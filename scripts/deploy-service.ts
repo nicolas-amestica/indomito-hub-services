@@ -150,6 +150,11 @@ log('green', '✓', `Sesión SSO activa (${profile})`);
 
 // 3. Exportar credenciales para que Serverless las use
 const awsCredentials = exportCredentials(profile);
+const {
+  AWS_PROFILE: _awsProfile,
+  AWS_DEFAULT_PROFILE: _awsDefaultProfile,
+  ...processEnvWithoutAwsProfile
+} = process.env;
 const identity = getCallerIdentity(awsCredentials);
 log('green', '✓', `Credenciales válidas — Account: ${identity.account}`);
 log('green', ' ', `ARN: ${identity.arn}`);
@@ -179,7 +184,7 @@ if (isRemove) {
     execFileSync('npx', ['tsx', 'scripts/validate-service.ts', '--service', service, '--stage', stage, '--region', region], {
       cwd: resolve('.'),
       stdio: 'inherit',
-      env: { ...process.env, ...awsCredentials, AWS_PROFILE: '' },
+      env: { ...processEnvWithoutAwsProfile, ...awsCredentials },
     });
     console.log('');
   } else {
@@ -195,11 +200,10 @@ execFileSync('npx', ['serverless', slsCommand, '--stage', stage, '--region', reg
   cwd: servicePath,
   stdio: 'inherit',
   env: {
-    ...process.env,
+    ...processEnvWithoutAwsProfile,
     ...awsCredentials,
     STAGE: stage,
     NODE_OPTIONS: '--disable-warning=DEP0169',
-    AWS_PROFILE: '',
   },
 });
 

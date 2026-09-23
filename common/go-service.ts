@@ -33,7 +33,7 @@ const SHARED_HTTP_API_AUTHORIZER_ID = `\${cf:indomito-hub-infra-api-gateway-${ST
  *   2. `authorizerEnabled: true` en infra + desplegar `api-gateway`
  *   3. Poner esta constante en `true`
  */
-const SHARED_AUTHORIZER_ENABLED = false;
+const SHARED_AUTHORIZER_ENABLED = STAGE === 'dev';
 
 /**
  * Evento personalizado para una función Lambda (EventBridge, DynamoDB Stream, etc.).
@@ -237,7 +237,13 @@ export function buildGoServiceServerless(service: string, endpoints: GoHttpEndpo
       }
 
       const httpApiEvent = isHttpEndpoint
-        ? { method: endpoint.method, path: endpoint.path, ...(needsAuthorizer && { authorizer: { id: SHARED_HTTP_API_AUTHORIZER_ID } }) }
+        ? {
+            method: endpoint.method,
+            path: endpoint.path,
+            ...(needsAuthorizer && {
+              authorizer: { type: 'request', id: SHARED_HTTP_API_AUTHORIZER_ID },
+            }),
+          }
         : null;
       const defaultEvents: GoFunctionEvent[] = httpApiEvent ? [{ httpApi: httpApiEvent }] : [];
 

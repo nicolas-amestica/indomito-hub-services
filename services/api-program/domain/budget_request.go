@@ -94,18 +94,18 @@ type BudgetRequest struct {
 	// DepartureCity es la ciudad de salida del viaje.
 	DepartureCity string `json:"departureCity" validate:"required"`
 
-	// TotalDays son los días totales del viaje. El frontend los deriva del rango
-	// de fechas; acá solo se comprueba su rango, que es
+	// TotalDays son los días totales del programa, ingresados por el usuario.
+	// Acá se comprueba su rango, que es
 	// program.FieldLimits.TotalDays (1 a 100).
 	TotalDays int `json:"totalDays" validate:"required,min=1,max=100"`
 
 	// TotalNights son las noches de estadía. Rango:
-	// program.FieldLimits.TotalNights (1 a 100).
+	// program.FieldLimits.TotalNights (0 a 100).
 	//
 	// El backend no compara noches contra días: la incoherencia entre ambos es
 	// una advertencia no bloqueante del formulario (Requirement 3.10), no un
 	// rechazo del endpoint.
-	TotalNights int `json:"totalNights" validate:"required,min=1,max=100"`
+	TotalNights int `json:"totalNights" validate:"min=0,max=100"`
 
 	// ServiceNames son los nombres de los servicios contratados, para el bloque
 	// ServiceList del documento. Solo los nombres: el presupuesto lista los

@@ -143,9 +143,9 @@ func TestBudgetRequestShapeValidation(t *testing.T) {
 			wantField: "totalDays",
 		},
 		{
-			name:      "sin noches de estadía",
-			mutate:    func(req *BudgetRequest) { req.TotalNights = 0 },
-			wantCode:  apperr.CodeRequiredFieldMissing,
+			name:      "noches negativas",
+			mutate:    func(req *BudgetRequest) { req.TotalNights = -1 },
+			wantCode:  apperr.CodeValidationError,
 			wantField: "totalNights",
 		},
 		{

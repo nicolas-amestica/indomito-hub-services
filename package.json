@@ -12,5 +12,9 @@
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "yaml": "^2.6.1"
+  },
+  "dependencies": {
+    "@primeuix/themes": "^3.0.1",
+    "primeng": "^22.1.1"
   }
 }
