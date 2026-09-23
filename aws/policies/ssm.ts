@@ -1,12 +1,12 @@
-import type { IamStatement } from './types.js';
+import type { IamResource, IamStatement } from "./types.js";
 
 /**
  * Grants ssm:GetParameter on the specified parameter path pattern.
  */
-export function ssmReadPolicy(parameterPattern: string): IamStatement {
+export function ssmReadPolicy(parameterPattern: IamResource): IamStatement {
   return {
-    Effect: 'Allow',
-    Action: ['ssm:GetParameter', 'ssm:GetParameters'],
+    Effect: "Allow",
+    Action: ["ssm:GetParameter", "ssm:GetParameters"],
     Resource: parameterPattern,
   };
 }
@@ -14,10 +14,10 @@ export function ssmReadPolicy(parameterPattern: string): IamStatement {
 /**
  * Grants ssm:PutParameter on the specified parameter path pattern.
  */
-export function ssmWritePolicy(parameterPattern: string): IamStatement {
+export function ssmWritePolicy(parameterPattern: IamResource): IamStatement {
   return {
-    Effect: 'Allow',
-    Action: ['ssm:PutParameter'],
+    Effect: "Allow",
+    Action: ["ssm:PutParameter"],
     Resource: parameterPattern,
   };
 }

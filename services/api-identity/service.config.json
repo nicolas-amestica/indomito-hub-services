@@ -1,0 +1,55 @@
+{
+  "name": "api-identity",
+  "localPort": 8083,
+  "localEntrypoint": "./cmd/local-api",
+  "defaultArtifactDir": ".serverless-artifacts",
+  "requiredEnvironment": [
+    "APP_NAME",
+    "APP_STAGE",
+    "APP_REGION",
+    "USERS_TABLE_NAME",
+    "JWT_SIGNING_SECRET_PARAM"
+  ],
+  "functions": [
+    {
+      "name": "fn-login-v1",
+      "entrypoint": "./cmd/fn-login-v1"
+    },
+    {
+      "name": "fn-obtener-permisos-v1",
+      "entrypoint": "./cmd/fn-obtener-permisos-v1"
+    },
+    {
+      "name": "fn-listar-usuarios-v1",
+      "entrypoint": "./cmd/fn-listar-usuarios-v1"
+    },
+    {
+      "name": "fn-guardar-usuario-v1",
+      "entrypoint": "./cmd/fn-guardar-usuario-v1"
+    },
+    {
+      "name": "fn-listar-perfiles-v1",
+      "entrypoint": "./cmd/fn-listar-perfiles-v1"
+    },
+    {
+      "name": "fn-guardar-perfil-v1",
+      "entrypoint": "./cmd/fn-guardar-perfil-v1"
+    },
+    {
+      "name": "fn-listar-modulos-v1",
+      "entrypoint": "./cmd/fn-listar-modulos-v1"
+    },
+    {
+      "name": "fn-guardar-modulo-v1",
+      "entrypoint": "./cmd/fn-guardar-modulo-v1"
+    },
+    {
+      "name": "fn-guardar-permisos-v1",
+      "entrypoint": "./cmd/fn-guardar-permisos-v1"
+    },
+    {
+      "name": "fn-obtener-permisos-perfil-v1",
+      "entrypoint": "./cmd/fn-obtener-permisos-perfil-v1"
+    }
+  ]
+}

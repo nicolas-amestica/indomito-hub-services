@@ -16,7 +16,8 @@
  *   const config = buildGoServiceServerless(ApiServices.Viajes, [...endpoints]);
  */
 export const ApiServices = {
-  Catalog: 'api-catalog',
-  Favorite: 'api-favorite',
-  Program: 'api-program',
+  Catalog: "api-catalog",
+  Favorite: "api-favorite",
+  Program: "api-program",
+  Identity: "api-identity",
 } as const;

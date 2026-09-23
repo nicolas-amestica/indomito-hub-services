@@ -13,7 +13,7 @@ const serverlessConfigPath = "../serverless.ts"
 // serverlessEndpointPattern captura el metodo y el path de cada entrada del
 // arreglo `endpoints` de serverless.ts, en el orden en que aparecen.
 var serverlessEndpointPattern = regexp.MustCompile(
-	`method:\s*'([A-Z]+)',\s*\n\s*path:\s*'([^']+)',`,
+	`method:\s*["']([A-Z]+)["'],\s*\n\s*path:\s*["']([^"']+)["'],`,
 )
 
 // TestRoutesMatchServerlessConfig comprueba que las rutas declaradas en Go
