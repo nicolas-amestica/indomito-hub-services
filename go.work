@@ -12,6 +12,7 @@ use (
 	.
 	./libs
 	./services/api-catalog
+	./services/api-contract
 	./services/api-favorite
 	./services/api-identity
 	./services/api-program
