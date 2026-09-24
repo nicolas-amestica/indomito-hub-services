@@ -63,3 +63,22 @@ type ProgramService struct {
 	UnitPrice  float64      `dynamodbav:"unitPrice"  json:"unitPrice"  validate:"required,gte=0.01"`
 	Currency   CurrencyCode `dynamodbav:"currency"   json:"currency"   validate:"required,oneof=CLP USD BRL"`
 }
+
+// ProgramTotals conserva el resultado financiero y las tasas tributarias
+// efectivamente aplicadas al momento de guardar un programa.
+type ProgramTotals struct {
+	SubtotalCLP                   float64 `dynamodbav:"subtotalCLP"                      json:"subtotalCLP"`
+	SubtotalUSD                   float64 `dynamodbav:"subtotalUSD"                      json:"subtotalUSD"`
+	SubtotalBRL                   float64 `dynamodbav:"subtotalBRL"                      json:"subtotalBRL"`
+	NetCLP                        int64   `dynamodbav:"netCLP"                           json:"netCLP"`
+	VATCLP                        int64   `dynamodbav:"vatCLP"                           json:"vatCLP"`
+	CrewWithholdingCLP            int64   `dynamodbav:"crewWithholdingCLP"               json:"crewWithholdingCLP"`
+	VATRate                       float64 `dynamodbav:"vatRate"                          json:"vatRate" validate:"gte=0,lte=100"`
+	CrewWithholdingRate           float64 `dynamodbav:"crewWithholdingRate"              json:"crewWithholdingRate" validate:"gte=0,lte=100"`
+	UtilityCLP                    int64   `dynamodbav:"utilityCLP"                       json:"utilityCLP"`
+	NetWithUtilityCLP             int64   `dynamodbav:"netWithUtilityCLP"                json:"netWithUtilityCLP"`
+	NetWithUtilityPerPassengerCLP int64   `dynamodbav:"netWithUtilityPerPassengerCLP"    json:"netWithUtilityPerPassengerCLP"`
+	RechargeCLP                   int64   `dynamodbav:"rechargeCLP"                      json:"rechargeCLP"`
+	TotalCLP                      int64   `dynamodbav:"totalCLP"                         json:"totalCLP"`
+	TotalPerPassengerCLP          int64   `dynamodbav:"totalPerPassengerCLP"             json:"totalPerPassengerCLP"`
+}

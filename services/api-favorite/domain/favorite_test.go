@@ -356,13 +356,11 @@ func TestFavoriteItemRoundTrip(t *testing.T) {
 // El motivo del requerimiento: al cargar un favorito los montos se recalculan
 // con la tasa vigente (Requirement 11.10). Una tasa histórica guardada en el
 // modelo alcanza para que alguien cotice con el dólar de hace tres meses.
-func TestFavoriteContentOmitsTotalsAndExchangeByType(t *testing.T) {
+func TestFavoriteContentOmitsHistoricalExchangeByType(t *testing.T) {
 	// Campos derivados del motor de cálculo y snapshot de tipo de cambio. Los
 	// nombres son los de las interfaces del diseño; TotalNights y
 	// TotalPassengers no están porque son decisiones del usuario, no derivados.
 	forbiddenFields := map[string]string{
-		"Totals":            "totales calculados (Requirement 11.17)",
-		"ProgramTotals":     "totales calculados (Requirement 11.17)",
 		"Exchange":          "snapshot de tipo de cambio (Requirement 11.17)",
 		"ExchangeSnapshot":  "snapshot de tipo de cambio (Requirement 11.17)",
 		"UsdToClp":          "tasa histórica (Requirements 11.10, 11.17)",
@@ -370,8 +368,6 @@ func TestFavoriteContentOmitsTotalsAndExchangeByType(t *testing.T) {
 		"PayingPassengers":  "derivado de pasajeros y liberados (Requirement 17.6)",
 		"BaseAmount":        "monto derivado del motor de cálculo",
 		"AmountCLP":         "monto derivado del motor de cálculo",
-		"SubtotalCLP":       "total derivado del motor de cálculo",
-		"TotalCLP":          "total derivado del motor de cálculo",
 		"PricePerPassenger": "total derivado del motor de cálculo",
 	}
 

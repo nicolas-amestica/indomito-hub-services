@@ -27,6 +27,9 @@
       "name": "fn-guardar-usuario-v1",
       "entrypoint": "./cmd/fn-guardar-usuario-v1"
     },
+    { "name": "fn-actualizar-usuario-v1", "entrypoint": "./cmd/fn-actualizar-usuario-v1" },
+    { "name": "fn-cambiar-estado-usuario-v1", "entrypoint": "./cmd/fn-cambiar-estado-usuario-v1" },
+    { "name": "fn-eliminar-usuario-v1", "entrypoint": "./cmd/fn-eliminar-usuario-v1" },
     {
       "name": "fn-listar-perfiles-v1",
       "entrypoint": "./cmd/fn-listar-perfiles-v1"
@@ -35,6 +38,8 @@
       "name": "fn-guardar-perfil-v1",
       "entrypoint": "./cmd/fn-guardar-perfil-v1"
     },
+    { "name": "fn-actualizar-perfil-v1", "entrypoint": "./cmd/fn-actualizar-perfil-v1" },
+    { "name": "fn-eliminar-perfil-v1", "entrypoint": "./cmd/fn-eliminar-perfil-v1" },
     {
       "name": "fn-listar-modulos-v1",
       "entrypoint": "./cmd/fn-listar-modulos-v1"
@@ -43,6 +48,8 @@
       "name": "fn-guardar-modulo-v1",
       "entrypoint": "./cmd/fn-guardar-modulo-v1"
     },
+    { "name": "fn-actualizar-modulo-v1", "entrypoint": "./cmd/fn-actualizar-modulo-v1" },
+    { "name": "fn-eliminar-modulo-v1", "entrypoint": "./cmd/fn-eliminar-modulo-v1" },
     {
       "name": "fn-guardar-permisos-v1",
       "entrypoint": "./cmd/fn-guardar-permisos-v1"

@@ -51,6 +51,9 @@ var (
 	// ExchangeRatesRoute expone las tasas de cambio de USD y BRL a CLP, con
 	// respaldo desde el ultimo snapshot cuando la fuente externa no responde.
 	ExchangeRatesRoute = Route{Method: http.MethodGet, Path: "/tasas-cambio"}
+
+	GetTaxSettingsRoute    = Route{Method: http.MethodGet, Path: "/configuracion/tributaria"}
+	UpdateTaxSettingsRoute = Route{Method: http.MethodPut, Path: "/configuracion/tributaria"}
 )
 
 // localShutdownTimeout es el margen que se le da al servidor local para cerrar

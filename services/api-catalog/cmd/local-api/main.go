@@ -8,14 +8,16 @@ import (
 
 	"ind-hub-api-gox-sls-pri-gh/libs/logger"
 	"ind-hub-api-gox-sls-pri-gh/services/api-catalog/functions"
+	taxsettings "ind-hub-api-gox-sls-pri-gh/services/api-catalog/functions/actualizar-configuracion-tributaria-v1"
 	catalogs "ind-hub-api-gox-sls-pri-gh/services/api-catalog/functions/obtener-catalogos-v1"
+	gettaxsettings "ind-hub-api-gox-sls-pri-gh/services/api-catalog/functions/obtener-configuracion-tributaria-v1"
 	rates "ind-hub-api-gox-sls-pri-gh/services/api-catalog/functions/obtener-tasas-cambio-v1"
 )
 
 func main() {
 	log := logger.New("api-catalog-local", "startup", "local")
 
-	if err := functions.RunLocal(context.Background(), catalogs.Register, rates.Register); err != nil {
+	if err := functions.RunLocal(context.Background(), catalogs.Register, gettaxsettings.Register, taxsettings.Register, rates.Register); err != nil {
 		log.Error("localServerError", zap.Error(err))
 		// Sync puede devolver un error al cerrar stdout en algunas plataformas;
 		// el error relevante ya quedó registrado y el proceso debe terminar.

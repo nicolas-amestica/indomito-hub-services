@@ -56,11 +56,15 @@ func Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.API
 	case method == "GET" && path == "/auth/permisos":
 		return permissions(ctx, app, req)
 	case method == "GET" && path == "/iam/usuarios":
-		return listPartition(ctx, app, "USERS", domain.User{})
+		return listUsers(ctx, app)
 	case method == "POST" && path == "/iam/usuarios":
 		return saveUser(ctx, app, req)
+	case (method == "PUT" || method == "PATCH") && strings.HasPrefix(path, "/iam/usuarios/"):
+		return updateUser(ctx, app, req)
+	case method == "DELETE" && strings.HasPrefix(path, "/iam/usuarios/"):
+		return deleteUser(ctx, app, req)
 	case method == "GET" && path == "/iam/perfiles":
-		return listPartition(ctx, app, "PROFILES", domain.Profile{})
+		return listProfiles(ctx, app)
 	case method == "GET" && strings.HasPrefix(path, "/iam/perfiles/") && strings.HasSuffix(path, "/permisos"):
 		parts := strings.Split(strings.Trim(path, "/"), "/")
 		if len(parts) != 4 || !codeRE.MatchString(parts[2]) {
@@ -72,11 +76,19 @@ func Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.API
 		}
 		return response(200, items)
 	case method == "POST" && path == "/iam/perfiles":
-		return saveProfile(ctx, app, req)
+		return createProfile(ctx, app, req)
+	case method == "PUT" && strings.HasPrefix(path, "/iam/perfiles/") && !strings.HasSuffix(path, "/permisos"):
+		return updateProfile(ctx, app, req)
+	case method == "DELETE" && strings.HasPrefix(path, "/iam/perfiles/"):
+		return deleteProfile(ctx, app, req)
 	case method == "GET" && path == "/iam/modulos":
-		return listPartition(ctx, app, "MODULES", domain.Module{})
+		return listModules(ctx, app)
 	case method == "POST" && path == "/iam/modulos":
-		return saveModule(ctx, app, req)
+		return createModule(ctx, app, req)
+	case method == "PUT" && strings.HasPrefix(path, "/iam/modulos/"):
+		return updateModule(ctx, app, req)
+	case method == "DELETE" && strings.HasPrefix(path, "/iam/modulos/"):
+		return deleteModule(ctx, app, req)
 	case method == "PUT" && strings.HasPrefix(path, "/iam/perfiles/") && strings.HasSuffix(path, "/permisos"):
 		return savePermissions(ctx, app, req)
 	default:
@@ -132,15 +144,20 @@ func login(ctx context.Context, a *App, req events.APIGatewayV2HTTPRequest) (eve
 	if e != nil || secret.Parameter == nil || secret.Parameter.Value == nil {
 		return fail(500, "INTERNAL_ERROR", "No fue posible iniciar la sesión")
 	}
-	token := signToken(u, ps, *secret.Parameter.Value)
-	return response(200, map[string]any{"token": token, "expiresIn": 28800, "user": u, "permissions": ps})
+	effective := effectivePermissions(ps)
+	token := signToken(u, effective, *secret.Parameter.Value)
+	return response(200, map[string]any{"token": token, "expiresIn": 28800, "user": u, "permissions": effective})
 }
 func signToken(u domain.User, ps []permissionView, secret string) string {
 	now := time.Now().Unix()
 	eps := []string{}
+	access := []map[string]any{}
 	allow := map[string]bool{}
 	for _, p := range ps {
 		eps = append(eps, p.Module.Endpoints...)
+		for _, endpoint := range p.Module.Endpoints {
+			access = append(access, map[string]any{"endpoint": endpoint, "allowances": strings.Join(p.Allowances, "")})
+		}
 		for _, x := range p.Allowances {
 			allow[x] = true
 		}
@@ -152,7 +169,7 @@ func signToken(u domain.User, ps []permissionView, secret string) string {
 		}
 	}
 	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
-	body, _ := json.Marshal(map[string]any{"body": map[string]any{"allowances": crud, "username": u.Email, "userId": u.ID, "email": u.Email, "rut": u.RUT, "profileCode": u.ProfileCode, "endpoints": eps}, "iat": now, "exp": now + 28800})
+	body, _ := json.Marshal(map[string]any{"body": map[string]any{"allowances": crud, "username": u.Email, "userId": u.ID, "email": u.Email, "rut": u.RUT, "profileCode": u.ProfileCode, "endpoints": eps, "access": access}, "iat": now, "exp": now + 28800})
 	payload := base64.RawURLEncoding.EncodeToString(body)
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(header + "." + payload))
@@ -164,20 +181,61 @@ type permissionView struct {
 	Allowances []string      `json:"allowances"`
 }
 
+// effectivePermissions aplica la jerarquía de Axity: un LV2 solo es accesible
+// cuando su LV1 tiene lectura. Los permisos del hijo se conservan en DynamoDB
+// para la administración, pero no llegan al menú ni al authorizer.
+func effectivePermissions(raw []permissionView) []permissionView {
+	readableParents := map[string]bool{}
+	for _, permission := range raw {
+		if permission.Module.Level != "LV2" && containsAllowance(permission.Allowances, "r") {
+			readableParents[permission.Module.Code] = true
+		}
+	}
+	out := make([]permissionView, 0, len(raw))
+	for _, permission := range raw {
+		if permission.Module.Level == "LV2" && !readableParents[permission.Module.ParentCode] {
+			continue
+		}
+		out = append(out, permission)
+	}
+	return out
+}
+
+func containsAllowance(allowances []string, expected string) bool {
+	for _, allowance := range allowances {
+		if allowance == expected {
+			return true
+		}
+	}
+	return false
+}
+
 func profilePermissions(ctx context.Context, a *App, code string) ([]permissionView, error) {
-	items, e := query(ctx, a, "PROFILE#"+code)
+	items, e := queryPrefix(ctx, a, profilePermissionsPK, "PFL#"+code+"#"+appPK+"#LV1#")
 	if e != nil {
 		return nil, e
 	}
+	if len(items) == 0 {
+		items, e = query(ctx, a, "PROFILE#"+code)
+	}
+	modules, _ := listModuleRecords(ctx, a)
 	out := []permissionView{}
 	for _, it := range items {
 		var p domain.Permission
 		if attributevalue.UnmarshalMap(it, &p) != nil {
 			continue
 		}
-		var m domain.Module
-		if get(ctx, a, "MODULES", "MODULE#"+p.ModuleCode, &m) == nil && m.Active {
-			out = append(out, permissionView{m, p.Allowances})
+		for _, m := range modules {
+			if m.Code == p.ModuleCode && m.Active {
+				out = append(out, permissionView{m, p.Allowances})
+				break
+			}
+		}
+		if len(modules) == 0 {
+			var m domain.Module
+			if get(ctx, a, "MODULES", "MODULE#"+p.ModuleCode, &m) == nil && m.Active {
+				out = append(out, permissionView{m, p.Allowances})
+			}
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Module.Order < out[j].Module.Order })
@@ -196,7 +254,12 @@ func permissions(ctx context.Context, a *App, req events.APIGatewayV2HTTPRequest
 	if e != nil {
 		return fail(500, "INTERNAL_ERROR", "No fue posible cargar permisos")
 	}
-	return response(200, map[string]any{"user": u, "permissions": p})
+	effective := effectivePermissions(p)
+	secret, e := a.SSM.GetParameter(ctx, &ssm.GetParameterInput{Name: &a.SecretParam, WithDecryption: aws.Bool(true)})
+	if e != nil || secret.Parameter == nil || secret.Parameter.Value == nil {
+		return fail(500, "INTERNAL_ERROR", "No fue posible renovar la sesión")
+	}
+	return response(200, map[string]any{"token": signToken(u, effective, *secret.Parameter.Value), "expiresIn": 28800, "user": u, "permissions": effective})
 }
 func listPartition(ctx context.Context, a *App, pk string, kind any) (events.APIGatewayV2HTTPResponse, error) {
 	items, e := query(ctx, a, pk)
@@ -252,6 +315,17 @@ func saveUser(ctx context.Context, a *App, req events.APIGatewayV2HTTPRequest) (
 		active = *in.Active
 	}
 	u := domain.User{PK: "USER#" + in.ID, SK: "IDENTITY", ID: in.ID, Name: strings.TrimSpace(in.Name), Email: strings.ToLower(strings.TrimSpace(in.Email)), RUT: strings.TrimSpace(in.RUT), PasswordHash: hash, ProfileCode: in.ProfileCode, Active: active, CreatedAt: time.Now().UTC().Format(time.RFC3339)}
+	if existing.ID != "" {
+		if existing.Email != u.Email {
+			_ = deleteItem(ctx, a, "LOGIN#"+domain.NormalizeLogin(existing.Email), "IDENTITY")
+		}
+		if existing.RUT != u.RUT {
+			_ = deleteItem(ctx, a, "LOGIN#"+domain.NormalizeLogin(existing.RUT), "IDENTITY")
+		}
+		if existing.Email != u.Email || existing.ProfileCode != u.ProfileCode {
+			_ = deleteItem(ctx, a, userProfilesPK, "UPL#USR#"+existing.Email+"#"+appPK+"#PFL#"+existing.ProfileCode)
+		}
+	}
 	if e := put(ctx, a, u); e != nil {
 		return fail(500, "INTERNAL_ERROR", "No fue posible guardar")
 	}
@@ -262,6 +336,8 @@ func saveUser(ctx context.Context, a *App, req events.APIGatewayV2HTTPRequest) (
 	projection.SK = "USER#" + u.ID
 	projection.PasswordHash = ""
 	put(ctx, a, projection)
+	// Proyección Axity: una asignación por usuario y aplicación, consultable por PK.
+	put(ctx, a, map[string]any{"pk": userProfilesPK, "sk": "UPL#USR#" + u.Email + "#" + appPK + "#PFL#" + u.ProfileCode, "id": u.ProfileCode, "email": u.Email, "documentId": u.RUT, "profileCode": u.ProfileCode, "assignedAt": time.Now().UTC().Format(time.RFC3339), "isActive": u.Active})
 	return response(200, u)
 }
 func saveProfile(ctx context.Context, a *App, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -296,6 +372,7 @@ func savePermissions(ctx context.Context, a *App, req events.APIGatewayV2HTTPReq
 	}
 	var items []struct {
 		ModuleCode string   `json:"moduleCode"`
+		ParentCode string   `json:"parentCode"`
 		Allowances []string `json:"allowances"`
 	}
 	if json.Unmarshal([]byte(req.Body), &items) != nil {
@@ -310,7 +387,15 @@ func savePermissions(ctx context.Context, a *App, req events.APIGatewayV2HTTPReq
 				return fail(400, "VALIDATION_ERROR", "Permiso inválido")
 			}
 		}
-		put(ctx, a, domain.Permission{PK: "PROFILE#" + parts[2], SK: "MODULE#" + x.ModuleCode, ModuleCode: x.ModuleCode, Allowances: x.Allowances})
+		parent := x.ParentCode
+		if parent == "" {
+			parent = x.ModuleCode
+		}
+		sk := "PFL#" + parts[2] + "#" + appPK + "#LV1#" + parent
+		if x.ParentCode != "" {
+			sk += "#LV2#" + x.ModuleCode
+		}
+		put(ctx, a, domain.Permission{PK: profilePermissionsPK, SK: sk, ModuleCode: x.ModuleCode, ParentCode: x.ParentCode, Allowances: x.Allowances})
 	}
 	return response(http.StatusOK, items)
 }

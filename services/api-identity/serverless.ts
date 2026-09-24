@@ -20,12 +20,14 @@ const endpoints: GoHttpEndpoint[] = [
     method: "POST",
     path: "/auth/login",
     public: true,
+    timeout: 10,
     policies: rw,
   },
   {
     name: "fn-obtener-permisos-v1",
     method: "GET",
     path: "/auth/permisos",
+    timeout: 10,
     policies: rw,
   },
   {
@@ -40,6 +42,9 @@ const endpoints: GoHttpEndpoint[] = [
     path: "/iam/usuarios",
     policies: rw,
   },
+  { name: "fn-actualizar-usuario-v1", method: "PUT", path: "/iam/usuarios/{id}", policies: rw },
+  { name: "fn-cambiar-estado-usuario-v1", method: "PATCH", path: "/iam/usuarios/{id}", policies: rw },
+  { name: "fn-eliminar-usuario-v1", method: "DELETE", path: "/iam/usuarios/{id}", policies: rw },
   {
     name: "fn-listar-perfiles-v1",
     method: "GET",
@@ -52,6 +57,8 @@ const endpoints: GoHttpEndpoint[] = [
     path: "/iam/perfiles",
     policies: rw,
   },
+  { name: "fn-actualizar-perfil-v1", method: "PUT", path: "/iam/perfiles/{codigo}", policies: rw },
+  { name: "fn-eliminar-perfil-v1", method: "DELETE", path: "/iam/perfiles/{codigo}", policies: rw },
   {
     name: "fn-obtener-permisos-perfil-v1",
     method: "GET",
@@ -70,6 +77,8 @@ const endpoints: GoHttpEndpoint[] = [
     path: "/iam/modulos",
     policies: rw,
   },
+  { name: "fn-actualizar-modulo-v1", method: "PUT", path: "/iam/modulos/{codigo}", policies: rw },
+  { name: "fn-eliminar-modulo-v1", method: "DELETE", path: "/iam/modulos/{codigo}", policies: rw },
   {
     name: "fn-guardar-permisos-v1",
     method: "PUT",

@@ -40,6 +40,7 @@ type FavoriteContent struct {
 	// RateOrigin conserva cuándo, desde qué proveedor y por qué vía se
 	// obtuvieron las tasas usadas al guardar el programa.
 	RateOrigin *program.ExchangeRateOrigin `dynamodbav:"rateOrigin,omitempty" json:"rateOrigin,omitempty" validate:"omitempty"`
+	Totals     *program.ProgramTotals      `dynamodbav:"totals,omitempty" json:"totals,omitempty" validate:"omitempty"`
 	Crews      []program.CrewMember        `dynamodbav:"crews"    json:"crews"    validate:"max=20,dive"`
 	Services   []program.ProgramService    `dynamodbav:"services" json:"services" validate:"max=100,dive"`
 }

@@ -7,12 +7,21 @@
     "APP_NAME",
     "APP_STAGE",
     "APP_REGION",
-    "CATALOGS_TABLE_NAME"
+    "CATALOGS_TABLE_NAME",
+    "CONFIGURATIONS_TABLE_NAME"
   ],
   "functions": [
     {
       "name": "fn-obtener-catalogos-v1",
       "entrypoint": "./cmd/fn-obtener-catalogos-v1"
+    },
+    {
+      "name": "fn-actualizar-configuracion-tributaria-v1",
+      "entrypoint": "./cmd/fn-actualizar-configuracion-tributaria-v1"
+    },
+    {
+      "name": "fn-obtener-configuracion-tributaria-v1",
+      "entrypoint": "./cmd/fn-obtener-configuracion-tributaria-v1"
     },
     {
       "name": "fn-obtener-tasas-cambio-v1",

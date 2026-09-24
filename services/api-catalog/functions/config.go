@@ -13,6 +13,7 @@ import (
 // En AWS el valor sale del output CatalogosTableName del stack de DynamoDB
 // (repo ind-hub-inf). En local sale de configs/.env.local de este servicio.
 const CatalogsTableNameEnv = "CATALOGS_TABLE_NAME"
+const ConfigurationsTableNameEnv = "CONFIGURATIONS_TABLE_NAME"
 
 // BCCHAPITokenEnv autentica las consultas REST a la BDE del Banco Central.
 // Es opcional para que el servicio pueda recurrir a las fuentes de respaldo
@@ -28,7 +29,8 @@ const BCCHAPITokenEnv = "BCCH_API_TOKEN"
 // declara un unico nombre de tabla y no uno por endpoint.
 type Config struct {
 	// CatalogsTableName es el nombre de la tabla `catalogos` en DynamoDB.
-	CatalogsTableName string
+	CatalogsTableName       string
+	ConfigurationsTableName string
 
 	// BCCHAPIToken es el token de la API BDE. Nunca se registra en logs.
 	BCCHAPIToken string
@@ -51,9 +53,10 @@ type Config struct {
 // diagnosticar que un endpoint que responde 500 en cada invocacion.
 func LoadConfig(base bootstrap.Config) Config {
 	return Config{
-		CatalogsTableName: bootstrap.GetRequiredEnv(CatalogsTableNameEnv),
-		BCCHAPIToken:      bootstrap.GetEnv(BCCHAPITokenEnv, ""),
-		FunctionName:      bootstrap.GetEnv("APP_FUNCTION_NAME", base.AppName),
-		Port:              base.Port,
+		CatalogsTableName:       bootstrap.GetRequiredEnv(CatalogsTableNameEnv),
+		ConfigurationsTableName: bootstrap.GetRequiredEnv(ConfigurationsTableNameEnv),
+		BCCHAPIToken:            bootstrap.GetEnv(BCCHAPITokenEnv, ""),
+		FunctionName:            bootstrap.GetEnv("APP_FUNCTION_NAME", base.AppName),
+		Port:                    base.Port,
 	}
 }

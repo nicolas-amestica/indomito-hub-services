@@ -32,7 +32,7 @@ func TestRoutesMatchServerlessConfig(t *testing.T) {
 
 	matches := serverlessEndpointPattern.FindAllStringSubmatch(string(source), -1)
 
-	declared := []Route{CatalogsRoute, ExchangeRatesRoute}
+	declared := []Route{GetTaxSettingsRoute, UpdateTaxSettingsRoute, CatalogsRoute, ExchangeRatesRoute}
 	if len(matches) != len(declared) {
 		t.Fatalf(
 			"serverless.ts declara %d endpoints y functions/routes.go declara %d",

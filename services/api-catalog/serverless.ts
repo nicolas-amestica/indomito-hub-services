@@ -36,6 +36,8 @@ const CATALOGS_TABLE_ARN = `\${cf:${DDB_STACK}.CatalogosTableArn}`;
  * existe.
  */
 const CATALOGS_TABLE_NAME = `\${cf:${DDB_STACK}.CatalogosTableName}`;
+const CONFIGURATIONS_TABLE_ARN = `\${cf:${DDB_STACK}.ConfiguracionesTableArn}`;
+const CONFIGURATIONS_TABLE_NAME = `\${cf:${DDB_STACK}.ConfiguracionesTableName}`;
 
 /**
  * Token de la API BDE del Banco Central. El fallback vacío mantiene operativo
@@ -60,6 +62,26 @@ const BCCH_API_TOKEN = `\${ssm:/indomito/${STAGE}/rates/bcch-api-token, ''}`;
  * reintentos, que es lo que dejaria al endpoint sin poder entregar el respaldo.
  */
 const endpoints: GoHttpEndpoint[] = [
+  {
+    name: "fn-obtener-configuracion-tributaria-v1",
+    method: "GET",
+    path: "/configuracion/tributaria",
+    public: false,
+    memorySize: 128,
+    timeout: 6,
+    description: "Obtiene los porcentajes tributarios vigentes",
+    policies: [dynamodbReadPolicy(CONFIGURATIONS_TABLE_ARN)],
+  },
+  {
+    name: "fn-actualizar-configuracion-tributaria-v1",
+    method: "PUT",
+    path: "/configuracion/tributaria",
+    public: false,
+    memorySize: 128,
+    timeout: 6,
+    description: "Actualiza los porcentajes de IVA y retencion de tripulacion",
+    policies: [dynamodbCrudPolicy(CONFIGURATIONS_TABLE_ARN)],
+  },
   {
     name: "fn-obtener-catalogos-v1",
     method: "GET",
@@ -91,6 +113,7 @@ const endpoints: GoHttpEndpoint[] = [
 const config = buildGoServiceServerless(ApiServices.Catalog, endpoints, {
   env: {
     CATALOGS_TABLE_NAME,
+    CONFIGURATIONS_TABLE_NAME,
     BCCH_API_TOKEN,
   },
 });
