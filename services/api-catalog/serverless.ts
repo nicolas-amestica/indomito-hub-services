@@ -38,6 +38,12 @@ const CATALOGS_TABLE_ARN = `\${cf:${DDB_STACK}.CatalogosTableArn}`;
 const CATALOGS_TABLE_NAME = `\${cf:${DDB_STACK}.CatalogosTableName}`;
 
 /**
+ * Token de la API BDE del Banco Central. El fallback vacío mantiene operativo
+ * mindicador.cl hasta que infraestructura publique el SecureString del stage.
+ */
+const BCCH_API_TOKEN = `\${ssm:/indomito/${STAGE}/rates/bcch-api-token, ''}`;
+
+/**
  * Endpoints del servicio. Es la unica declaracion TypeScript de su superficie
  * HTTP; la contraparte en Go son las rutas de `functions/routes.go`, y el test
  * de consistencia de ese paquete comprueba que ambas coincidan.
@@ -85,6 +91,7 @@ const endpoints: GoHttpEndpoint[] = [
 const config = buildGoServiceServerless(ApiServices.Catalog, endpoints, {
   env: {
     CATALOGS_TABLE_NAME,
+    BCCH_API_TOKEN,
   },
 });
 

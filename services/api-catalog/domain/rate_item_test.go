@@ -25,11 +25,13 @@ func TestNewRateItem(t *testing.T) {
 		{
 			name: "tasas frescas",
 			snapshot: program.ExchangeSnapshot{
-				Date: "2026-03-14", UsdToClp: 950, BrlToClp: 165, IsFallback: false,
+				Date: "2026-03-14", UsdToClp: 950, BrlToClp: 165,
+				Source: program.ExchangeRateSourceBCCH, IsFallback: false,
 			},
 			want: RateItem{
 				PK: RatesPK, SK: RatesLatestSK,
-				Date: "2026-03-14", UsdToClp: 950, BrlToClp: 165, FetchedAt: fetchedAt,
+				Date: "2026-03-14", UsdToClp: 950, BrlToClp: 165,
+				Source: program.ExchangeRateSourceBCCH, FetchedAt: fetchedAt,
 			},
 		},
 		{
@@ -81,7 +83,8 @@ func TestRateItemFallbackSnapshot(t *testing.T) {
 	}
 
 	want := program.ExchangeSnapshot{
-		Date: "2026-03-11", UsdToClp: 940, BrlToClp: 160, IsFallback: true,
+		Date: "2026-03-11", UsdToClp: 940, BrlToClp: 160,
+		Source: program.ExchangeRateSourceUnknown, IsFallback: true,
 	}
 
 	if got := item.FallbackSnapshot(); got != want {
@@ -103,7 +106,7 @@ func TestRateItemAttributeNames(t *testing.T) {
 		t.Fatalf("MarshalMap() error = %v", err)
 	}
 
-	want := []string{"brlToClp", "date", "fetchedAt", "pk", "sk", "usdToClp"}
+	want := []string{"brlToClp", "date", "fetchedAt", "pk", "sk", "source", "usdToClp"}
 	if got := attributeNames(av); !reflect.DeepEqual(got, want) {
 		t.Fatalf("atributos = %v, want %v", got, want)
 	}

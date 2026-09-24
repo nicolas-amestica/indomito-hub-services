@@ -60,7 +60,14 @@ func handle(
 		_ = log.Sync()
 	}()
 
-	return serveRates(ctx, app, req, DefaultSource(), FetchRates, time.Now, log)
+	preferredSources := DefaultPreferredSources(app.Config.BCCHAPIToken)
+	return serveRates(ctx, app, req, DefaultSource(), func(
+		ctx context.Context,
+		_ Source,
+		log *zap.Logger,
+	) (FetchedRates, error) {
+		return FetchPreferredRates(ctx, preferredSources, log)
+	}, time.Now, log)
 }
 
 // serveRates contiene el flujo comprobable del endpoint con sus dependencias

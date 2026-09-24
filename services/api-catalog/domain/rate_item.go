@@ -34,6 +34,9 @@ type RateItem struct {
 	// BrlToClp es el valor del real en pesos, ya redondeado.
 	BrlToClp int64 `dynamodbav:"brlToClp"`
 
+	// Source conserva el proveedor que originó el snapshot.
+	Source program.ExchangeRateSource `dynamodbav:"source"`
+
 	// FetchedAt es el instante de la consulta exitosa que escribió el ítem.
 	// attributevalue lo guarda como cadena RFC3339Nano.
 	//
@@ -58,6 +61,7 @@ func NewRateItem(snapshot program.ExchangeSnapshot, fetchedAt time.Time) RateIte
 		Date:      snapshot.Date,
 		UsdToClp:  snapshot.UsdToClp,
 		BrlToClp:  snapshot.BrlToClp,
+		Source:    snapshot.Source,
 		FetchedAt: fetchedAt.UTC(),
 	}
 }
@@ -70,10 +74,16 @@ func NewRateItem(snapshot program.ExchangeSnapshot, fetchedAt time.Time) RateIte
 // snapshot entregado al cliente es, por definición, una tasa de una fecha
 // anterior, y el Requirement 1.7 obliga a decírselo.
 func (i RateItem) FallbackSnapshot() program.ExchangeSnapshot {
+	source := i.Source
+	if source == "" {
+		source = program.ExchangeRateSourceUnknown
+	}
+
 	return program.ExchangeSnapshot{
 		Date:       i.Date,
 		UsdToClp:   i.UsdToClp,
 		BrlToClp:   i.BrlToClp,
+		Source:     source,
 		IsFallback: true,
 	}
 }

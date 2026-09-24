@@ -34,11 +34,14 @@ import (
 // noches se precargan desde los días y dejan de actualizarse cuando el usuario
 // las edita.
 type FavoriteContent struct {
-	Generals program.ProgramGeneral   `dynamodbav:"generals" json:"generals" validate:"required"`
-	Schedule program.ScheduleContent  `dynamodbav:"schedule" json:"schedule" validate:"required"`
-	Pricing  program.PricingContent   `dynamodbav:"pricing"  json:"pricing"  validate:"required"`
-	Crews    []program.CrewMember     `dynamodbav:"crews"    json:"crews"    validate:"max=20,dive"`
-	Services []program.ProgramService `dynamodbav:"services" json:"services" validate:"max=100,dive"`
+	Generals program.ProgramGeneral  `dynamodbav:"generals" json:"generals" validate:"required"`
+	Schedule program.ScheduleContent `dynamodbav:"schedule" json:"schedule" validate:"required"`
+	Pricing  program.PricingContent  `dynamodbav:"pricing"  json:"pricing"  validate:"required"`
+	// RateOrigin conserva cuándo, desde qué proveedor y por qué vía se
+	// obtuvieron las tasas usadas al guardar el programa.
+	RateOrigin *program.ExchangeRateOrigin `dynamodbav:"rateOrigin,omitempty" json:"rateOrigin,omitempty" validate:"omitempty"`
+	Crews      []program.CrewMember        `dynamodbav:"crews"    json:"crews"    validate:"max=20,dive"`
+	Services   []program.ProgramService    `dynamodbav:"services" json:"services" validate:"max=100,dive"`
 }
 
 // Favorite es un favorito tal como lo expone la API: el contenido guardado más

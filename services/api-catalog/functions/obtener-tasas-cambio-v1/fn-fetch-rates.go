@@ -150,6 +150,9 @@ type FetchedRates struct {
 	// BrlToClp es el valor del real en pesos, redondeado.
 	BrlToClp int64
 
+	// Source es el proveedor que entregó ambas tasas.
+	Source program.ExchangeRateSource
+
 	// Attempts es la cantidad de intentos que hizo falta, contando el que
 	// funcionó. Es el campo `attempts` del log de la invocación.
 	Attempts int
@@ -167,6 +170,7 @@ func (r FetchedRates) Snapshot() program.ExchangeSnapshot {
 		Date:       r.Date,
 		UsdToClp:   r.UsdToClp,
 		BrlToClp:   r.BrlToClp,
+		Source:     r.Source,
 		IsFallback: false,
 	}
 }
@@ -280,6 +284,7 @@ func (s Source) fetchOnce(ctx context.Context, log *zap.Logger) (FetchedRates, e
 		Date:     resolveDate(usd, brl, log),
 		UsdToClp: roundToClp(usd.toClp),
 		BrlToClp: roundToClp(brl.toClp),
+		Source:   program.ExchangeRateSourceCurrencyAPI,
 	}, nil
 }
 
