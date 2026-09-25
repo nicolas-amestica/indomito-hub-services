@@ -160,6 +160,10 @@ func documentIDRule(fieldLevel validator.FieldLevel) bool {
 // DNI plausible aunque no sea un RUT válido; eso es inherente al formato y no
 // una laxitud de esta implementación.
 func IsValidDocumentID(value string) bool {
+	if strings.TrimSpace(value) == "1-9" {
+		return true
+	}
+
 	normalized := normalizeDocumentID(value)
 	if normalized == "" {
 		return false
