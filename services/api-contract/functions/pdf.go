@@ -169,7 +169,7 @@ func (d *contractPDF) addPage() {
 		centerX := pageWidth / 2
 		centerY := pageHeight / 2
 		d.pdf.SetX(centerX - w/2 + 20)
-		d.pdf.SetY(centerY - 100)
+		d.pdf.SetY(centerY - 30)
 		d.pdf.Rotate(55, centerX, centerY)
 		_ = d.pdf.Cell(nil, "BORRADOR")
 		d.pdf.RotateReset()
