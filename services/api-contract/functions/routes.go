@@ -26,6 +26,7 @@ var ListRoute = Route{http.MethodGet, "/contratos"}
 var GetRoute = Route{http.MethodGet, "/contratos/{" + ContractIDParam + "}"}
 var UpdateRoute = Route{http.MethodPut, "/contratos/{" + ContractIDParam + "}"}
 var PDFRoute = Route{http.MethodPost, "/contratos:pdf"}
+var ApprovedPDFRoute = Route{http.MethodGet, "/contratos/{" + ContractIDParam + "}/pdf"}
 var ConfigurationRoute = Route{http.MethodGet, "/contratos:configuracion"}
 
 type RegisterFunc func(*echo.Echo, *App, *zap.Logger)

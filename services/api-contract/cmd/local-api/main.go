@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	if err := functions.RunLocal(context.Background(), functions.RegisterCreate, functions.RegisterList, functions.RegisterGet, functions.RegisterUpdate, functions.RegisterPDF, functions.RegisterConfiguration); err != nil {
+	if err := functions.RunLocal(context.Background(), functions.RegisterCreate, functions.RegisterList, functions.RegisterGet, functions.RegisterUpdate, functions.RegisterPDF, functions.RegisterApprovedPDF, functions.RegisterConfiguration); err != nil {
 		os.Exit(1)
 	}
 }

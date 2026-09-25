@@ -136,6 +136,14 @@ type Content struct {
 	Passengers            []Passenger `json:"passengers" dynamodbav:"passengers"`
 }
 
+type PDFDocument struct {
+	ObjectKey   string `json:"objectKey" dynamodbav:"objectKey"`
+	ContentType string `json:"contentType" dynamodbav:"contentType"`
+	Size        int64  `json:"size" dynamodbav:"size"`
+	SHA256      string `json:"sha256" dynamodbav:"sha256"`
+	GeneratedAt string `json:"generatedAt" dynamodbav:"generatedAt"`
+}
+
 type Contract struct {
 	ID               string            `json:"id" dynamodbav:"id"`
 	ProgramID        string            `json:"programId,omitempty" dynamodbav:"programId,omitempty"`
@@ -146,6 +154,7 @@ type Contract struct {
 	CreatedAt        string            `json:"createdAt" dynamodbav:"createdAt"`
 	UpdatedAt        string            `json:"updatedAt" dynamodbav:"updatedAt"`
 	Version          int               `json:"version" dynamodbav:"version"`
+	PDFDocument      *PDFDocument      `json:"pdfDocument,omitempty" dynamodbav:"pdfDocument,omitempty"`
 }
 type Item struct {
 	PK          string `json:"-" dynamodbav:"pk"`

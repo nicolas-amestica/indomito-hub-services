@@ -2,6 +2,7 @@ package functions
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -48,6 +49,7 @@ var RegisterList = register(ListRoute, HandleList)
 var RegisterGet = register(GetRoute, HandleGet)
 var RegisterUpdate = register(UpdateRoute, HandleUpdate)
 var RegisterPDF = register(PDFRoute, HandlePDF)
+var RegisterApprovedPDF = register(ApprovedPDFRoute, HandleApprovedPDF)
 var RegisterConfiguration = register(ConfigurationRoute, HandleConfiguration)
 
 func HandleConfiguration(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -192,6 +194,18 @@ func HandleUpdate(ctx context.Context, req events.APIGatewayV2HTTPRequest) (even
 	current.Period = period
 	current.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	current.Version++
+	if body.Status == domain.StatusApproved {
+		pdf, err := ComposePDF(current.Content, false)
+		if err != nil {
+			return errorResponse(500, "No se pudo generar el PDF definitivo."), nil
+		}
+		objectKey := fmt.Sprintf("contracts/%s/approved/v%d.pdf", id, current.Version)
+		if err := app.Documents.PutPDF(ctx, objectKey, pdf); err != nil {
+			return errorResponse(500, "No se pudo almacenar el PDF definitivo."), nil
+		}
+		digest := sha256.Sum256(pdf)
+		current.PDFDocument = &domain.PDFDocument{ObjectKey: objectKey, ContentType: approvedPDFContentType, Size: int64(len(pdf)), SHA256: fmt.Sprintf("%x", digest), GeneratedAt: current.UpdatedAt}
+	}
 	current.GSIPeriodPK = domain.YearPK(period)
 	current.GSIPeriodSK = current.CreatedAt + "#" + id
 	raw, err := attributevalue.MarshalMap(current)
@@ -203,6 +217,26 @@ func HandleUpdate(ctx context.Context, req events.APIGatewayV2HTTPRequest) (even
 		return errorResponse(409, "El contrato cambio o ya fue aprobado."), nil
 	}
 	return lambdautil.SuccessResponse(200, current.Contract)
+}
+
+func HandleApprovedPDF(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+	app, err := GetApp(ctx)
+	if err != nil {
+		return lambdautil.ErrorResponse(req, err)
+	}
+	item, code, err := getItem(ctx, app, req.PathParameters[ContractIDParam])
+	if err != nil {
+		return errorResponse(code, err.Error()), nil
+	}
+	if item.Status != domain.StatusApproved || item.PDFDocument == nil || strings.TrimSpace(item.PDFDocument.ObjectKey) == "" {
+		return errorResponse(404, "El contrato no tiene un PDF aprobado."), nil
+	}
+	const validity = 15 * time.Minute
+	url, err := app.Documents.PresignPDF(ctx, item.PDFDocument.ObjectKey, validity)
+	if err != nil {
+		return errorResponse(500, "No se pudo obtener el PDF aprobado."), nil
+	}
+	return lambdautil.SuccessResponse(200, map[string]any{"url": url, "expiresAt": time.Now().UTC().Add(validity).Format(time.RFC3339)})
 }
 
 func HandlePDF(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
