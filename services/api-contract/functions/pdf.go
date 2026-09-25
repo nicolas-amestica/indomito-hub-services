@@ -6,12 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/signintech/gopdf"
 	"ind-hub-api-gox-sls-pri-gh/services/api-contract/domain"
+
+	"github.com/signintech/gopdf"
 )
 
-const pageWidth = 595.28
-const pageHeight = 841.89
+const pageWidth = 612.0
+const pageHeight = 792.0
 const margin = 50.0
 
 // Tamaños de fuente — replican la jerarquía visual del legacy (pdf-lib).
@@ -39,11 +40,11 @@ var headerPNG []byte
 //go:embed assets/footer.png
 var footerPNG []byte
 
-//go:embed assets/EBGaramond.ttf
-var garamondTTF []byte
+//go:embed assets/CourierNew.ttf
+var courierTTF []byte
 
-//go:embed assets/EBGaramond-Bold.ttf
-var garamondBoldTTF []byte
+//go:embed assets/CourierNew-Bold.ttf
+var courierBoldTTF []byte
 
 type contractPDF struct {
 	pdf     *gopdf.GoPdf
@@ -59,12 +60,12 @@ func contentWidth() float64 {
 // ComposePDF genera los bytes de un contrato PDF a partir del contenido.
 func ComposePDF(c domain.Content, preview bool) ([]byte, error) {
 	p := &gopdf.GoPdf{}
-	p.Start(gopdf.Config{PageSize: *gopdf.PageSizeA4})
+	p.Start(gopdf.Config{PageSize: *gopdf.PageSizeLetter})
 
-	if err := p.AddTTFFontData("garamond", garamondTTF); err != nil {
+	if err := p.AddTTFFontData("courier", courierTTF); err != nil {
 		return nil, fmt.Errorf("no se pudo cargar la fuente regular: %w", err)
 	}
-	if err := p.AddTTFFontData("garamond-bold", garamondBoldTTF); err != nil {
+	if err := p.AddTTFFontData("courier-bold", courierBoldTTF); err != nil {
 		return nil, fmt.Errorf("no se pudo cargar la fuente bold: %w", err)
 	}
 
@@ -73,6 +74,9 @@ func ComposePDF(c domain.Content, preview bool) ([]byte, error) {
 
 	// Título centrado en negrita (tamaño 14 como el legacy).
 	d.center("CONTRATO DE PRESTACIÓN DE SERVICIOS TURÍSTICOS", fontSizeTitle, true)
+	d.y += 10
+	schoolName := fmt.Sprintf("\"%s\"", strings.ToUpper(fallback(c.Institution.Name)))
+	d.center(schoolName, fontSizeTitle, true)
 	d.y += 10
 
 	// Datos generales — justificados.
@@ -153,17 +157,20 @@ func (d *contractPDF) addPage() {
 	d.pdf.AddPage()
 	d.y = 160
 	if holder, err := gopdf.ImageHolderByBytes(headerPNG); err == nil {
-		_ = d.pdf.ImageByHolder(holder, -8, 0, &gopdf.Rect{W: 612, H: 163})
+		_ = d.pdf.ImageByHolder(holder, -8, 0, &gopdf.Rect{W: 632, H: 163})
 	}
 	if holder, err := gopdf.ImageHolderByBytes(footerPNG); err == nil {
-		_ = d.pdf.ImageByHolder(holder, -15, 768, &gopdf.Rect{W: 625, H: 74})
+		_ = d.pdf.ImageByHolder(holder, -15, 718, &gopdf.Rect{W: 642, H: 74})
 	}
 	if d.preview {
-		_ = d.pdf.SetFont("garamond", "", 42)
-		d.pdf.SetTextColor(225, 225, 225)
-		d.pdf.SetX(155)
-		d.pdf.SetY(420)
-		d.pdf.Rotate(35, 297, 421)
+		_ = d.pdf.SetFont("courier", "", 120)
+		d.pdf.SetTextColor(230, 230, 230)
+		w, _ := d.pdf.MeasureTextWidth("BORRADOR")
+		centerX := pageWidth / 2
+		centerY := pageHeight / 2
+		d.pdf.SetX(centerX - w/2 - 120)
+		d.pdf.SetY(centerY - 20)
+		d.pdf.Rotate(55, centerX, centerY)
 		_ = d.pdf.Cell(nil, "BORRADOR")
 		d.pdf.RotateReset()
 		d.pdf.SetTextColor(0, 0, 0)
@@ -172,7 +179,7 @@ func (d *contractPDF) addPage() {
 
 // ensure verifica que quede espacio suficiente antes del footer. Si no, agrega una nueva página.
 func (d *contractPDF) ensure(h float64) {
-	if d.y+h > 760 {
+	if d.y+h > 710 {
 		d.addPage()
 	}
 }
@@ -180,9 +187,9 @@ func (d *contractPDF) ensure(h float64) {
 // setFont alterna entre la fuente regular y bold.
 func (d *contractPDF) setFont(bold bool, size int) {
 	if bold {
-		_ = d.pdf.SetFont("garamond-bold", "", size)
+		_ = d.pdf.SetFont("courier-bold", "", size)
 	} else {
-		_ = d.pdf.SetFont("garamond", "", size)
+		_ = d.pdf.SetFont("courier", "", size)
 	}
 }
 
@@ -410,7 +417,7 @@ func (d *contractPDF) signatures(c domain.Content) {
 		d.setFont(false, fontSizeSignatureDetail)
 		d.pdf.SetX(col1X)
 		d.pdf.SetY(operatorY)
-		_ = d.pdf.Cell(nil, fallback(p.Name))
+		_ = d.pdf.Cell(nil, strings.ToUpper(fallback(p.Name)))
 		operatorY -= 13
 
 		d.pdf.SetX(col1X)
@@ -435,7 +442,7 @@ func (d *contractPDF) signatures(c domain.Content) {
 		d.setFont(false, fontSizeSignatureDetail)
 		d.pdf.SetX(col2X)
 		d.pdf.SetY(clientY)
-		_ = d.pdf.Cell(nil, fallback(p.Name))
+		_ = d.pdf.Cell(nil, strings.ToUpper(fallback(p.Name)))
 		clientY -= 14
 
 		d.pdf.SetX(col2X)
@@ -450,7 +457,7 @@ func (d *contractPDF) signatures(c domain.Content) {
 func people(rows []domain.Person) string {
 	parts := make([]string, 0, len(rows))
 	for _, p := range rows {
-		parts = append(parts, fmt.Sprintf("%s, cédula nacional de identidad número %s", fallback(p.Name), fallback(p.DNI)))
+		parts = append(parts, fmt.Sprintf("%s, cédula nacional de identidad número %s", strings.ToUpper(fallback(p.Name)), fallback(p.DNI)))
 	}
 	if len(parts) == 0 {
 		return ":::SIN REPRESENTANTE:::"
