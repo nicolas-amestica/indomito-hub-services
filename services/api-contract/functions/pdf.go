@@ -12,7 +12,26 @@ import (
 
 const pageWidth = 595.28
 const pageHeight = 841.89
-const margin = 52.0
+const margin = 50.0
+
+// Tamaños de fuente — replican la jerarquía visual del legacy (pdf-lib).
+const (
+	fontSizeTitle           = 14
+	fontSizeBody            = 10
+	fontSizeClauseTitle     = 11 // Solo para el número de cláusula, ej. "PRIMERO:"
+	fontSizeServiceTitle    = 11
+	fontSizeService         = 9
+	fontSizeSignature       = 10
+	fontSizeSignatureDetail = 9
+)
+
+// Interlineado y espaciado — tomados del legacy.
+const (
+	lineHeightBody    = 15.0
+	lineHeightService = 12.0
+	clauseSpacing     = 15.0
+	generalPostGap    = 20.0
+)
 
 //go:embed assets/header.png
 var headerPNG []byte
@@ -23,37 +42,66 @@ var footerPNG []byte
 //go:embed assets/EBGaramond.ttf
 var garamondTTF []byte
 
+//go:embed assets/EBGaramond-Bold.ttf
+var garamondBoldTTF []byte
+
 type contractPDF struct {
 	pdf     *gopdf.GoPdf
 	y       float64
 	preview bool
 }
 
+// contentWidth devuelve el ancho disponible para contenido.
+func contentWidth() float64 {
+	return pageWidth - 2*margin
+}
+
+// ComposePDF genera los bytes de un contrato PDF a partir del contenido.
 func ComposePDF(c domain.Content, preview bool) ([]byte, error) {
 	p := &gopdf.GoPdf{}
 	p.Start(gopdf.Config{PageSize: *gopdf.PageSizeA4})
+
 	if err := p.AddTTFFontData("garamond", garamondTTF); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("no se pudo cargar la fuente regular: %w", err)
 	}
+	if err := p.AddTTFFontData("garamond-bold", garamondBoldTTF); err != nil {
+		return nil, fmt.Errorf("no se pudo cargar la fuente bold: %w", err)
+	}
+
 	d := &contractPDF{pdf: p, preview: preview}
 	d.addPage()
-	d.center("CONTRATO DE PRESTACIÓN DE SERVICIOS TURÍSTICOS", 12, true)
-	d.y += 14
-	d.paragraph(buildGeneral(c))
-	d.y += 8
+
+	// Título centrado en negrita (tamaño 14 como el legacy).
+	d.center("CONTRATO DE PRESTACIÓN DE SERVICIOS TURÍSTICOS", fontSizeTitle, true)
+	d.y += 10
+
+	// Datos generales — justificados.
+	d.justifiedParagraph(buildGeneral(c), fontSizeBody)
+	d.y += generalPostGap
+
+	// Cláusulas.
 	for _, clause := range buildClauses(c) {
-		d.heading(clause.title)
-		d.paragraph(clause.text)
+		// Título de la cláusula en negrita (tamaño 11).
+		d.heading(clause.title, fontSizeClauseTitle)
+		// Cuerpo justificado (tamaño 10).
+		d.justifiedParagraph(clause.text, fontSizeBody)
+
+		// Detalle del plan (cláusula 16).
 		if clause.number == 16 {
 			d.plan(c.Plan, c.Trip)
 		}
+		// Tabla de pasajeros (cláusula 22).
 		if clause.number == 22 {
 			d.passengerTable(c.Passengers)
 		}
-		d.y += 7
+
+		d.y += clauseSpacing
 	}
+
+	// Página de firmas.
 	d.addPage()
 	d.signatures(c)
+
 	bytes, err := p.GetBytesPdfReturnErr()
 	if err != nil {
 		return nil, err
@@ -74,7 +122,7 @@ func buildClauses(c domain.Content) []clause {
 	co := p.Conditions
 	t := c.Trip
 	return []clause{
-		{1, "PRIMERO:", fmt.Sprintf("El Operador y el Pasajero han convenido la realización de un programa de viaje con destino a %s, con fecha de salida el %s y retorno el %s, partiendo desde %s, domiciliado en %s, y retornando al mismo lugar de origen. El programa detallado ha sido firmado por los comparecientes y forma parte integrante de este contrato por acuerdo unánime de ambas partes.", fallback(t.Destination), displayDate(t.DepartureDate), displayDate(t.ReturnDate), fallback(t.DeparturePoint), fallback(c.Institution.Address))},
+		{1, "PRIMERO:", fmt.Sprintf("El Operador y el Pasajero han convenido la realización de un programa de viaje con destino a %s, con fecha de salida el %s y retorno el %s, partiendo desde %s, domiciliado en %s, y retornando al mismo lugar de origen. El programa detallado ha sido firmado por los comparecientes y forma parte integrante de este contrato por acuerdo unánime de ambas partes.", fallback(t.Destination), displayDateFull(t.DepartureDate), displayDateFull(t.ReturnDate), fallback(t.DeparturePoint), fallback(c.Institution.Address))},
 		{2, "SEGUNDO:", "El transporte de los pasajeros se realizará en los medios pactados en el presente contrato, ya sean aéreos, terrestres o marítimos, cuya prestación es de exclusiva responsabilidad del Operador."},
 		{3, "TERCERO:", "El alojamiento hotelero de los pasajeros se realizará en los hoteles, habitaciones y regímenes pactados. Sin perjuicio de lo anterior, estos podrán ser modificados garantizando la misma categoría y condiciones de los servicios contratados, asegurando que todos los pasajeros del grupo permanezcan en un mismo establecimiento."},
 		{4, "CUARTO:", "El Operador podrá introducir cambios en las rutas y horarios previamente establecidos, siempre que sean acordados con los Representantes del viaje, por las siguientes razones: a) De fuerza mayor, cuando pudieran afectar la seguridad de los pasajeros; b) Aquellas destinadas a mejorar el cumplimiento de los objetivos previstos."},
@@ -99,6 +147,8 @@ func buildClauses(c domain.Content) []clause {
 		{23, "", "En comprobante, previa lectura, firman y ratifican como representantes."}}
 }
 
+// ─── Métodos de dibujo ───────────────────────────────────────────────────────
+
 func (d *contractPDF) addPage() {
 	d.pdf.AddPage()
 	d.y = 160
@@ -119,119 +169,284 @@ func (d *contractPDF) addPage() {
 		d.pdf.SetTextColor(0, 0, 0)
 	}
 }
+
+// ensure verifica que quede espacio suficiente antes del footer. Si no, agrega una nueva página.
 func (d *contractPDF) ensure(h float64) {
 	if d.y+h > 760 {
 		d.addPage()
 	}
 }
+
+// setFont alterna entre la fuente regular y bold.
 func (d *contractPDF) setFont(bold bool, size int) {
-	_ = bold
-	_ = d.pdf.SetFont("garamond", "", size)
+	if bold {
+		_ = d.pdf.SetFont("garamond-bold", "", size)
+	} else {
+		_ = d.pdf.SetFont("garamond", "", size)
+	}
 }
+
+// center dibuja texto centrado horizontalmente.
 func (d *contractPDF) center(text string, size int, bold bool) {
 	d.setFont(bold, size)
 	d.ensure(float64(size + 8))
-	d.pdf.SetX(margin)
+	w, _ := d.pdf.MeasureTextWidth(text)
+	x := (pageWidth - w) / 2
+	d.pdf.SetX(x)
 	d.pdf.SetY(d.y)
-	_ = d.pdf.CellWithOption(&gopdf.Rect{W: pageWidth - 2*margin, H: 18}, text, gopdf.CellOption{Align: gopdf.Center})
-	d.y += 20
+	_ = d.pdf.Cell(nil, text)
+	d.y += float64(size) + 6
 }
-func (d *contractPDF) heading(text string) {
+
+// heading dibuja un título de cláusula en negrita.
+func (d *contractPDF) heading(text string, size int) {
 	if text == "" {
 		return
 	}
-	d.ensure(18)
-	d.setFont(true, 12)
+	d.ensure(float64(size) + 8)
+	d.setFont(true, size)
 	d.pdf.SetX(margin)
 	d.pdf.SetY(d.y)
 	_ = d.pdf.Cell(nil, text)
-	d.y += 16
+	d.y += float64(size) + 5
 }
-func (d *contractPDF) paragraph(text string) {
-	d.setFont(false, 12)
-	for _, line := range wrap(text, 76) {
-		d.ensure(16)
-		d.pdf.SetX(margin)
-		d.pdf.SetY(d.y)
-		_ = d.pdf.Cell(nil, line)
-		d.y += 15
+
+// justifiedParagraph dibuja un párrafo con texto justificado, midiendo el ancho
+// real de cada palabra con la fuente activa.
+func (d *contractPDF) justifiedParagraph(text string, size int) {
+	d.setFont(false, size)
+	cw := contentWidth()
+	lines := d.wrapByWidth(text, cw, false, size)
+
+	for i, line := range lines {
+		d.ensure(lineHeightBody)
+		isLast := i == len(lines)-1
+		d.drawJustifiedLine(line, margin, d.y, cw, isLast, false, size)
+		d.y += lineHeightBody
 	}
 }
+
+// drawJustifiedLine dibuja una línea de texto justificada distribuyendo el
+// espacio sobrante entre las palabras. La última línea de un párrafo no se
+// justifica (queda alineada a la izquierda, como el legacy).
+func (d *contractPDF) drawJustifiedLine(line string, x, y, maxWidth float64, isLastLine bool, bold bool, size int) {
+	d.setFont(bold, size)
+	words := strings.Fields(line)
+
+	if isLastLine || len(words) <= 1 {
+		d.pdf.SetX(x)
+		d.pdf.SetY(y)
+		_ = d.pdf.Cell(nil, strings.Join(words, " "))
+		return
+	}
+
+	// Medir el ancho natural de las palabras (sin espacios).
+	var wordsWidth float64
+	for _, word := range words {
+		w, _ := d.pdf.MeasureTextWidth(word)
+		wordsWidth += w
+	}
+
+	// Medir el ancho de un espacio normal.
+	spaceW, _ := d.pdf.MeasureTextWidth(" ")
+	naturalWidth := wordsWidth + float64(len(words)-1)*spaceW
+	extraPerGap := 0.0
+	if len(words) > 1 && maxWidth > naturalWidth {
+		extraPerGap = (maxWidth - naturalWidth) / float64(len(words)-1)
+	}
+
+	currentX := x
+	for i, word := range words {
+		d.pdf.SetX(currentX)
+		d.pdf.SetY(y)
+		_ = d.pdf.Cell(nil, word)
+		if i < len(words)-1 {
+			w, _ := d.pdf.MeasureTextWidth(word)
+			currentX += w + spaceW + extraPerGap
+		}
+	}
+}
+
+// wrapByWidth divide el texto en líneas que caben en maxWidth, midiendo el
+// ancho real con la fuente activa. Reemplaza la función wrap() que cortaba a
+// 76 caracteres fijos.
+func (d *contractPDF) wrapByWidth(text string, maxWidth float64, bold bool, size int) []string {
+	d.setFont(bold, size)
+	words := strings.Fields(text)
+	var lines []string
+	var line string
+
+	for _, word := range words {
+		test := line
+		if test != "" {
+			test += " "
+		}
+		test += word
+		w, _ := d.pdf.MeasureTextWidth(test)
+		if w > maxWidth && line != "" {
+			lines = append(lines, line)
+			line = word
+		} else {
+			line = test
+		}
+	}
+	if line != "" {
+		lines = append(lines, line)
+	}
+	return lines
+}
+
+// ─── Plan y servicios ────────────────────────────────────────────────────────
+
 func (d *contractPDF) plan(p domain.Plan, t domain.Trip) {
-	d.y += 4
-	d.heading(fallback(p.Name))
-	d.paragraph(fmt.Sprintf("%d días / %d noches de estadía", t.Days, t.Nights))
-	d.heading("Servicios incluidos:")
+	d.y += 10
+
+	// Nombre del plan.
+	d.heading(fallback(p.Name), fontSizeServiceTitle)
+	d.setFont(false, fontSizeBody)
+	d.ensure(lineHeightBody)
+	d.pdf.SetX(margin)
+	d.pdf.SetY(d.y)
+	_ = d.pdf.Cell(nil, fmt.Sprintf("%d días / %d noches de estadía", t.Days, t.Nights))
+	d.y += 20
+
+	// Servicios incluidos.
+	d.heading("Servicios incluidos:", fontSizeBody)
 	for _, s := range p.ServicesIncluded {
-		d.paragraph("• " + s.Description)
+		d.serviceItem("• " + s.Description)
 	}
 }
+
+// serviceItem dibuja un servicio con indentación y justificado.
+func (d *contractPDF) serviceItem(text string) {
+	indent := 20.0
+	d.setFont(false, fontSizeService)
+	availWidth := contentWidth() - indent
+	lines := d.wrapByWidth(text, availWidth, false, fontSizeService)
+
+	for i, line := range lines {
+		d.ensure(lineHeightService)
+		isLast := i == len(lines)-1
+		d.drawJustifiedLine(line, margin+indent, d.y, availWidth, isLast, false, fontSizeService)
+		d.y += lineHeightService
+	}
+}
+
+// ─── Tabla de pasajeros ──────────────────────────────────────────────────────
+
 func (d *contractPDF) passengerTable(rows []domain.Passenger) {
+	d.y += 10
+	d.heading("NÓMINA DE PASAJEROS", fontSizeBody)
 	d.y += 4
-	d.heading("NÓMINA DE PASAJEROS")
 	widths := []float64{94, 94, 72, 76, 78, 77}
 	headers := []string{"Nombres", "Apellidos", "RUT", "Fecha nac.", "Nacionalidad", "Sexo"}
-	d.tableRow(headers, widths, true, false)
-	for index, r := range rows {
-		d.tableRow([]string{r.Names, r.LastNames, r.DNI, displayDate(r.BirthDate), r.Nationality, sexLabel(r.Sex)}, widths, false, index%2 == 1)
+	d.tableRow(headers, widths, true)
+	for _, r := range rows {
+		d.tableRow([]string{r.Names, r.LastNames, r.DNI, displayDateShort(r.BirthDate), r.Nationality, sexLabel(r.Sex)}, widths, false)
 	}
 }
-func (d *contractPDF) tableRow(values []string, widths []float64, header bool, alternate bool) {
-	const height = 34.0
+
+// tableRow dibuja una fila de tabla sin colores de fondo — solo bordes negros.
+func (d *contractPDF) tableRow(values []string, widths []float64, header bool) {
+	const height = 22.0
 	d.ensure(height + 2)
-	d.setFont(header, 12)
+
+	fontSize := fontSizeService
+	if header {
+		fontSize = fontSizeBody
+	}
+	d.setFont(header, fontSize)
+
 	x := margin
 	for i, v := range values {
-		if header {
-			d.pdf.SetFillColor(32, 55, 72)
-		} else if alternate {
-			d.pdf.SetFillColor(240, 245, 247)
-		} else {
-			d.pdf.SetFillColor(255, 255, 255)
-		}
+		// Fondo blanco siempre (sin color).
+		d.pdf.SetFillColor(255, 255, 255)
 		d.pdf.RectFromUpperLeftWithStyle(x, d.y, widths[i], height, "F")
+
+		// Texto negro.
 		d.pdf.SetTextColor(0, 0, 0)
-		if header {
-			d.pdf.SetTextColor(255, 255, 255)
-		}
-		for lineIndex, line := range tableCellLines(v, widths[i]) {
+
+		for lineIndex, line := range tableCellLines(v, widths[i], fontSize) {
 			d.pdf.SetX(x + 4)
-			d.pdf.SetY(d.y + 5 + float64(lineIndex*13))
-			_ = d.pdf.CellWithOption(&gopdf.Rect{W: widths[i] - 8, H: 13}, line, gopdf.CellOption{Align: gopdf.Left})
+			d.pdf.SetY(d.y + 4 + float64(lineIndex*11))
+			_ = d.pdf.CellWithOption(&gopdf.Rect{W: widths[i] - 8, H: 11}, line, gopdf.CellOption{Align: gopdf.Left})
 		}
-		d.pdf.SetStrokeColor(198, 208, 214)
+
+		// Borde negro.
+		d.pdf.SetStrokeColor(0, 0, 0)
 		d.pdf.RectFromUpperLeftWithStyle(x, d.y, widths[i], height, "D")
 		x += widths[i]
 	}
 	d.pdf.SetTextColor(0, 0, 0)
 	d.y += height
 }
+
+// ─── Firmas ──────────────────────────────────────────────────────────────────
+
 func (d *contractPDF) signatures(c domain.Content) {
-	d.center("FIRMAS", 11, true)
 	d.y += 45
-	all := append(append([]domain.Person{}, c.Representatives...), c.ClientRepresentatives...)
-	for i, p := range all {
-		d.ensure(80)
-		x := margin
-		if i%2 == 1 {
-			x = 315
-		}
-		d.pdf.SetX(x)
-		d.pdf.SetY(d.y)
-		d.pdf.Line(x, d.y, x+200, d.y)
-		d.setFont(true, 12)
-		d.pdf.SetY(d.y - 16)
-		d.pdf.SetX(x)
+
+	col1X := margin + 40.0
+	col2X := pageWidth/2 + 40.0
+	signatureSpace := 90.0
+
+	operatorY := d.y
+	clientY := d.y
+
+	// Columna operadores.
+	operatorY -= 12
+	operatorY -= 35
+	for _, p := range c.Representatives {
+		d.ensure(signatureSpace)
+		d.pdf.Line(col1X, operatorY, col1X+200, operatorY)
+		operatorY -= 15
+
+		d.setFont(true, fontSizeSignatureDetail)
+		d.pdf.SetX(col1X)
+		d.pdf.SetY(operatorY)
+		_ = d.pdf.Cell(nil, "El Operador")
+		operatorY -= 10
+
+		d.setFont(false, fontSizeSignatureDetail)
+		d.pdf.SetX(col1X)
+		d.pdf.SetY(operatorY)
 		_ = d.pdf.Cell(nil, fallback(p.Name))
-		d.setFont(false, 12)
-		d.pdf.SetY(d.y - 29)
-		d.pdf.SetX(x)
-		_ = d.pdf.Cell(nil, "RUT "+fallback(p.DNI))
-		if i%2 == 1 {
-			d.y += 90
-		}
+		operatorY -= 13
+
+		d.pdf.SetX(col1X)
+		d.pdf.SetY(operatorY)
+		_ = d.pdf.Cell(nil, "RUT "+formatRUT(fallback(p.DNI)))
+		operatorY -= signatureSpace - 28
+	}
+
+	// Columna clientes.
+	clientY -= 47
+	for _, p := range c.ClientRepresentatives {
+		d.ensure(signatureSpace)
+		d.pdf.Line(col2X, clientY, col2X+200, clientY)
+		clientY -= 15
+
+		d.setFont(true, fontSizeSignatureDetail)
+		d.pdf.SetX(col2X)
+		d.pdf.SetY(clientY)
+		_ = d.pdf.Cell(nil, "El Representante")
+		clientY -= 10
+
+		d.setFont(false, fontSizeSignatureDetail)
+		d.pdf.SetX(col2X)
+		d.pdf.SetY(clientY)
+		_ = d.pdf.Cell(nil, fallback(p.Name))
+		clientY -= 14
+
+		d.pdf.SetX(col2X)
+		d.pdf.SetY(clientY)
+		_ = d.pdf.Cell(nil, "RUT "+formatRUT(fallback(p.DNI)))
+		clientY -= signatureSpace - 31
 	}
 }
+
+// ─── Funciones auxiliares ────────────────────────────────────────────────────
+
 func people(rows []domain.Person) string {
 	parts := make([]string, 0, len(rows))
 	for _, p := range rows {
@@ -248,8 +463,85 @@ func fallback(v string) string {
 	}
 	return strings.TrimSpace(v)
 }
-func money(v int64) string { return fmt.Sprintf("$%d", v) }
+
+// money formatea un monto con separador de miles (formato chileno).
+// Ejemplo: 1234567 → "$1.234.567"
+func money(v int64) string {
+	s := fmt.Sprintf("%d", v)
+	if v < 0 {
+		s = s[1:] // quitar el signo para formatear
+	}
+	n := len(s)
+	if n <= 3 {
+		if v < 0 {
+			return "-$" + s
+		}
+		return "$" + s
+	}
+	var result strings.Builder
+	remainder := n % 3
+	if remainder > 0 {
+		result.WriteString(s[:remainder])
+	}
+	for i := remainder; i < n; i += 3 {
+		if result.Len() > 0 {
+			result.WriteByte('.')
+		}
+		result.WriteString(s[i : i+3])
+	}
+	if v < 0 {
+		return "-$" + result.String()
+	}
+	return "$" + result.String()
+}
+
+// Meses en español para formateo de fechas.
+var spanishMonths = []string{
+	"enero", "febrero", "marzo", "abril", "mayo", "junio",
+	"julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+}
+
+// displayDate devuelve la fecha en formato simple: "1 de septiembre de 2026".
 func displayDate(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback(value)
+	}
+	if date, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		d := date.UTC()
+		return fmt.Sprintf("%d de %s de %d", d.Day(), spanishMonths[d.Month()-1], d.Year())
+	}
+	if date, err := time.Parse(time.RFC3339, value); err == nil {
+		d := date.UTC()
+		return fmt.Sprintf("%d de %s de %d", d.Day(), spanishMonths[d.Month()-1], d.Year())
+	}
+	return fallback(value)
+}
+
+// Días de la semana en español.
+var spanishWeekdays = []string{
+	"domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado",
+}
+
+// displayDateFull devuelve la fecha en formato completo: "lunes 1 de septiembre de 2026".
+func displayDateFull(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback(value)
+	}
+	if date, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		d := date.UTC()
+		return fmt.Sprintf("%s %d de %s de %d", spanishWeekdays[d.Weekday()], d.Day(), spanishMonths[d.Month()-1], d.Year())
+	}
+	if date, err := time.Parse(time.RFC3339, value); err == nil {
+		d := date.UTC()
+		return fmt.Sprintf("%s %d de %s de %d", spanishWeekdays[d.Weekday()], d.Day(), spanishMonths[d.Month()-1], d.Year())
+	}
+	return fallback(value)
+}
+
+// displayDateShort devuelve la fecha en formato corto DD/MM/YYYY (para tablas).
+func displayDateShort(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return fallback(value)
@@ -257,8 +549,39 @@ func displayDate(value string) string {
 	if date, err := time.Parse(time.RFC3339Nano, value); err == nil {
 		return date.UTC().Format("02/01/2006")
 	}
+	if date, err := time.Parse(time.RFC3339, value); err == nil {
+		return date.UTC().Format("02/01/2006")
+	}
 	return fallback(value)
 }
+
+// formatRUT formatea un RUT chileno con puntos y guión.
+// Ejemplo: "12345678-9" → "12.345.678-9"
+func formatRUT(rut string) string {
+	clean := strings.ReplaceAll(strings.ReplaceAll(rut, ".", ""), " ", "")
+	if !strings.Contains(clean, "-") || len(clean) < 3 {
+		return rut
+	}
+	parts := strings.SplitN(clean, "-", 2)
+	body := parts[0]
+	dv := parts[1]
+
+	// Agregar puntos al cuerpo.
+	var formatted strings.Builder
+	n := len(body)
+	remainder := n % 3
+	if remainder > 0 {
+		formatted.WriteString(body[:remainder])
+	}
+	for i := remainder; i < n; i += 3 {
+		if formatted.Len() > 0 {
+			formatted.WriteByte('.')
+		}
+		formatted.WriteString(body[i : i+3])
+	}
+	return formatted.String() + "-" + dv
+}
+
 func sexLabel(v string) string {
 	switch v {
 	case "FEMALE":
@@ -273,8 +596,13 @@ func sexLabel(v string) string {
 		return fallback(v)
 	}
 }
-func tableCellLines(value string, width float64) []string {
-	max := int(width / 6.2)
+
+// tableCellLines divide el texto de una celda en líneas que quepan en el ancho
+// dado, usando un estimado de ancho por carácter para la fuente del tamaño
+// indicado.
+func tableCellLines(value string, width float64, fontSize int) []string {
+	charWidth := float64(fontSize) * 0.5
+	max := int(width / charWidth)
 	if max < 5 {
 		max = 5
 	}
@@ -289,6 +617,9 @@ func tableCellLines(value string, width float64) []string {
 	lines[1] = string(last) + "…"
 	return lines[:2]
 }
+
+// wrap divide texto por conteo de caracteres (solo para celdas de tabla donde
+// no se justifica). Para párrafos se usa wrapByWidth.
 func wrap(text string, max int) []string {
 	words := strings.Fields(text)
 	lines := []string{}
