@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"net/mail"
 	"regexp"
 	"strconv"
 	"strings"
@@ -176,6 +177,9 @@ func NewItem(id, programID string, programReference *ProgramReference, period st
 		return Item{}, err
 	}
 	programID = strings.TrimSpace(programID)
+	if programID == "" || programReference == nil {
+		return Item{}, errors.New("el programa guardado y su referencia son obligatorios")
+	}
 	if programReference != nil {
 		if programID == "" {
 			programID = strings.TrimSpace(programReference.ID)
@@ -185,7 +189,7 @@ func NewItem(id, programID string, programReference *ProgramReference, period st
 		}
 	}
 	if strings.TrimSpace(period) == "" {
-		period = now.Format("2006-01")
+		return Item{}, errors.New("el periodo es obligatorio")
 	}
 	stamp := now.UTC().Format(time.RFC3339Nano)
 	c := Contract{ID: id, ProgramID: programID, ProgramReference: programReference, Period: period, Status: StatusDraft, Content: content, CreatedAt: stamp, UpdatedAt: stamp, Version: 1}
@@ -279,6 +283,42 @@ func ceilDivision(value, divisor int64) int64 {
 var rutPattern = regexp.MustCompile(`^(\d{7,8})-([0-9K])$`)
 
 func ValidateContent(content Content) error {
+	if err := validatePeople("representante de Giras Indomito", content.Representatives, false); err != nil {
+		return err
+	}
+	if err := validatePeople("representante del cliente", content.ClientRepresentatives, true); err != nil {
+		return err
+	}
+	if strings.TrimSpace(content.Institution.Name) == "" || strings.TrimSpace(content.Institution.Address) == "" || strings.TrimSpace(content.Institution.Course) == "" {
+		return errors.New("los datos de la institucion son obligatorios")
+	}
+	trip := content.Trip
+	if strings.TrimSpace(trip.City) == "" || strings.TrimSpace(trip.Destination) == "" || strings.TrimSpace(trip.DeparturePoint) == "" || trip.ContractDate == "" || trip.DepartureDate == "" || trip.ReturnDate == "" || trip.Days < 1 || trip.Nights < 0 {
+		return errors.New("los datos del viaje son obligatorios")
+	}
+	departure, departureErr := time.Parse(time.RFC3339Nano, trip.DepartureDate)
+	returnDate, returnErr := time.Parse(time.RFC3339Nano, trip.ReturnDate)
+	if departureErr != nil || returnErr != nil || int(returnDate.Sub(departure).Hours()/24)+1 != trip.Days {
+		return errors.New("el rango de viaje debe coincidir exactamente con la cantidad de dias")
+	}
+	if strings.TrimSpace(content.Plan.Name) == "" || len(content.Plan.ServicesIncluded) == 0 {
+		return errors.New("el programa y sus servicios son obligatorios")
+	}
+	for _, service := range content.Plan.ServicesIncluded {
+		if strings.TrimSpace(service.Description) == "" {
+			return errors.New("todos los servicios incluidos son obligatorios")
+		}
+	}
+	payment := content.Payments
+	if payment.PricePerPerson <= 0 || payment.MaxExchangeRate <= 0 || payment.Installments.Quantity < 1 || strings.TrimSpace(payment.Installments.StartMonth) == "" {
+		return errors.New("los datos de pago y cuotas son obligatorios")
+	}
+	if strings.TrimSpace(payment.BankAccount.AccountNumber) == "" || strings.TrimSpace(payment.BankAccount.AccountHolder) == "" || strings.TrimSpace(payment.BankAccount.Bank) == "" || !ValidRUT(payment.BankAccount.HolderDNI) {
+		return errors.New("la cuenta bancaria no es valida")
+	}
+	if _, err := mail.ParseAddress(payment.BankAccount.Email); err != nil {
+		return errors.New("el email de la cuenta bancaria no es valido")
+	}
 	if len(content.Passengers) == 0 {
 		return errors.New("la lista de pasajeros es obligatoria")
 	}
@@ -296,6 +336,18 @@ func ValidateContent(content Content) error {
 		case "FEMALE", "MALE", "OTHER", "NOT_SPECIFIED":
 		default:
 			return fmt.Errorf("el sexo del pasajero %d no es valido", index+1)
+		}
+	}
+	return nil
+}
+
+func validatePeople(label string, people []Person, courseRequired bool) error {
+	if len(people) == 0 {
+		return fmt.Errorf("debe existir al menos un %s", label)
+	}
+	for index, person := range people {
+		if strings.TrimSpace(person.Name) == "" || !ValidRUT(person.DNI) || (courseRequired && strings.TrimSpace(person.Course) == "") {
+			return fmt.Errorf("el %s %d tiene datos obligatorios incompletos o un RUT no valido", label, index+1)
 		}
 	}
 	return nil

@@ -24,7 +24,7 @@ func TestNewItemKeepsProgramSnapshot(t *testing.T) {
 		reference.ID,
 		reference,
 		"2027-01",
-		Content{Passengers: []Passenger{{Names: "Ana", LastNames: "Perez", DNI: "12345678-5", BirthDate: "2010-01-01", Nationality: "Chilena", Sex: "FEMALE"}}},
+		validContent(),
 		time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC),
 	)
 	if err != nil {
@@ -38,6 +38,23 @@ func TestNewItemKeepsProgramSnapshot(t *testing.T) {
 	}
 	if got := item.ProgramReference.UpdatedAt; got != "2026-09-24T12:00:00Z" {
 		t.Fatalf("program updatedAt = %q, want UTC ISO", got)
+	}
+}
+
+func validContent() Content {
+	return Content{
+		Representatives:       []Person{{Name: "Susana Guevara", DNI: "16915292-6"}},
+		Institution:           Institution{Name: "Colegio", Address: "Direccion 123", Course: "4 medio"},
+		ClientRepresentatives: []Person{{Name: "Ana Perez", DNI: "12345678-5", Course: "4 medio"}},
+		Trip:                  Trip{City: "Santiago", ContractDate: "2026-09-24", Destination: "Brasil", DepartureDate: "2027-01-10", ReturnDate: "2027-01-14", Days: 5, Nights: 4, DeparturePoint: "Colegio"},
+		Plan:                  Plan{Name: "Brasil 2027", ServicesIncluded: []Service{{Description: "Transporte"}}},
+		Payments: Payments{
+			FreePassengers: 1, PricePerPerson: 500000, DownPayment: 100000, DaysBeforePayment: 10, MaxExchangeRate: 1100,
+			Installments: Installments{Quantity: 5, StartMonth: "Enero"},
+			Conditions:   Conditions{SpecialProgramDeposit: 100000},
+			BankAccount:  BankAccount{AccountNumber: "90278249343", AccountHolder: "Giras Indomito Ltda.", HolderDNI: "77.654.796-4", Bank: "Banco Estado · Cuenta Vista", Email: "pagos@work.girasindomito.cl"},
+		},
+		Passengers: []Passenger{{Names: "Ana", LastNames: "Perez", DNI: "12345678-5", BirthDate: "2010-01-01", Nationality: "Chile", Sex: "FEMALE"}},
 	}
 }
 

@@ -3,12 +3,13 @@
   "localPort": 8084,
   "localEntrypoint": "./cmd/local-api",
   "defaultArtifactDir": ".serverless-artifacts",
-  "requiredEnvironment": ["APP_NAME", "APP_STAGE", "APP_REGION", "PROGRAMS_TABLE_NAME"],
+  "requiredEnvironment": ["APP_NAME", "APP_STAGE", "APP_REGION", "PROGRAMS_TABLE_NAME", "CATALOGS_TABLE_NAME"],
   "functions": [
     { "name": "fn-crear-contrato-v1", "entrypoint": "./cmd/fn-crear-contrato-v1" },
     { "name": "fn-listar-contratos-v1", "entrypoint": "./cmd/fn-listar-contratos-v1" },
     { "name": "fn-obtener-contrato-v1", "entrypoint": "./cmd/fn-obtener-contrato-v1" },
     { "name": "fn-actualizar-contrato-v1", "entrypoint": "./cmd/fn-actualizar-contrato-v1" },
-    { "name": "fn-generar-contrato-pdf-v1", "entrypoint": "./cmd/fn-generar-contrato-pdf-v1" }
+    { "name": "fn-generar-contrato-pdf-v1", "entrypoint": "./cmd/fn-generar-contrato-pdf-v1" },
+    { "name": "fn-obtener-configuracion-contrato-v1", "entrypoint": "./cmd/fn-obtener-configuracion-contrato-v1" }
   ]
 }

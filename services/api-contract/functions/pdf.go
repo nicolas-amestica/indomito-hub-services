@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/signintech/gopdf"
-	"golang.org/x/image/font/gofont/gobold"
-	"golang.org/x/image/font/gofont/gomono"
 	"ind-hub-api-gox-sls-pri-gh/services/api-contract/domain"
 )
 
@@ -22,6 +20,9 @@ var headerPNG []byte
 //go:embed assets/footer.png
 var footerPNG []byte
 
+//go:embed assets/EBGaramond.ttf
+var garamondTTF []byte
+
 type contractPDF struct {
 	pdf     *gopdf.GoPdf
 	y       float64
@@ -31,10 +32,7 @@ type contractPDF struct {
 func ComposePDF(c domain.Content, preview bool) ([]byte, error) {
 	p := &gopdf.GoPdf{}
 	p.Start(gopdf.Config{PageSize: *gopdf.PageSizeA4})
-	if err := p.AddTTFFontData("mono", gomono.TTF); err != nil {
-		return nil, err
-	}
-	if err := p.AddTTFFontData("bold", gobold.TTF); err != nil {
+	if err := p.AddTTFFontData("garamond", garamondTTF); err != nil {
 		return nil, err
 	}
 	d := &contractPDF{pdf: p, preview: preview}
@@ -87,7 +85,7 @@ func buildClauses(c domain.Content) []clause {
 		{9, "NOVENO:", "Todos los gastos que se generen como consecuencia de acciones u omisiones de los pasajeros serán de exclusivo cargo de estos. Asimismo, los gastos que se generen como consecuencia de acciones u omisiones del Operador serán de exclusivo cargo de este último."},
 		{10, "DÉCIMO:", "En caso de que el viaje tuviera que acortarse o prolongarse de los términos pactados por razones fuera de control de ambas partes, tales como catástrofes naturales, accidentes, cortes de puentes, caminos obstruidos u otras no imputables al Operador ni al Pasajero, se considerará que no se pudieron cumplir por fuerza mayor. Sin perjuicio de lo anterior, el Operador prestará toda la ayuda necesaria para dar por cumplido el servicio o buscar las compensaciones que correspondan."},
 		{11, "DÉCIMO PRIMERO:", "Los participantes del programa quedan cubiertos por el seguro correspondiente a los vehículos de transporte de pasajeros, según la legislación del país de destino."},
-		{12, "DÉCIMO SEGUNDO:", fmt.Sprintf("Los programas incluirán exclusivamente lo señalado en el presente contrato y serán confirmados bajo previa reserva con una cuota inicial correspondiente al %d%% del valor del programa con aéreos y %d%% en aquellos que no incluyen aéreos, o la suma de %s en caso de Programas Especiales. Dicho monto será abonado al valor total. El saldo faltante deberá estar cancelado en un plazo no superior a %d días antes de la salida del vuelo o %d días antes de la ocupación de los servicios terrestres.", co.DepositPercentageWithFlight, co.DepositPercentageWithoutFlight, money(co.SpecialProgramDeposit), co.DaysBeforeFlightBalance, co.DaysBeforeTerrestrialBalance)},
+		{12, "DÉCIMO SEGUNDO:", fmt.Sprintf("Los programas incluirán exclusivamente lo señalado en el presente contrato y serán confirmados bajo previa reserva con una cuota inicial correspondiente al %d%% del valor del programa con aéreos y %d%% en aquellos que no incluyen aéreos, o la suma de %s por persona en caso de Programas Especiales. Dicho monto será abonado al valor total. El saldo faltante deberá estar cancelado en un plazo no superior a %d días antes de la salida del vuelo o %d días antes de la ocupación de los servicios terrestres.", co.DepositPercentageWithFlight, co.DepositPercentageWithoutFlight, money(co.SpecialProgramDeposit), co.DaysBeforeFlightBalance, co.DaysBeforeTerrestrialBalance)},
 		{13, "DÉCIMO TERCERO:", "Todo pasajero que documente o cancele la totalidad del viaje con posterioridad al tiempo estipulado en el contrato estará sujeto a las diferencias de precio que pudieran producirse por variación del tipo de cambio y/o intereses que procedieran."},
 		{14, "DÉCIMO CUARTO:", "En caso de modificaciones al programa contratado en fechas posteriores por parte del Pasajero, dichos cambios podrán hacerse efectivos siempre que existan disponibilidades por parte de los prestadores de servicios. Cualquier costo adicional será de exclusiva responsabilidad del Pasajero."},
 		{15, "DÉCIMO QUINTO:", "Será de exclusiva responsabilidad del Pasajero cumplir con toda la documentación y requisitos para ingresar al país de destino, como la presentación de documentos vigentes en aeropuertos y aduanas. Los costos adicionales por incumplimiento serán de exclusiva responsabilidad del Pasajero."},
@@ -111,7 +109,7 @@ func (d *contractPDF) addPage() {
 		_ = d.pdf.ImageByHolder(holder, -15, 768, &gopdf.Rect{W: 625, H: 74})
 	}
 	if d.preview {
-		_ = d.pdf.SetFont("bold", "", 42)
+		_ = d.pdf.SetFont("garamond", "", 42)
 		d.pdf.SetTextColor(225, 225, 225)
 		d.pdf.SetX(155)
 		d.pdf.SetY(420)
@@ -127,11 +125,8 @@ func (d *contractPDF) ensure(h float64) {
 	}
 }
 func (d *contractPDF) setFont(bold bool, size int) {
-	name := "mono"
-	if bold {
-		name = "bold"
-	}
-	_ = d.pdf.SetFont(name, "", size)
+	_ = bold
+	_ = d.pdf.SetFont("garamond", "", size)
 }
 func (d *contractPDF) center(text string, size int, bold bool) {
 	d.setFont(bold, size)
@@ -146,20 +141,20 @@ func (d *contractPDF) heading(text string) {
 		return
 	}
 	d.ensure(18)
-	d.setFont(true, 9)
+	d.setFont(true, 12)
 	d.pdf.SetX(margin)
 	d.pdf.SetY(d.y)
 	_ = d.pdf.Cell(nil, text)
-	d.y += 13
+	d.y += 16
 }
 func (d *contractPDF) paragraph(text string) {
-	d.setFont(false, 9)
-	for _, line := range wrap(text, 92) {
-		d.ensure(12)
+	d.setFont(false, 12)
+	for _, line := range wrap(text, 76) {
+		d.ensure(16)
 		d.pdf.SetX(margin)
 		d.pdf.SetY(d.y)
 		_ = d.pdf.Cell(nil, line)
-		d.y += 11
+		d.y += 15
 	}
 }
 func (d *contractPDF) plan(p domain.Plan, t domain.Trip) {
@@ -174,24 +169,42 @@ func (d *contractPDF) plan(p domain.Plan, t domain.Trip) {
 func (d *contractPDF) passengerTable(rows []domain.Passenger) {
 	d.y += 4
 	d.heading("NÓMINA DE PASAJEROS")
-	widths := []float64{100, 100, 72, 72, 70, 77}
+	widths := []float64{94, 94, 72, 76, 78, 77}
 	headers := []string{"Nombres", "Apellidos", "RUT", "Fecha nac.", "Nacionalidad", "Sexo"}
-	d.tableRow(headers, widths, true)
-	for _, r := range rows {
-		d.tableRow([]string{r.Names, r.LastNames, r.DNI, displayDate(r.BirthDate), r.Nationality, sexLabel(r.Sex)}, widths, false)
+	d.tableRow(headers, widths, true, false)
+	for index, r := range rows {
+		d.tableRow([]string{r.Names, r.LastNames, r.DNI, displayDate(r.BirthDate), r.Nationality, sexLabel(r.Sex)}, widths, false, index%2 == 1)
 	}
 }
-func (d *contractPDF) tableRow(values []string, widths []float64, bold bool) {
-	d.ensure(22)
-	d.setFont(bold, 7)
+func (d *contractPDF) tableRow(values []string, widths []float64, header bool, alternate bool) {
+	const height = 34.0
+	d.ensure(height + 2)
+	d.setFont(header, 12)
 	x := margin
 	for i, v := range values {
-		d.pdf.SetX(x)
-		d.pdf.SetY(d.y)
-		_ = d.pdf.CellWithOption(&gopdf.Rect{W: widths[i], H: 20}, truncate(v, 26), gopdf.CellOption{Align: gopdf.Left, Border: 1})
+		if header {
+			d.pdf.SetFillColor(32, 55, 72)
+		} else if alternate {
+			d.pdf.SetFillColor(240, 245, 247)
+		} else {
+			d.pdf.SetFillColor(255, 255, 255)
+		}
+		d.pdf.RectFromUpperLeftWithStyle(x, d.y, widths[i], height, "F")
+		d.pdf.SetTextColor(0, 0, 0)
+		if header {
+			d.pdf.SetTextColor(255, 255, 255)
+		}
+		for lineIndex, line := range tableCellLines(v, widths[i]) {
+			d.pdf.SetX(x + 4)
+			d.pdf.SetY(d.y + 5 + float64(lineIndex*13))
+			_ = d.pdf.CellWithOption(&gopdf.Rect{W: widths[i] - 8, H: 13}, line, gopdf.CellOption{Align: gopdf.Left})
+		}
+		d.pdf.SetStrokeColor(198, 208, 214)
+		d.pdf.RectFromUpperLeftWithStyle(x, d.y, widths[i], height, "D")
 		x += widths[i]
 	}
-	d.y += 20
+	d.pdf.SetTextColor(0, 0, 0)
+	d.y += height
 }
 func (d *contractPDF) signatures(c domain.Content) {
 	d.center("FIRMAS", 11, true)
@@ -206,11 +219,11 @@ func (d *contractPDF) signatures(c domain.Content) {
 		d.pdf.SetX(x)
 		d.pdf.SetY(d.y)
 		d.pdf.Line(x, d.y, x+200, d.y)
-		d.setFont(true, 8)
+		d.setFont(true, 12)
 		d.pdf.SetY(d.y - 16)
 		d.pdf.SetX(x)
 		_ = d.pdf.Cell(nil, fallback(p.Name))
-		d.setFont(false, 8)
+		d.setFont(false, 12)
 		d.pdf.SetY(d.y - 29)
 		d.pdf.SetX(x)
 		_ = d.pdf.Cell(nil, "RUT "+fallback(p.DNI))
@@ -260,12 +273,21 @@ func sexLabel(v string) string {
 		return fallback(v)
 	}
 }
-func truncate(v string, n int) string {
-	r := []rune(v)
-	if len(r) <= n {
-		return v
+func tableCellLines(value string, width float64) []string {
+	max := int(width / 6.2)
+	if max < 5 {
+		max = 5
 	}
-	return string(r[:n-1]) + "…"
+	lines := wrap(value, max)
+	if len(lines) <= 2 {
+		return lines
+	}
+	last := []rune(lines[1])
+	if len(last) >= max {
+		last = last[:max-1]
+	}
+	lines[1] = string(last) + "…"
+	return lines[:2]
 }
 func wrap(text string, max int) []string {
 	words := strings.Fields(text)

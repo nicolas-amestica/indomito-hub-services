@@ -1,0 +1,83 @@
+{
+  "pk": "APP#INDOMITO_HUB#CFG#FRM#01KQWC0R139GW9481BEYN55RCP",
+  "sk": "FRM#SCP#PGR#01M3B45PF4QDV0XQZWWNQ6A1QA",
+  "content": {
+    "form": "CREATE_PROGRAM",
+    "catalogs": {
+      "plans": [
+        { "id": "01M2ET1GWJQ9YHHCJP7WQR9RNH", "display": "Gira de estudio", "order": 1 },
+        { "id": "01M2ET33WXCK31Z62N3AQ6TMM0", "display": "Particular", "order": 2 }
+      ],
+      "seasons": [
+        { "id": "2025", "display": "2025", "order": 1 },
+        { "id": "2026", "display": "2026", "order": 2 },
+        { "id": "2027", "display": "2027", "order": 3 },
+        { "id": "2028", "display": "2028", "order": 4 },
+        { "id": "2029", "display": "2029", "order": 5 },
+        { "id": "2030", "display": "2030", "order": 6 },
+        { "id": "2031", "display": "2031", "order": 7 },
+        { "id": "2032", "display": "2032", "order": 8 },
+        { "id": "2033", "display": "2033", "order": 9 },
+        { "id": "2034", "display": "2034", "order": 10 },
+        { "id": "2035", "display": "2035", "order": 11 },
+        { "id": "2036", "display": "2036", "order": 12 },
+        { "id": "2037", "display": "2037", "order": 13 },
+        { "id": "2038", "display": "2038", "order": 14 },
+        { "id": "2039", "display": "2039", "order": 15 },
+        { "id": "2040", "display": "2040", "order": 16 }
+      ],
+      "destinations": [
+        { "id": "PER", "display": "Personalizado", "order": 1, "budgetTemplateId": "brochure-default" },
+        { "id": "BRF", "display": "Bariloche Full - Terrestre", "order": 2, "budgetTemplateId": "brochure-default" },
+        { "id": "BRE", "display": "Bariloche Eco - Terrestre", "order": 3, "budgetTemplateId": "brochure-default" },
+        { "id": "BRX", "display": "Bariloche Express - Terrestre", "order": 4, "budgetTemplateId": "brochure-default" },
+        { "id": "BRL", "display": "Bariloche Light - Terrestre", "order": 5, "budgetTemplateId": "brochure-default" },
+        { "id": "BRS", "display": "Bariloche y Sur de Chile - Terrestre", "order": 6, "budgetTemplateId": "brochure-default" },
+        { "id": "CBU", "display": "Camboriú - Terrestre", "order": 7, "budgetTemplateId": "brochure-default" }
+      ]
+    },
+    "defaults": {
+      "generals": {
+        "name": "",
+        "description": "",
+        "defaultPlanId": "01M2ET1GWJQ9YHHCJP7WQR9RNH",
+        "seasonId": null,
+        "destinationId": null,
+        "departureCity": ""
+      },
+      "schedule": {
+        "totalDays": null,
+        "totalNights": null,
+        "totalPassengers": null,
+        "freePassengers": null
+      },
+      "pricing": {
+        "usdIncreaseCLP": 60,
+        "brlIncreaseCLP": 40,
+        "utilityRate": 20,
+        "rechargeRate": 5
+      }
+    },
+    "policy": {
+      "minUtilityRate": 10
+    },
+    "limits": {
+      "totalDays": { "min": 1, "max": 100, "step": 1 },
+      "totalNights": { "min": 0, "max": 100, "step": 1 },
+      "totalPassengers": { "min": 1, "max": 100, "step": 1 },
+      "freePassengers": { "min": 0, "max": 99, "step": 1 },
+      "usdIncreaseCLP": { "min": 0, "max": 200, "step": 5 },
+      "brlIncreaseCLP": { "min": 0, "max": 40, "step": 5 },
+      "utilityRate": { "min": 0, "max": 100, "step": 1 },
+      "rechargeRate": { "min": 0, "max": 100, "step": 1 },
+      "itemPrice": { "min": 0.01, "max": 99999999 },
+      "maxCrews": 20,
+      "maxServices": 100,
+      "nameMinLength": 3
+    },
+    "scenarioOffsets": [-10, -5, 0, 5]
+  },
+  "description": "Configuraciones de formulario de creación de programa",
+  "id": "01M3B45PF4QDV0XQZWWNQ6A1QA",
+  "scope": "PGR"
+}

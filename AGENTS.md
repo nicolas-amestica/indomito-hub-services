@@ -55,11 +55,24 @@
 - **Free Tier**: al diseñar o agregar cualquier recurso AWS, siempre priorizar las opciones dentro del Free Tier (tipos de instancia, tiers de servicio, límites de uso incluidos). Evaluar el costo antes de proponer un recurso nuevo.
 - **DynamoDB**: **estrictamente prohibido usar el operador `Scan`** bajo cualquier circunstancia, en cualquier ambiente. Usar siempre `Query` apoyado en la partition key/sort key o en un GSI/LSI diseñado para el patrón de acceso. Si no existe un índice que soporte la consulta necesaria, diseñar el índice antes de escribir la consulta — nunca recurrir a `Scan` como solución temporal.
 
+## Arquitectura Frontend — Features Angular
+
+- Todo código de interfaz debe usar componentes PrimeNG y utilidades Tailwind CSS conforme a sus documentaciones oficiales. No incorporar otras librerías de componentes, CSS/SCSS personalizado ni implementaciones artesanales cuando PrimeNG provea el componente; reservar el HTML semántico nativo para estructura y casos sin equivalente en PrimeNG.
+- En formularios, usar siempre el componente o directiva PrimeNG correspondiente (`pInputText`, `p-select`, `p-datepicker`, `p-inputnumber`, `pButton`, `p-fileupload`, etc.). Tailwind se limita a layout, espaciado y composición externa; no debe reconstruir la apariencia interna de controles PrimeNG.
+- No aplicar en contenedores de componentes PrimeNG clases tipográficas heredables que alteren su contenido (`uppercase`, `font-*`, `text-*`, `tracking-*`, entre otras). El texto de la etiqueta debe estilizarse en un elemento hermano independiente cuando sea necesario.
+- No agregar selectores CSS globales sobre elementos de formulario ni sobrescribir tokens globales de componentes PrimeNG para resolver una pantalla puntual. Un cambio al preset o al orden de capas CSS es una modificación transversal del sistema de diseño y requiere validar visualmente y compilar todas las pantallas afectadas.
+- Cada feature nueva debe ser autocontenida dentro de `src/app/indomito-hub/<feature-name>` y usar nombres de carpetas, archivos e identificadores en inglés.
+- La estructura debe seguir el patrón modular de Axity: cada feature mantiene sus propios `constants`, `components`, `interfaces`, `pages`, `services`, `stores`, `types`, `fn` y archivo `<feature-name>.routes.ts` cuando correspondan.
+- Las páginas, componentes, servicios y stores deben contener solo la responsabilidad de su clase o función principal. Las interfaces, tipos, constantes, factories, validadores y helpers reutilizables deben declararse en las carpetas hermanas correspondientes de la misma feature, no dentro del archivo de una página o componente.
+- Los subdominios administrativos deben vivir bajo `src/app/indomito-hub/administration/`; por ejemplo, `administration/iam` y `administration/configuration`.
+- Solo las capacidades transversales y reutilizadas por varias features deben vivir en `core` o `shared`. No trasladar lógica específica de una feature a esas carpetas.
+- El módulo `indomito-hub/programs` es la referencia local de organización. Para decisiones no cubiertas por este proyecto, usar como referencia el módulo `surgeries` del frontend Axity.
+
 ## Patrones de Referencia
 
 | Repo           | Módulo referencia        | Paradigma             |
 | -------------- | ------------------------ | --------------------- |
-| application    | `src/app/` (por definir) | Stores, servicios     |
+| application    | `src/app/indomito-hub/programs` | Feature autocontenida con rutas, stores, servicios y tipos |
 | services       | `services/api-catalog`, `services/api-favorite`, `services/api-program` | Endpoint-per-function |
 | authorizer     | `src/functions/authorize.ts` | Handler unico + politicas IAM |
 

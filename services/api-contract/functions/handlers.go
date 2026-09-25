@@ -48,6 +48,39 @@ var RegisterList = register(ListRoute, HandleList)
 var RegisterGet = register(GetRoute, HandleGet)
 var RegisterUpdate = register(UpdateRoute, HandleUpdate)
 var RegisterPDF = register(PDFRoute, HandlePDF)
+var RegisterConfiguration = register(ConfigurationRoute, HandleConfiguration)
+
+func HandleConfiguration(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+	app, err := GetApp(ctx)
+	if err != nil {
+		return lambdautil.ErrorResponse(req, err)
+	}
+	scope := strings.ToUpper(strings.TrimSpace(req.QueryStringParameters["scope"]))
+	if scope == "" {
+		return errorResponse(400, "El scope es obligatorio."), nil
+	}
+	out, err := app.DDB.Query(ctx, &dynamodb.QueryInput{
+		TableName:              aws.String(app.Config.CatalogsTableName),
+		KeyConditionExpression: aws.String("pk = :pk AND begins_with(sk, :sk)"),
+		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
+			":pk": &ddbtypes.AttributeValueMemberS{Value: domain.ContractFormConfigurationPK},
+			":sk": &ddbtypes.AttributeValueMemberS{Value: domain.ContractFormConfigurationSKPrefix + scope},
+		},
+		ScanIndexForward: aws.Bool(false),
+		Limit:            aws.Int32(1),
+	})
+	if err != nil {
+		return errorResponse(500, "No se pudo obtener la configuracion del formulario."), nil
+	}
+	if len(out.Items) == 0 {
+		return errorResponse(404, "No existe configuracion para el scope solicitado."), nil
+	}
+	var item domain.ContractFormConfigurationItem
+	if err := attributevalue.UnmarshalMap(out.Items[0], &item); err != nil {
+		return errorResponse(500, "La configuracion del formulario no es valida."), nil
+	}
+	return lambdautil.SuccessResponse(200, item.Content)
+}
 
 func HandleCreate(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	app, err := GetApp(ctx)
@@ -136,6 +169,9 @@ func HandleUpdate(ctx context.Context, req events.APIGatewayV2HTTPRequest) (even
 	if body.Status == "" {
 		body.Status = current.Status
 	}
+	if strings.TrimSpace(body.ProgramID) == "" || body.ProgramReference == nil {
+		return errorResponse(400, "El programa guardado y su referencia son obligatorios."), nil
+	}
 	if !body.Status.Valid() || !domain.CanTransition(current.Status, body.Status) {
 		return errorResponse(409, "La transicion de estado no esta permitida."), nil
 	}
@@ -144,7 +180,7 @@ func HandleUpdate(ctx context.Context, req events.APIGatewayV2HTTPRequest) (even
 	}
 	period := body.Period
 	if period == "" {
-		period = current.Period
+		return errorResponse(400, "El periodo es obligatorio."), nil
 	}
 	if body.ProgramReference != nil && strings.TrimSpace(body.ProgramReference.ID) != strings.TrimSpace(body.ProgramID) {
 		return errorResponse(400, "La referencia del programa no coincide con programId."), nil
