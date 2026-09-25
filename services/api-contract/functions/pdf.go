@@ -15,6 +15,7 @@ import (
 const pageWidth = 612.0
 const pageHeight = 792.0
 const margin = 50.0
+const passengerTableBorderWidth = 0.35
 
 // Tamaños de fuente — replican la jerarquía visual del legacy (pdf-lib).
 const (
@@ -434,6 +435,7 @@ func (d *contractPDF) tableRow(values []string, widths []float64, header bool, h
 
 		// Borde negro.
 		d.pdf.SetStrokeColor(0, 0, 0)
+		d.pdf.SetLineWidth(passengerTableBorderWidth)
 		d.pdf.RectFromUpperLeftWithStyle(x, d.y, widths[i], height, "D")
 		x += widths[i]
 	}
@@ -461,64 +463,63 @@ func passengerTableLayout(passengerCount int, startY float64) (float64, int) {
 // ─── Firmas ──────────────────────────────────────────────────────────────────
 
 func (d *contractPDF) signatures(c domain.Content) {
-	d.y += 45
+	// La página comienza bajo el header (y=160). Este margen mantiene el área
+	// destinada a firmar completamente separada de la imagen institucional.
+	d.y += 70
 
 	col1X := margin + 40.0
 	col2X := pageWidth/2 + 40.0
-	signatureSpace := 90.0
+	signatureSpace := 112.0
 
 	operatorY := d.y
 	clientY := d.y
 
 	// Columna operadores.
-	operatorY -= 12
-	operatorY -= 35
 	for _, p := range c.Representatives {
 		d.ensure(signatureSpace)
 		d.pdf.Line(col1X, operatorY, col1X+200, operatorY)
-		operatorY -= 15
+		operatorY += 16
+
+		d.setFont(false, fontSizeSignatureDetail)
+		d.pdf.SetX(col1X)
+		d.pdf.SetY(operatorY)
+		_ = d.pdf.Cell(nil, "RUT "+formatRUT(fallback(p.DNI)))
+		operatorY += 13
+
+		d.pdf.SetX(col1X)
+		d.pdf.SetY(operatorY)
+		_ = d.pdf.Cell(nil, strings.ToUpper(fallback(p.Name)))
+		operatorY += 13
 
 		d.setFont(true, fontSizeSignatureDetail)
 		d.pdf.SetX(col1X)
 		d.pdf.SetY(operatorY)
 		_ = d.pdf.Cell(nil, "El Operador")
-		operatorY -= 10
-
-		d.setFont(false, fontSizeSignatureDetail)
-		d.pdf.SetX(col1X)
-		d.pdf.SetY(operatorY)
-		_ = d.pdf.Cell(nil, strings.ToUpper(fallback(p.Name)))
-		operatorY -= 13
-
-		d.pdf.SetX(col1X)
-		d.pdf.SetY(operatorY)
-		_ = d.pdf.Cell(nil, "RUT "+formatRUT(fallback(p.DNI)))
-		operatorY -= signatureSpace - 28
+		operatorY += signatureSpace - 42
 	}
 
 	// Columna clientes.
-	clientY -= 47
 	for _, p := range c.ClientRepresentatives {
 		d.ensure(signatureSpace)
 		d.pdf.Line(col2X, clientY, col2X+200, clientY)
-		clientY -= 15
+		clientY += 16
+
+		d.setFont(false, fontSizeSignatureDetail)
+		d.pdf.SetX(col2X)
+		d.pdf.SetY(clientY)
+		_ = d.pdf.Cell(nil, "RUT "+formatRUT(fallback(p.DNI)))
+		clientY += 13
+
+		d.pdf.SetX(col2X)
+		d.pdf.SetY(clientY)
+		_ = d.pdf.Cell(nil, strings.ToUpper(fallback(p.Name)))
+		clientY += 13
 
 		d.setFont(true, fontSizeSignatureDetail)
 		d.pdf.SetX(col2X)
 		d.pdf.SetY(clientY)
 		_ = d.pdf.Cell(nil, "El Representante")
-		clientY -= 10
-
-		d.setFont(false, fontSizeSignatureDetail)
-		d.pdf.SetX(col2X)
-		d.pdf.SetY(clientY)
-		_ = d.pdf.Cell(nil, strings.ToUpper(fallback(p.Name)))
-		clientY -= 14
-
-		d.pdf.SetX(col2X)
-		d.pdf.SetY(clientY)
-		_ = d.pdf.Cell(nil, "RUT "+formatRUT(fallback(p.DNI)))
-		clientY -= signatureSpace - 31
+		clientY += signatureSpace - 42
 	}
 }
 

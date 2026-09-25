@@ -102,7 +102,7 @@ func (r Route) Register(e *echo.Echo, handler echo.HandlerFunc) {
 // No es publico. El endpoint genera un documento comercial e invoca compute
 // facturable, asi que necesita saber quien llama, y mientras el authorizer
 // compartido no exista solo existe en el servidor local (Requirement 19.4).
-var GenerateBudgetRoute = Route{Method: http.MethodPost, Path: "/programas:presupuesto"}
+var GenerateBudgetRoute = Route{Method: http.MethodPost, Path: "/cotizaciones:presupuesto"}
 
 // localShutdownTimeout es el margen que se le da al servidor local para cerrar
 // las conexiones en curso tras un Ctrl+C.

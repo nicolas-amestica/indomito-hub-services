@@ -18,7 +18,7 @@ const DDB_STACK = `indomito-hub-infra-ddb-${STAGE}`;
  * concatenan `/index/*` para cubrir los GSI. Un objeto ahi produciria
  * `"[object Object]/index/*"`.
  */
-const FAVORITES_TABLE_ARN = `\${cf:${DDB_STACK}.FavoritosTableArn}`;
+const FAVORITES_TABLE_ARN = `\${cf:${DDB_STACK}.ProgramasTableArn}`;
 
 /**
  * Nombre de la tabla `favoritos`, que las funciones leen de
@@ -29,7 +29,7 @@ const FAVORITES_TABLE_ARN = `\${cf:${DDB_STACK}.FavoritosTableArn}`;
  * y tomarlo de ahi hace imposible que este servicio apunte a una tabla que no
  * existe.
  */
-const FAVORITES_TABLE_NAME = `\${cf:${DDB_STACK}.FavoritosTableName}`;
+const FAVORITES_TABLE_NAME = `\${cf:${DDB_STACK}.ProgramasTableName}`;
 
 /**
  * Endpoints del servicio. Es la unica declaracion TypeScript de su superficie
@@ -62,42 +62,42 @@ const endpoints: GoHttpEndpoint[] = [
   {
     name: 'fn-listar-favoritos-v1',
     method: 'GET',
-    path: '/favoritos',
+    path: '/cotizaciones',
     public: false,
     memorySize: 128,
     timeout: 6,
-    description: 'Lista los favoritos del usuario autenticado, por scope',
+    description: 'Lista las cotizaciones del usuario autenticado',
     // Solo lectura: es el unico de los cuatro que no modifica la tabla.
     policies: [dynamodbReadPolicy(FAVORITES_TABLE_ARN)],
   },
   {
     name: 'fn-crear-favorito-v1',
     method: 'POST',
-    path: '/favoritos',
+    path: '/cotizaciones',
     public: false,
     memorySize: 128,
     timeout: 6,
-    description: 'Crea un favorito con el contenido del programa en curso',
+    description: 'Crea una cotizacion para el usuario autenticado',
     policies: [dynamodbCrudPolicy(FAVORITES_TABLE_ARN)],
   },
   {
     name: 'fn-actualizar-favorito-v1',
     method: 'PUT',
-    path: '/favoritos/{id-favorito}',
+    path: '/cotizaciones/{id-cotizacion}',
     public: false,
     memorySize: 128,
     timeout: 6,
-    description: 'Reemplaza el contenido de un favorito del usuario autenticado',
+    description: 'Reemplaza una cotizacion del usuario autenticado',
     policies: [dynamodbCrudPolicy(FAVORITES_TABLE_ARN)],
   },
   {
     name: 'fn-eliminar-favorito-v1',
     method: 'DELETE',
-    path: '/favoritos/{id-favorito}',
+    path: '/cotizaciones/{id-cotizacion}',
     public: false,
     memorySize: 128,
     timeout: 6,
-    description: 'Elimina un favorito del usuario autenticado',
+    description: 'Elimina una cotizacion del usuario autenticado',
     policies: [dynamodbCrudPolicy(FAVORITES_TABLE_ARN)],
   },
 ];

@@ -224,18 +224,18 @@ func TestHandleCreatesFavoriteForAuthenticatedUser(t *testing.T) {
 	if stored.Name != "Programa Florianópolis" {
 		t.Errorf("Name = %q, want nombre recortado", stored.Name)
 	}
-	if !stringsHasPrefix(stored.SK, domain.ScopeProgram.SKPrefix()) {
-		t.Errorf("SK = %q, want prefijo %q", stored.SK, domain.ScopeProgram.SKPrefix())
+	if !stringsHasPrefix(stored.SK, domain.ScopeQuotation.SKPrefix()) {
+		t.Errorf("SK = %q, want prefijo %q", stored.SK, domain.ScopeQuotation.SKPrefix())
 	}
 	if stored.CreatedAt.IsZero() || !stored.CreatedAt.Equal(stored.UpdatedAt) {
 		t.Errorf("fechas escritas = (%s, %s), want iguales y no cero", stored.CreatedAt, stored.UpdatedAt)
 	}
 
 	favorite := decodeFavorite(t, response.Body)
-	if favorite.ID == "" || domain.ScopeProgram.SKPrefix()+favorite.ID != stored.SK {
+	if favorite.ID == "" || domain.ScopeQuotation.SKPrefix()+favorite.ID != stored.SK {
 		t.Errorf("favorite.ID = %q, no corresponde a SK %q", favorite.ID, stored.SK)
 	}
-	if favorite.Scope != domain.ScopeProgram || favorite.Name != stored.Name {
+	if favorite.Scope != domain.ScopeQuotation || favorite.Name != stored.Name {
 		t.Errorf("favorito devuelto = %+v, want scope y nombre persistidos", favorite)
 	}
 

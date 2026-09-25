@@ -153,7 +153,7 @@ func updateFavorite(
 ) (domain.Favorite, error) {
 	key, err := (domain.FavoriteKey{
 		UserID: userID,
-		Scope:  domain.ScopeProgram,
+		Scope:  domain.ScopeQuotation,
 		ID:     favoriteID,
 	}).Key()
 	if err != nil {

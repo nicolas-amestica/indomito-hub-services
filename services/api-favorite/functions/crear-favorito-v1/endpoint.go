@@ -146,7 +146,7 @@ func createFavorite(
 	item, err := domain.NewFavoriteItem(
 		domain.FavoriteKey{
 			UserID: userID,
-			Scope:  domain.ScopeProgram,
+			Scope:  domain.ScopeQuotation,
 			ID:     favoriteID,
 		},
 		request.Name,

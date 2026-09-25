@@ -48,7 +48,7 @@ const endpoints: GoHttpEndpoint[] = [
   {
     name: 'fn-generar-presupuesto-v1',
     method: 'POST',
-    path: '/programas:presupuesto',
+    path: '/cotizaciones:presupuesto',
     public: false,
     memorySize: 512,
     timeout: 20,

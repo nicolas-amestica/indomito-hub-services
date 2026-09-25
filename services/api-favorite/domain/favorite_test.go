@@ -89,7 +89,7 @@ func TestNewFavoriteItem(t *testing.T) {
 		},
 		{
 			name:        "scope desconocido",
-			key:         FavoriteKey{UserID: "u1", Scope: Scope("cotizacion"), ID: ulidA},
+			key:         FavoriteKey{UserID: "u1", Scope: Scope("desconocido"), ID: ulidA},
 			favoriteNam: "Cuarto medio A",
 			wantErr:     true,
 		},

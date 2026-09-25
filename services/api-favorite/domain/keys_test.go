@@ -107,7 +107,7 @@ func TestFavoriteKeySK(t *testing.T) {
 		},
 		{
 			name:    "scope desconocido",
-			key:     FavoriteKey{UserID: "u1", Scope: Scope("cotizacion"), ID: ulidA},
+			key:     FavoriteKey{UserID: "u1", Scope: Scope("desconocido"), ID: ulidA},
 			wantErr: ErrInvalidScope,
 		},
 		{
@@ -228,6 +228,12 @@ func TestParseFavoriteSK(t *testing.T) {
 			wantID:    ulidA,
 		},
 		{
+			name:      "cotización",
+			sk:        "QUOTE#COTIZACION#" + ulidA,
+			wantScope: ScopeQuotation,
+			wantID:    ulidA,
+		},
+		{
 			name:    "sin los tres componentes",
 			sk:      "FAV#PROGRAMA",
 			wantErr: ErrMalformedSK,
@@ -245,7 +251,7 @@ func TestParseFavoriteSK(t *testing.T) {
 		{
 			name:    "segmento de scope desconocido",
 			sk:      "FAV#COTIZACION#" + ulidA,
-			wantErr: ErrInvalidScope,
+			wantErr: ErrMalformedSK,
 		},
 		{
 			name:    "segmento de scope en minúsculas: la clave lo lleva en mayúsculas",
@@ -325,8 +331,11 @@ func TestScopeSKPrefix(t *testing.T) {
 	if got, want := ScopeProgram.SKPrefix(), "FAV#PROGRAMA#"; got != want {
 		t.Errorf("ScopeProgram.SKPrefix() = %q, want %q", got, want)
 	}
+	if got, want := ScopeQuotation.SKPrefix(), "QUOTE#COTIZACION#"; got != want {
+		t.Errorf("ScopeQuotation.SKPrefix() = %q, want %q", got, want)
+	}
 
-	if got := Scope("cotizacion").SKPrefix(); got != "" {
+	if got := Scope("desconocido").SKPrefix(); got != "" {
 		t.Errorf("SKPrefix() de un scope desconocido = %q, want vacío", got)
 	}
 
@@ -347,7 +356,7 @@ func TestScopeValid(t *testing.T) {
 		}
 	}
 
-	for _, scope := range []Scope{"", "PROGRAMA", "programas", "cotizacion"} {
+	for _, scope := range []Scope{"", "PROGRAMA", "programas", "desconocido"} {
 		if Scope(scope).Valid() {
 			t.Errorf("Valid() acepta el scope desconocido %q", scope)
 		}

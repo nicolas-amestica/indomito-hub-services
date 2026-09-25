@@ -63,7 +63,7 @@ func (r Route) Register(e *echo.Echo, handler echo.HandlerFunc) {
 // favorito. Los handlers de actualizar y eliminar lo leen con este nombre,
 // tanto del evento de API Gateway como del contexto de Echo, porque
 // [Route.LocalPath] conserva el nombre y solo cambia la notacion.
-const FavoriteIDParam = "id-favorito"
+const FavoriteIDParam = "id-cotizacion"
 
 // Rutas de los cuatro endpoints del servicio. Son la unica declaracion Go de su
 // superficie HTTP: ver [Route].
@@ -76,18 +76,18 @@ var (
 	// ListFavoritesRoute lista los favoritos del usuario autenticado. El scope
 	// llega como parametro de consulta (`?scope=programa`), que no forma parte
 	// del path.
-	ListFavoritesRoute = Route{Method: http.MethodGet, Path: "/favoritos"}
+	ListFavoritesRoute = Route{Method: http.MethodGet, Path: "/cotizaciones"}
 
 	// CreateFavoriteRoute crea un favorito con el contenido del programa en
 	// curso.
-	CreateFavoriteRoute = Route{Method: http.MethodPost, Path: "/favoritos"}
+	CreateFavoriteRoute = Route{Method: http.MethodPost, Path: "/cotizaciones"}
 
 	// UpdateFavoriteRoute reemplaza el contenido de un favorito existente del
 	// usuario autenticado.
-	UpdateFavoriteRoute = Route{Method: http.MethodPut, Path: "/favoritos/{" + FavoriteIDParam + "}"}
+	UpdateFavoriteRoute = Route{Method: http.MethodPut, Path: "/cotizaciones/{" + FavoriteIDParam + "}"}
 
 	// DeleteFavoriteRoute elimina un favorito del usuario autenticado.
-	DeleteFavoriteRoute = Route{Method: http.MethodDelete, Path: "/favoritos/{" + FavoriteIDParam + "}"}
+	DeleteFavoriteRoute = Route{Method: http.MethodDelete, Path: "/cotizaciones/{" + FavoriteIDParam + "}"}
 )
 
 // localShutdownTimeout es el margen que se le da al servidor local para cerrar

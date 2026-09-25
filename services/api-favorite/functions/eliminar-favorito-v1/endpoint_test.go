@@ -133,7 +133,7 @@ func TestHandleDeletesFavoriteFromAuthenticatedUserPartition(t *testing.T) {
 	if err := attributevalue.UnmarshalMap(ddb.deleteInput.Key, &key); err != nil {
 		t.Fatalf("no se pudo leer la clave: %v", err)
 	}
-	if key.PK != domain.UserPKPrefix+testUserID || key.SK != domain.ScopeProgram.SKPrefix()+testFavoriteID {
+	if key.PK != domain.UserPKPrefix+testUserID || key.SK != domain.ScopeQuotation.SKPrefix()+testFavoriteID {
 		t.Errorf("Key = %+v, want usuario del contexto e id del path", key)
 	}
 

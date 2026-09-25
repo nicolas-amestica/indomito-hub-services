@@ -122,9 +122,9 @@ func TestLocalPathUsesEchoNotation(t *testing.T) {
 		route Route
 		want  string
 	}{
-		{name: "sin parametros", route: ListFavoritesRoute, want: "/favoritos"},
-		{name: "un parametro", route: UpdateFavoriteRoute, want: "/favoritos/:" + FavoriteIDParam},
-		{name: "un parametro en delete", route: DeleteFavoriteRoute, want: "/favoritos/:" + FavoriteIDParam},
+		{name: "sin parametros", route: ListFavoritesRoute, want: "/cotizaciones"},
+		{name: "un parametro", route: UpdateFavoriteRoute, want: "/cotizaciones/:" + FavoriteIDParam},
+		{name: "un parametro en delete", route: DeleteFavoriteRoute, want: "/cotizaciones/:" + FavoriteIDParam},
 	}
 
 	for _, testCase := range cases {

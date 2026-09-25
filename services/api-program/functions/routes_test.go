@@ -169,7 +169,7 @@ func TestLocalPathUsesEchoNotation(t *testing.T) {
 		{
 			name:  "accion con dos puntos escapados",
 			route: GenerateBudgetRoute,
-			want:  `/programas\:presupuesto`,
+			want:  `/cotizaciones\:presupuesto`,
 		},
 		{
 			name:  "parametro entre llaves",
@@ -212,17 +212,17 @@ func TestRegisterMatchesOnlyTheDeclaredPath(t *testing.T) {
 	}{
 		{
 			name:   "el path declarado responde",
-			path:   "/programas:presupuesto",
+			path:   "/cotizaciones:presupuesto",
 			status: http.StatusNoContent,
 		},
 		{
 			name:   "un path que solo comparte el prefijo no responde",
-			path:   "/programas-cualquier-cosa",
+			path:   "/cotizaciones-cualquier-cosa",
 			status: http.StatusNotFound,
 		},
 		{
-			name:   "otra accion sobre programas no responde",
-			path:   "/programas:otra-cosa",
+			name:   "otra accion sobre cotizaciones no responde",
+			path:   "/cotizaciones:otra-cosa",
 			status: http.StatusNotFound,
 		},
 	}

@@ -48,7 +48,8 @@ const (
 
 	// FavoritePrefix es el primer componente de la clave de ordenamiento de
 	// todo favorito, cualquiera sea su scope.
-	FavoritePrefix = "FAV"
+	FavoritePrefix  = "FAV"
+	QuotationPrefix = "QUOTE"
 
 	// keySeparator separa los componentes de la clave de ordenamiento.
 	keySeparator = "#"
@@ -84,6 +85,8 @@ const (
 	// ScopeProgram agrupa los favoritos del formulario de programa, el único
 	// scope de esta feature.
 	ScopeProgram Scope = "programa"
+	// ScopeQuotation identifica las cotizaciones persistidas en la tabla programas.
+	ScopeQuotation Scope = "cotizacion"
 )
 
 // scopeSKSegments asocia cada scope conocido con su segmento de clave de
@@ -97,12 +100,18 @@ const (
 // scope nuevo tiene que declarar ambos, y eso obliga a decidir el segmento en
 // lugar de heredarlo de cómo se escribió el otro.
 var scopeSKSegments = map[Scope]string{
-	ScopeProgram: "PROGRAMA",
+	ScopeProgram:   "PROGRAMA",
+	ScopeQuotation: "COTIZACION",
+}
+
+var scopeSKPrefixes = map[Scope]string{
+	ScopeProgram:   FavoritePrefix,
+	ScopeQuotation: QuotationPrefix,
 }
 
 // Scopes devuelve los scopes conocidos.
 func Scopes() []Scope {
-	return []Scope{ScopeProgram}
+	return []Scope{ScopeProgram, ScopeQuotation}
 }
 
 // Valid informa si s es uno de los scopes conocidos. Un scope desconocido es un
@@ -126,7 +135,7 @@ func (s Scope) SKPrefix() string {
 		return ""
 	}
 
-	return FavoritePrefix + keySeparator + segment + keySeparator
+	return scopeSKPrefixes[s] + keySeparator + segment + keySeparator
 }
 
 // NewFavoriteID genera el identificador de un favorito nuevo.
@@ -246,7 +255,7 @@ func ParseFavoriteSK(sk string) (Scope, string, error) {
 		)
 	}
 
-	if parts[0] != FavoritePrefix {
+	if parts[0] != FavoritePrefix && parts[0] != QuotationPrefix {
 		return "", "", fmt.Errorf(
 			"%w: %q no empieza con %q", ErrMalformedSK, sk, FavoritePrefix,
 		)
@@ -259,6 +268,9 @@ func ParseFavoriteSK(sk string) (Scope, string, error) {
 
 	if err := ValidateFavoriteID(parts[2]); err != nil {
 		return "", "", fmt.Errorf("%w en la clave %q", err, sk)
+	}
+	if scopeSKPrefixes[scope] != parts[0] {
+		return "", "", fmt.Errorf("%w: prefijo %q incompatible con scope %q", ErrMalformedSK, parts[0], scope)
 	}
 
 	return scope, parts[2], nil
