@@ -21,15 +21,18 @@ import (
 )
 
 type CreateRequest struct {
-	ProgramID string         `json:"programId"`
-	Period    string         `json:"period"`
-	Content   domain.Content `json:"content"`
+	ProgramID        string                   `json:"programId"`
+	ProgramReference *domain.ProgramReference `json:"programReference"`
+	Period           string                   `json:"period"`
+	Content          domain.Content           `json:"content"`
 }
 type UpdateRequest struct {
-	Period  string         `json:"period"`
-	Status  domain.Status  `json:"status"`
-	Content domain.Content `json:"content"`
-	Version int            `json:"version"`
+	ProgramID        string                   `json:"programId"`
+	ProgramReference *domain.ProgramReference `json:"programReference"`
+	Period           string                   `json:"period"`
+	Status           domain.Status            `json:"status"`
+	Content          domain.Content           `json:"content"`
+	Version          int                      `json:"version"`
 }
 type PDFRequest struct {
 	Content domain.Content `json:"content"`
@@ -55,7 +58,7 @@ func HandleCreate(ctx context.Context, req events.APIGatewayV2HTTPRequest) (even
 	if err := lambdautil.BindJSON(req, &body); err != nil {
 		return lambdautil.ErrorResponse(req, err)
 	}
-	item, err := domain.NewItem(domain.NewID(), body.ProgramID, body.Period, body.Content, time.Now())
+	item, err := domain.NewItem(domain.NewID(), body.ProgramID, body.ProgramReference, body.Period, body.Content, time.Now())
 	if err != nil {
 		return errorResponse(http.StatusBadRequest, err.Error()), nil
 	}
@@ -120,11 +123,15 @@ func HandleUpdate(ctx context.Context, req events.APIGatewayV2HTTPRequest) (even
 	if err := lambdautil.BindJSON(req, &body); err != nil {
 		return lambdautil.ErrorResponse(req, err)
 	}
+	domain.NormalizePayments(&body.Content)
+	if err := domain.NormalizeDates(&body.Content, body.ProgramReference); err != nil {
+		return errorResponse(400, err.Error()), nil
+	}
 	if current.Status == domain.StatusApproved {
 		return errorResponse(409, "El contrato aprobado es inmutable."), nil
 	}
-	if len(body.Content.Passengers) == 0 {
-		return errorResponse(400, "La lista de pasajeros es obligatoria."), nil
+	if err := domain.ValidateContent(body.Content); err != nil {
+		return errorResponse(400, err.Error()), nil
 	}
 	if body.Status == "" {
 		body.Status = current.Status
@@ -139,7 +146,12 @@ func HandleUpdate(ctx context.Context, req events.APIGatewayV2HTTPRequest) (even
 	if period == "" {
 		period = current.Period
 	}
+	if body.ProgramReference != nil && strings.TrimSpace(body.ProgramReference.ID) != strings.TrimSpace(body.ProgramID) {
+		return errorResponse(400, "La referencia del programa no coincide con programId."), nil
+	}
 	current.Content = body.Content
+	current.ProgramID = strings.TrimSpace(body.ProgramID)
+	current.ProgramReference = body.ProgramReference
 	current.Status = body.Status
 	current.Period = period
 	current.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
@@ -162,8 +174,12 @@ func HandlePDF(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.
 	if err := lambdautil.BindJSON(req, &body); err != nil {
 		return lambdautil.ErrorResponse(req, err)
 	}
-	if len(body.Content.Passengers) == 0 {
-		return errorResponse(400, "La lista de pasajeros es obligatoria."), nil
+	domain.NormalizePayments(&body.Content)
+	if err := domain.NormalizeDates(&body.Content, nil); err != nil {
+		return errorResponse(400, err.Error()), nil
+	}
+	if err := domain.ValidateContent(body.Content); err != nil {
+		return errorResponse(400, err.Error()), nil
 	}
 	pdf, err := ComposePDF(body.Content, body.Preview)
 	if err != nil {

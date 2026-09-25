@@ -2,6 +2,9 @@ package domain
 
 import (
 	"errors"
+	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,6 +55,7 @@ type Person struct {
 type Institution struct {
 	Name    string `json:"name" dynamodbav:"name"`
 	Address string `json:"address" dynamodbav:"address"`
+	Course  string `json:"course" dynamodbav:"course"`
 }
 type Trip struct {
 	City           string `json:"city" dynamodbav:"city"`
@@ -97,7 +101,6 @@ type Payments struct {
 	TotalPassengers   int          `json:"totalPassengers" dynamodbav:"totalPassengers"`
 	FreePassengers    int          `json:"freePassengers" dynamodbav:"freePassengers"`
 	PricePerPerson    int64        `json:"pricePerPerson" dynamodbav:"pricePerPerson"`
-	PriceInUSD        float64      `json:"priceInUSD" dynamodbav:"priceInUSD"`
 	TotalGroup        int64        `json:"totalGroup" dynamodbav:"totalGroup"`
 	DownPayment       int64        `json:"downPayment" dynamodbav:"downPayment"`
 	GroupBalance      int64        `json:"groupBalance" dynamodbav:"groupBalance"`
@@ -113,6 +116,14 @@ type Passenger struct {
 	DNI         string `json:"dni" dynamodbav:"dni"`
 	BirthDate   string `json:"birthDate" dynamodbav:"birthDate"`
 	Nationality string `json:"nationality" dynamodbav:"nationality"`
+	Sex         string `json:"sex" dynamodbav:"sex"`
+}
+
+type ProgramReference struct {
+	ID        string         `json:"id" dynamodbav:"id"`
+	Name      string         `json:"name" dynamodbav:"name"`
+	UpdatedAt string         `json:"updatedAt" dynamodbav:"updatedAt"`
+	Content   map[string]any `json:"content" dynamodbav:"content"`
 }
 type Content struct {
 	Representatives       []Person    `json:"representatives" dynamodbav:"representatives"`
@@ -125,14 +136,15 @@ type Content struct {
 }
 
 type Contract struct {
-	ID        string  `json:"id" dynamodbav:"id"`
-	ProgramID string  `json:"programId,omitempty" dynamodbav:"programId,omitempty"`
-	Period    string  `json:"period" dynamodbav:"period"`
-	Status    Status  `json:"status" dynamodbav:"status"`
-	Content   Content `json:"content" dynamodbav:"content"`
-	CreatedAt string  `json:"createdAt" dynamodbav:"createdAt"`
-	UpdatedAt string  `json:"updatedAt" dynamodbav:"updatedAt"`
-	Version   int     `json:"version" dynamodbav:"version"`
+	ID               string            `json:"id" dynamodbav:"id"`
+	ProgramID        string            `json:"programId,omitempty" dynamodbav:"programId,omitempty"`
+	ProgramReference *ProgramReference `json:"programReference,omitempty" dynamodbav:"programReference,omitempty"`
+	Period           string            `json:"period" dynamodbav:"period"`
+	Status           Status            `json:"status" dynamodbav:"status"`
+	Content          Content           `json:"content" dynamodbav:"content"`
+	CreatedAt        string            `json:"createdAt" dynamodbav:"createdAt"`
+	UpdatedAt        string            `json:"updatedAt" dynamodbav:"updatedAt"`
+	Version          int               `json:"version" dynamodbav:"version"`
 }
 type Item struct {
 	PK          string `json:"-" dynamodbav:"pk"`
@@ -155,14 +167,171 @@ func YearPK(period string) string {
 	}
 	return "CONTRACT#YEAR#" + year
 }
-func NewItem(id, programID, period string, content Content, now time.Time) (Item, error) {
-	if len(content.Passengers) == 0 {
-		return Item{}, errors.New("la lista de pasajeros es obligatoria")
+func NewItem(id, programID string, programReference *ProgramReference, period string, content Content, now time.Time) (Item, error) {
+	NormalizePayments(&content)
+	if err := NormalizeDates(&content, programReference); err != nil {
+		return Item{}, err
+	}
+	if err := ValidateContent(content); err != nil {
+		return Item{}, err
+	}
+	programID = strings.TrimSpace(programID)
+	if programReference != nil {
+		if programID == "" {
+			programID = strings.TrimSpace(programReference.ID)
+		}
+		if programID == "" || programID != strings.TrimSpace(programReference.ID) {
+			return Item{}, errors.New("la referencia del programa no coincide con programId")
+		}
 	}
 	if strings.TrimSpace(period) == "" {
 		period = now.Format("2006-01")
 	}
 	stamp := now.UTC().Format(time.RFC3339Nano)
-	c := Contract{ID: id, ProgramID: strings.TrimSpace(programID), Period: period, Status: StatusDraft, Content: content, CreatedAt: stamp, UpdatedAt: stamp, Version: 1}
+	c := Contract{ID: id, ProgramID: programID, ProgramReference: programReference, Period: period, Status: StatusDraft, Content: content, CreatedAt: stamp, UpdatedAt: stamp, Version: 1}
 	return Item{PK: PK(id), SK: SK, GSIPeriodPK: YearPK(period), GSIPeriodSK: stamp + "#" + id, Contract: c}, nil
+}
+
+func NormalizeDates(content *Content, programReference *ProgramReference) error {
+	fields := []struct {
+		name  string
+		value *string
+	}{
+		{"fecha del contrato", &content.Trip.ContractDate},
+		{"fecha de salida", &content.Trip.DepartureDate},
+		{"fecha de retorno", &content.Trip.ReturnDate},
+	}
+	for index := range content.Passengers {
+		fields = append(fields, struct {
+			name  string
+			value *string
+		}{fmt.Sprintf("fecha de nacimiento del pasajero %d", index+1), &content.Passengers[index].BirthDate})
+	}
+	if programReference != nil {
+		fields = append(fields, struct {
+			name  string
+			value *string
+		}{"fecha de actualizacion del programa", &programReference.UpdatedAt})
+	}
+	for _, field := range fields {
+		normalized, err := normalizeDateUTC(*field.value)
+		if err != nil {
+			return fmt.Errorf("%s no es valida", field.name)
+		}
+		*field.value = normalized
+	}
+	return nil
+}
+
+func normalizeDateUTC(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	if instant, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		return instant.UTC().Format(time.RFC3339Nano), nil
+	}
+	for _, layout := range []string{"2006-01-02", "02/01/2006", "02-01-2006"} {
+		if date, err := time.Parse(layout, value); err == nil {
+			return time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC).Format(time.RFC3339), nil
+		}
+	}
+	return "", errors.New("fecha invalida")
+}
+
+func NormalizePayments(content *Content) {
+	passengerCount := len(content.Passengers)
+	maxFree := passengerCount - 1
+	if maxFree < 0 {
+		maxFree = 0
+	}
+	if content.Payments.FreePassengers < 0 {
+		content.Payments.FreePassengers = 0
+	} else if content.Payments.FreePassengers > maxFree {
+		content.Payments.FreePassengers = maxFree
+	}
+	content.Payments.TotalPassengers = passengerCount - content.Payments.FreePassengers
+	if content.Payments.PricePerPerson < 0 {
+		content.Payments.PricePerPerson = 0
+	}
+	content.Payments.TotalGroup = int64(content.Payments.TotalPassengers) * content.Payments.PricePerPerson
+	content.Payments.GroupBalance = content.Payments.TotalGroup - content.Payments.DownPayment
+	if content.Payments.GroupBalance < 0 {
+		content.Payments.GroupBalance = 0
+	}
+	quantity := int64(content.Payments.Installments.Quantity)
+	if quantity <= 0 {
+		content.Payments.Installments.GroupInstallmentValue = 0
+		content.Payments.Installments.IndividualInstallmentValue = 0
+		return
+	}
+	content.Payments.Installments.GroupInstallmentValue = ceilDivision(content.Payments.GroupBalance, quantity)
+	content.Payments.Installments.IndividualInstallmentValue = ceilDivision(content.Payments.GroupBalance, quantity*int64(content.Payments.TotalPassengers))
+}
+
+func ceilDivision(value, divisor int64) int64 {
+	if value <= 0 || divisor <= 0 {
+		return 0
+	}
+	return (value + divisor - 1) / divisor
+}
+
+var rutPattern = regexp.MustCompile(`^(\d{7,8})-([0-9K])$`)
+
+func ValidateContent(content Content) error {
+	if len(content.Passengers) == 0 {
+		return errors.New("la lista de pasajeros es obligatoria")
+	}
+	for index, passenger := range content.Passengers {
+		if strings.TrimSpace(passenger.Names) == "" || strings.TrimSpace(passenger.LastNames) == "" || strings.TrimSpace(passenger.Nationality) == "" {
+			return fmt.Errorf("el pasajero %d tiene datos obligatorios incompletos", index+1)
+		}
+		if !ValidRUT(passenger.DNI) {
+			return fmt.Errorf("el RUT del pasajero %d no es valido", index+1)
+		}
+		if !validBirthDate(passenger.BirthDate) {
+			return fmt.Errorf("la fecha de nacimiento del pasajero %d no es valida", index+1)
+		}
+		switch passenger.Sex {
+		case "FEMALE", "MALE", "OTHER", "NOT_SPECIFIED":
+		default:
+			return fmt.Errorf("el sexo del pasajero %d no es valido", index+1)
+		}
+	}
+	return nil
+}
+
+func ValidRUT(value string) bool {
+	cleaned := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(value, ".", ""), " ", ""))
+	match := rutPattern.FindStringSubmatch(cleaned)
+	if match == nil {
+		return false
+	}
+	sum, factor := 0, 2
+	for index := len(match[1]) - 1; index >= 0; index-- {
+		digit, _ := strconv.Atoi(string(match[1][index]))
+		sum += digit * factor
+		factor++
+		if factor == 8 {
+			factor = 2
+		}
+	}
+	result := 11 - sum%11
+	expected := strconv.Itoa(result)
+	if result == 11 {
+		expected = "0"
+	} else if result == 10 {
+		expected = "K"
+	}
+	return expected == match[2]
+}
+
+func validBirthDate(value string) bool {
+	for _, layout := range []string{time.RFC3339Nano, "2006-01-02", "02/01/2006", "02-01-2006"} {
+		date, err := time.Parse(layout, strings.TrimSpace(value))
+		if err == nil {
+			return date.Year() >= 1920 && !date.After(time.Now())
+		}
+	}
+	return false
 }

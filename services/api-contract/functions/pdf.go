@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/signintech/gopdf"
 	"golang.org/x/image/font/gofont/gobold"
@@ -68,14 +69,14 @@ type clause struct {
 }
 
 func buildGeneral(c domain.Content) string {
-	return fmt.Sprintf("En %s, %s, entre GIRAS INDÓMITO LIMITADA, RUT %s, representada legalmente por %s, según se acredita, en adelante \"El Operador\", por una parte; y por otra, %s, en representación del %s, en adelante \"El Pasajero\" o \"Los Representantes\".", fallback(c.Trip.City), fallback(c.Trip.ContractDate), fallback(c.Payments.BankAccount.HolderDNI), people(c.Representatives), people(c.ClientRepresentatives), fallback(c.Institution.Name))
+	return fmt.Sprintf("En %s, %s, entre GIRAS INDÓMITO LIMITADA, RUT %s, representada legalmente por %s, según se acredita, en adelante \"El Operador\", por una parte; y por otra, %s, en representación del %s, curso %s, en adelante \"El Pasajero\" o \"Los Representantes\".", fallback(c.Trip.City), displayDate(c.Trip.ContractDate), fallback(c.Payments.BankAccount.HolderDNI), people(c.Representatives), people(c.ClientRepresentatives), fallback(c.Institution.Name), fallback(c.Institution.Course))
 }
 func buildClauses(c domain.Content) []clause {
 	p := c.Payments
 	co := p.Conditions
 	t := c.Trip
 	return []clause{
-		{1, "PRIMERO:", fmt.Sprintf("El Operador y el Pasajero han convenido la realización de un programa de viaje con destino a %s, con fecha de salida el %s y retorno el %s, partiendo desde %s, domiciliado en %s, y retornando al mismo lugar de origen. El programa detallado ha sido firmado por los comparecientes y forma parte integrante de este contrato por acuerdo unánime de ambas partes.", fallback(t.Destination), fallback(t.DepartureDate), fallback(t.ReturnDate), fallback(t.DeparturePoint), fallback(c.Institution.Address))},
+		{1, "PRIMERO:", fmt.Sprintf("El Operador y el Pasajero han convenido la realización de un programa de viaje con destino a %s, con fecha de salida el %s y retorno el %s, partiendo desde %s, domiciliado en %s, y retornando al mismo lugar de origen. El programa detallado ha sido firmado por los comparecientes y forma parte integrante de este contrato por acuerdo unánime de ambas partes.", fallback(t.Destination), displayDate(t.DepartureDate), displayDate(t.ReturnDate), fallback(t.DeparturePoint), fallback(c.Institution.Address))},
 		{2, "SEGUNDO:", "El transporte de los pasajeros se realizará en los medios pactados en el presente contrato, ya sean aéreos, terrestres o marítimos, cuya prestación es de exclusiva responsabilidad del Operador."},
 		{3, "TERCERO:", "El alojamiento hotelero de los pasajeros se realizará en los hoteles, habitaciones y regímenes pactados. Sin perjuicio de lo anterior, estos podrán ser modificados garantizando la misma categoría y condiciones de los servicios contratados, asegurando que todos los pasajeros del grupo permanezcan en un mismo establecimiento."},
 		{4, "CUARTO:", "El Operador podrá introducir cambios en las rutas y horarios previamente establecidos, siempre que sean acordados con los Representantes del viaje, por las siguientes razones: a) De fuerza mayor, cuando pudieran afectar la seguridad de los pasajeros; b) Aquellas destinadas a mejorar el cumplimiento de los objetivos previstos."},
@@ -173,11 +174,11 @@ func (d *contractPDF) plan(p domain.Plan, t domain.Trip) {
 func (d *contractPDF) passengerTable(rows []domain.Passenger) {
 	d.y += 4
 	d.heading("NÓMINA DE PASAJEROS")
-	widths := []float64{125, 125, 82, 82, 77}
-	headers := []string{"Nombres", "Apellidos", "RUT", "Fecha nac.", "Nacionalidad"}
+	widths := []float64{100, 100, 72, 72, 70, 77}
+	headers := []string{"Nombres", "Apellidos", "RUT", "Fecha nac.", "Nacionalidad", "Sexo"}
 	d.tableRow(headers, widths, true)
 	for _, r := range rows {
-		d.tableRow([]string{r.Names, r.LastNames, r.DNI, r.BirthDate, r.Nationality}, widths, false)
+		d.tableRow([]string{r.Names, r.LastNames, r.DNI, displayDate(r.BirthDate), r.Nationality, sexLabel(r.Sex)}, widths, false)
 	}
 }
 func (d *contractPDF) tableRow(values []string, widths []float64, bold bool) {
@@ -235,6 +236,30 @@ func fallback(v string) string {
 	return strings.TrimSpace(v)
 }
 func money(v int64) string { return fmt.Sprintf("$%d", v) }
+func displayDate(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback(value)
+	}
+	if date, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		return date.UTC().Format("02/01/2006")
+	}
+	return fallback(value)
+}
+func sexLabel(v string) string {
+	switch v {
+	case "FEMALE":
+		return "Femenino"
+	case "MALE":
+		return "Masculino"
+	case "OTHER":
+		return "Otro"
+	case "NOT_SPECIFIED":
+		return "No indica"
+	default:
+		return fallback(v)
+	}
+}
 func truncate(v string, n int) string {
 	r := []rune(v)
 	if len(r) <= n {
