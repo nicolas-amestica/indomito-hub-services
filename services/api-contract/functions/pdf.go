@@ -130,6 +130,11 @@ func buildClauses(c domain.Content) []clause {
 	p := c.Payments
 	co := p.Conditions
 	t := c.Trip
+	paymentClause := fmt.Sprintf("La cantidad inicial es de %d pasajeros más %d liberados de pago. Cada pasajero pagante cancela %s, totalizando %s para el grupo. La firma se realiza mediante un abono de %s, quedando un saldo grupal de %s, pagadero en %d cuotas mensuales desde %s.", p.TotalPassengers, p.FreePassengers, money(p.PricePerPerson), money(p.TotalGroup), money(p.DownPayment), money(p.GroupBalance), p.Installments.Quantity, monthName(p.Installments.StartMonth))
+	if p.DiscountPercentage > 0 {
+		paymentClause += fmt.Sprintf(" Se aplicará un descuento de %s%% sobre el valor de la cuota única y exclusivamente cuando esta sea pagada en efectivo.", percentage(p.DiscountPercentage))
+	}
+	paymentClause += fmt.Sprintf(" El viaje debe estar pagado como máximo %d días antes de la salida. Si el dólar supera %s, el viaje deberá reprogramarse o pagarse la diferencia. Las transferencias o depósitos se efectuarán a la cuenta corriente %s de %s, RUT %s, %s. Enviar comprobante a %s.", p.DaysBeforePayment, money(p.MaxExchangeRate), fallback(p.BankAccount.AccountNumber), fallback(p.BankAccount.AccountHolder), formatRUT(fallback(p.BankAccount.HolderDNI)), fallback(p.BankAccount.Bank), fallback(p.BankAccount.Email))
 	return []clause{
 		{1, "PRIMERO:", fmt.Sprintf("El Operador y el Pasajero han convenido la realización de un programa de viaje con destino a %s, con fecha de salida el %s y retorno el %s, partiendo desde %s, domiciliado en %s, y retornando al mismo lugar de origen. El programa detallado ha sido firmado por los comparecientes y forma parte integrante de este contrato por acuerdo unánime de ambas partes.", fallback(t.Destination), displayDateFull(t.DepartureDate), displayDateFull(t.ReturnDate), fallback(t.DeparturePoint), fallback(c.Institution.Address))},
 		{2, "SEGUNDO:", "El transporte de los pasajeros se realizará en los medios pactados en el presente contrato, ya sean aéreos, terrestres o marítimos, cuya prestación es de exclusiva responsabilidad del Operador."},
@@ -147,7 +152,7 @@ func buildClauses(c domain.Content) []clause {
 		{14, "DÉCIMO CUARTO:", "En caso de modificaciones al programa contratado en fechas posteriores por parte del Pasajero, dichos cambios podrán hacerse efectivos siempre que existan disponibilidades por parte de los prestadores de servicios. Cualquier costo adicional será de exclusiva responsabilidad del Pasajero."},
 		{15, "DÉCIMO QUINTO:", "Será de exclusiva responsabilidad del Pasajero cumplir con toda la documentación y requisitos para ingresar al país de destino, como la presentación de documentos vigentes en aeropuertos y aduanas. Los costos adicionales por incumplimiento serán de exclusiva responsabilidad del Pasajero."},
 		{16, "DÉCIMO SEXTO:", "El programa contratado incluirá los siguientes servicios:"},
-		{17, "DÉCIMO SÉPTIMO:", fmt.Sprintf("La cantidad inicial es de %d pasajeros más %d liberados de pago. Cada pasajero pagante cancela %s, totalizando %s para el grupo. La firma se realiza mediante un abono de %s, quedando un saldo grupal de %s, pagadero en %d cuotas mensuales desde %s. El viaje debe estar pagado como máximo %d días antes de la salida. Si el dólar supera %s, el viaje deberá reprogramarse o pagarse la diferencia. Las transferencias o depósitos se efectuarán a la cuenta corriente %s de %s, RUT %s, %s. Enviar comprobante a %s.", p.TotalPassengers, p.FreePassengers, money(p.PricePerPerson), money(p.TotalGroup), money(p.DownPayment), money(p.GroupBalance), p.Installments.Quantity, monthName(p.Installments.StartMonth), p.DaysBeforePayment, money(p.MaxExchangeRate), fallback(p.BankAccount.AccountNumber), fallback(p.BankAccount.AccountHolder), formatRUT(fallback(p.BankAccount.HolderDNI)), fallback(p.BankAccount.Bank), fallback(p.BankAccount.Email))},
+		{17, "DÉCIMO SÉPTIMO:", paymentClause},
 		{18, "DÉCIMO OCTAVO:", "En la eventualidad de que no se cumpla con la cantidad de pasajeros acordada en el artículo DÉCIMO SÉPTIMO, se deberá cancelar la cantidad total acordada en el artículo anterior. En caso de no alcanzar el monto, se debe avisar con anterioridad al Operador para buscar una solución que implique el cambio del programa."},
 		{19, "DÉCIMO NOVENO:", fmt.Sprintf("Ante cualquier reclamo respecto de los servicios contratados, el Pasajero deberá informar por escrito dentro de %d días. Las dificultades que no puedan solucionarse armoniosamente se someterán a un árbitro arbitrador designado de común acuerdo y, en subsidio, a la justicia ordinaria.", co.ComplaintDeadlineDays)},
 		{20, "VIGÉSIMO:", fmt.Sprintf("El presente contrato tendrá vigencia únicamente en las fechas estipuladas. Cualquier cambio deberá avisarse por escrito con %d días de anticipación a la salida.", co.CancellationNoticeDays)},
@@ -389,33 +394,22 @@ func (d *contractPDF) serviceItem(text string) {
 // ─── Tabla de pasajeros ──────────────────────────────────────────────────────
 
 func (d *contractPDF) passengerTable(rows []domain.Passenger) {
-	const rowH = 22.0
-	// Altura total: gap + título + gap + header + filas.
-	tableH := 10.0 + float64(fontSizeBody) + 13.0 + 4.0 + rowH + float64(len(rows))*rowH
-
-	// Si la tabla completa no cabe en la página actual, saltar a una nueva.
-	d.ensure(tableH)
-
-	d.y += 10
+	// La nómina siempre ocupa una página dedicada. La altura de sus filas se
+	// adapta hasta 60 pasajeros para impedir que la tabla se divida.
+	d.addPage()
 	d.heading("NÓMINA DE PASAJEROS", fontSizeBody)
 	d.y += 4
-	widths := []float64{94, 94, 72, 76, 78, 77}
-	headers := []string{"Nombres", "Apellidos", "RUT", "Fecha nac.", "Nacionalidad", "Sexo"}
-	d.tableRow(headers, widths, true)
-	for _, r := range rows {
-		d.tableRow([]string{r.Names, r.LastNames, formatRUT(r.DNI), displayDateShort(r.BirthDate), r.Nationality, sexLabel(r.Sex)}, widths, false)
+	rowHeight, fontSize := passengerTableLayout(len(rows), d.y)
+	widths := []float64{24, 90, 90, 74, 76, 78, 80}
+	headers := []string{"N°", "Nombres", "Apellidos", "RUT", "Fecha nac.", "Nacionalidad", "Sexo"}
+	d.tableRow(headers, widths, true, rowHeight, fontSize)
+	for index, r := range rows {
+		d.tableRow([]string{strconv.Itoa(index + 1), r.Names, r.LastNames, formatRUT(r.DNI), displayDateShort(r.BirthDate), r.Nationality, sexLabel(r.Sex)}, widths, false, rowHeight, fontSize)
 	}
 }
 
 // tableRow dibuja una fila de tabla sin colores de fondo — solo bordes negros.
-func (d *contractPDF) tableRow(values []string, widths []float64, header bool) {
-	const height = 22.0
-	d.ensure(height + 2)
-
-	fontSize := fontSizeService
-	if header {
-		fontSize = fontSizeBody
-	}
+func (d *contractPDF) tableRow(values []string, widths []float64, header bool, height float64, fontSize int) {
 	d.setFont(header, fontSize)
 
 	x := margin
@@ -427,10 +421,15 @@ func (d *contractPDF) tableRow(values []string, widths []float64, header bool) {
 		// Texto negro.
 		d.pdf.SetTextColor(0, 0, 0)
 
-		for lineIndex, line := range tableCellLines(v, widths[i], fontSize) {
+		lines := tableCellLines(v, widths[i], fontSize)
+		if height < 18 && len(lines) > 1 {
+			lines = lines[:1]
+		}
+		lineHeight := float64(fontSize) + 2
+		for lineIndex, line := range lines {
 			d.pdf.SetX(x + 4)
-			d.pdf.SetY(d.y + 4 + float64(lineIndex*11))
-			_ = d.pdf.CellWithOption(&gopdf.Rect{W: widths[i] - 8, H: 11}, line, gopdf.CellOption{Align: gopdf.Left})
+			d.pdf.SetY(d.y + (height-lineHeight*float64(len(lines)))/2 + float64(lineIndex)*lineHeight)
+			_ = d.pdf.CellWithOption(&gopdf.Rect{W: widths[i] - 8, H: lineHeight}, line, gopdf.CellOption{Align: gopdf.Left})
 		}
 
 		// Borde negro.
@@ -440,6 +439,23 @@ func (d *contractPDF) tableRow(values []string, widths []float64, header bool) {
 	}
 	d.pdf.SetTextColor(0, 0, 0)
 	d.y += height
+}
+
+func passengerTableLayout(passengerCount int, startY float64) (float64, int) {
+	const maximumRowHeight = 22.0
+	available := 710.0 - startY
+	rowHeight := available / float64(passengerCount+1)
+	if rowHeight > maximumRowHeight {
+		rowHeight = maximumRowHeight
+	}
+	fontSize := int(rowHeight - 3)
+	if fontSize > fontSizeService {
+		fontSize = fontSizeService
+	}
+	if fontSize < 5 {
+		fontSize = 5
+	}
+	return rowHeight, fontSize
 }
 
 // ─── Firmas ──────────────────────────────────────────────────────────────────
@@ -554,6 +570,10 @@ func money(v int64) string {
 		return "-$" + result.String()
 	}
 	return "$" + result.String()
+}
+
+func percentage(value float64) string {
+	return strconv.FormatFloat(value, 'f', -1, 64)
 }
 
 // Meses en español para formateo de fechas.

@@ -99,17 +99,18 @@ type BankAccount struct {
 	Email         string `json:"email" dynamodbav:"email"`
 }
 type Payments struct {
-	TotalPassengers   int          `json:"totalPassengers" dynamodbav:"totalPassengers"`
-	FreePassengers    int          `json:"freePassengers" dynamodbav:"freePassengers"`
-	PricePerPerson    int64        `json:"pricePerPerson" dynamodbav:"pricePerPerson"`
-	TotalGroup        int64        `json:"totalGroup" dynamodbav:"totalGroup"`
-	DownPayment       int64        `json:"downPayment" dynamodbav:"downPayment"`
-	GroupBalance      int64        `json:"groupBalance" dynamodbav:"groupBalance"`
-	DaysBeforePayment int          `json:"daysBeforePayment" dynamodbav:"daysBeforePayment"`
-	MaxExchangeRate   int64        `json:"maxExchangeRate" dynamodbav:"maxExchangeRate"`
-	Installments      Installments `json:"installments" dynamodbav:"installments"`
-	Conditions        Conditions   `json:"conditions" dynamodbav:"conditions"`
-	BankAccount       BankAccount  `json:"bankAccount" dynamodbav:"bankAccount"`
+	TotalPassengers    int          `json:"totalPassengers" dynamodbav:"totalPassengers"`
+	FreePassengers     int          `json:"freePassengers" dynamodbav:"freePassengers"`
+	PricePerPerson     int64        `json:"pricePerPerson" dynamodbav:"pricePerPerson"`
+	TotalGroup         int64        `json:"totalGroup" dynamodbav:"totalGroup"`
+	DownPayment        int64        `json:"downPayment" dynamodbav:"downPayment"`
+	GroupBalance       int64        `json:"groupBalance" dynamodbav:"groupBalance"`
+	DaysBeforePayment  int          `json:"daysBeforePayment" dynamodbav:"daysBeforePayment"`
+	MaxExchangeRate    int64        `json:"maxExchangeRate" dynamodbav:"maxExchangeRate"`
+	DiscountPercentage float64      `json:"discountPercentage" dynamodbav:"discountPercentage"`
+	Installments       Installments `json:"installments" dynamodbav:"installments"`
+	Conditions         Conditions   `json:"conditions" dynamodbav:"conditions"`
+	BankAccount        BankAccount  `json:"bankAccount" dynamodbav:"bankAccount"`
 }
 type Passenger struct {
 	Names       string `json:"names" dynamodbav:"names"`
@@ -335,6 +336,9 @@ func ValidateContent(content Content) error {
 		}
 	}
 	payment := content.Payments
+	if payment.DiscountPercentage < 0 || payment.DiscountPercentage > 100 {
+		return errors.New("el porcentaje de descuento debe estar entre 0 y 100")
+	}
 	if payment.PricePerPerson <= 0 || payment.MaxExchangeRate <= 0 || payment.Installments.Quantity < 1 || strings.TrimSpace(payment.Installments.StartMonth) == "" {
 		return errors.New("los datos de pago y cuotas son obligatorios")
 	}

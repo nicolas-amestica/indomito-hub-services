@@ -65,6 +65,14 @@ func TestValidateContentRejectsInvalidPassengerData(t *testing.T) {
 	}
 }
 
+func TestValidateContentRejectsDiscountOutsidePercentageRange(t *testing.T) {
+	content := validContent()
+	content.Payments.DiscountPercentage = 101
+	if err := ValidateContent(content); err == nil {
+		t.Fatal("expected invalid discount error")
+	}
+}
+
 func TestNormalizeDatesConvertsOffsetsToUTC(t *testing.T) {
 	content := Content{Trip: Trip{DepartureDate: "2027-01-10T03:00:00-03:00"}}
 	if err := NormalizeDates(&content, nil); err != nil {
