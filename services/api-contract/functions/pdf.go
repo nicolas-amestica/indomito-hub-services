@@ -3,6 +3,7 @@ package functions
 import (
 	_ "embed"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -85,6 +86,10 @@ func ComposePDF(c domain.Content, preview bool) ([]byte, error) {
 
 	// Cláusulas.
 	for _, clause := range buildClauses(c) {
+		// Estimar la altura total de la cláusula para no cortarla entre páginas.
+		clauseH := d.estimateClauseHeight(clause, c)
+		d.ensure(clauseH)
+
 		// Título de la cláusula en negrita (tamaño 11).
 		d.heading(clause.title, fontSizeClauseTitle)
 		// Cuerpo justificado (tamaño 10).
@@ -119,7 +124,7 @@ type clause struct {
 }
 
 func buildGeneral(c domain.Content) string {
-	return fmt.Sprintf("En %s, %s, entre GIRAS INDÓMITO LIMITADA, RUT %s, representada legalmente por %s, según se acredita, en adelante \"El Operador\", por una parte; y por otra, %s, en representación del %s, curso %s, en adelante \"El Pasajero\" o \"Los Representantes\".", fallback(c.Trip.City), displayDate(c.Trip.ContractDate), fallback(c.Payments.BankAccount.HolderDNI), people(c.Representatives), people(c.ClientRepresentatives), fallback(c.Institution.Name), fallback(c.Institution.Course))
+	return fmt.Sprintf("En %s, %s, entre GIRAS INDÓMITO LIMITADA, RUT %s, representada legalmente por %s, según se acredita, en adelante \"El Operador\", por una parte; y por otra, %s, en representación del %s, curso %s, en adelante \"El Pasajero\" o \"Los Representantes\".", fallback(c.Trip.City), displayDate(c.Trip.ContractDate), formatRUT(fallback(c.Payments.BankAccount.HolderDNI)), people(c.Representatives), people(c.ClientRepresentatives), fallback(c.Institution.Name), fallback(c.Institution.Course))
 }
 func buildClauses(c domain.Content) []clause {
 	p := c.Payments
@@ -142,7 +147,7 @@ func buildClauses(c domain.Content) []clause {
 		{14, "DÉCIMO CUARTO:", "En caso de modificaciones al programa contratado en fechas posteriores por parte del Pasajero, dichos cambios podrán hacerse efectivos siempre que existan disponibilidades por parte de los prestadores de servicios. Cualquier costo adicional será de exclusiva responsabilidad del Pasajero."},
 		{15, "DÉCIMO QUINTO:", "Será de exclusiva responsabilidad del Pasajero cumplir con toda la documentación y requisitos para ingresar al país de destino, como la presentación de documentos vigentes en aeropuertos y aduanas. Los costos adicionales por incumplimiento serán de exclusiva responsabilidad del Pasajero."},
 		{16, "DÉCIMO SEXTO:", "El programa contratado incluirá los siguientes servicios:"},
-		{17, "DÉCIMO SÉPTIMO:", fmt.Sprintf("La cantidad inicial es de %d pasajeros más %d liberados de pago. Cada pasajero pagante cancela %s, totalizando %s para el grupo. La firma se realiza mediante un abono de %s, quedando un saldo grupal de %s, pagadero en %d cuotas mensuales desde %s. El viaje debe estar pagado como máximo %d días antes de la salida. Si el dólar supera %s, el viaje deberá reprogramarse o pagarse la diferencia. Las transferencias o depósitos se efectuarán a la cuenta corriente %s de %s, RUT %s, %s. Enviar comprobante a %s.", p.TotalPassengers, p.FreePassengers, money(p.PricePerPerson), money(p.TotalGroup), money(p.DownPayment), money(p.GroupBalance), p.Installments.Quantity, fallback(p.Installments.StartMonth), p.DaysBeforePayment, money(p.MaxExchangeRate), fallback(p.BankAccount.AccountNumber), fallback(p.BankAccount.AccountHolder), fallback(p.BankAccount.HolderDNI), fallback(p.BankAccount.Bank), fallback(p.BankAccount.Email))},
+		{17, "DÉCIMO SÉPTIMO:", fmt.Sprintf("La cantidad inicial es de %d pasajeros más %d liberados de pago. Cada pasajero pagante cancela %s, totalizando %s para el grupo. La firma se realiza mediante un abono de %s, quedando un saldo grupal de %s, pagadero en %d cuotas mensuales desde %s. El viaje debe estar pagado como máximo %d días antes de la salida. Si el dólar supera %s, el viaje deberá reprogramarse o pagarse la diferencia. Las transferencias o depósitos se efectuarán a la cuenta corriente %s de %s, RUT %s, %s. Enviar comprobante a %s.", p.TotalPassengers, p.FreePassengers, money(p.PricePerPerson), money(p.TotalGroup), money(p.DownPayment), money(p.GroupBalance), p.Installments.Quantity, monthName(p.Installments.StartMonth), p.DaysBeforePayment, money(p.MaxExchangeRate), fallback(p.BankAccount.AccountNumber), fallback(p.BankAccount.AccountHolder), formatRUT(fallback(p.BankAccount.HolderDNI)), fallback(p.BankAccount.Bank), fallback(p.BankAccount.Email))},
 		{18, "DÉCIMO OCTAVO:", "En la eventualidad de que no se cumpla con la cantidad de pasajeros acordada en el artículo DÉCIMO SÉPTIMO, se deberá cancelar la cantidad total acordada en el artículo anterior. En caso de no alcanzar el monto, se debe avisar con anterioridad al Operador para buscar una solución que implique el cambio del programa."},
 		{19, "DÉCIMO NOVENO:", fmt.Sprintf("Ante cualquier reclamo respecto de los servicios contratados, el Pasajero deberá informar por escrito dentro de %d días. Las dificultades que no puedan solucionarse armoniosamente se someterán a un árbitro arbitrador designado de común acuerdo y, en subsidio, a la justicia ordinaria.", co.ComplaintDeadlineDays)},
 		{20, "VIGÉSIMO:", fmt.Sprintf("El presente contrato tendrá vigencia únicamente en las fechas estipuladas. Cualquier cambio deberá avisarse por escrito con %d días de anticipación a la salida.", co.CancellationNoticeDays)},
@@ -303,6 +308,48 @@ func (d *contractPDF) wrapByWidth(text string, maxWidth float64, bold bool, size
 	return lines
 }
 
+// estimateTextHeight calcula la altura que ocuparía un texto justificado sin dibujarlo.
+func (d *contractPDF) estimateTextHeight(text string, size int, bold bool) float64 {
+	cw := contentWidth()
+	lines := d.wrapByWidth(text, cw, bold, size)
+	return float64(len(lines)) * lineHeightBody
+}
+
+// estimateClauseHeight calcula la altura total de una cláusula incluyendo
+// título, cuerpo, plan (cláusula 16) y tabla de pasajeros (cláusula 22).
+func (d *contractPDF) estimateClauseHeight(cl clause, c domain.Content) float64 {
+	var h float64
+
+	// Altura del título.
+	if cl.title != "" {
+		h += float64(fontSizeClauseTitle) + 13
+	}
+
+	// Altura del cuerpo.
+	h += d.estimateTextHeight(cl.text, fontSizeBody, false)
+
+	// Extras de la cláusula 16 (plan + servicios).
+	if cl.number == 16 {
+		h += 10                                 // gap
+		h += float64(fontSizeServiceTitle) + 13 // nombre del plan
+		h += lineHeightBody                     // días/noches
+		h += 20                                 // gap
+		h += float64(fontSizeBody) + 13         // "Servicios incluidos:"
+		for _, s := range c.Plan.ServicesIncluded {
+			indent := 20.0
+			availWidth := contentWidth() - indent
+			lines := d.wrapByWidth("• "+s.Description, availWidth, false, fontSizeService)
+			h += float64(len(lines)) * lineHeightService
+		}
+	}
+
+	// La tabla de pasajeros (cláusula 22) se fuerza a página nueva en
+	// passengerTable, así que no la sumamos aquí.
+
+	h += clauseSpacing
+	return h
+}
+
 // ─── Plan y servicios ────────────────────────────────────────────────────────
 
 func (d *contractPDF) plan(p domain.Plan, t domain.Trip) {
@@ -342,6 +389,13 @@ func (d *contractPDF) serviceItem(text string) {
 // ─── Tabla de pasajeros ──────────────────────────────────────────────────────
 
 func (d *contractPDF) passengerTable(rows []domain.Passenger) {
+	const rowH = 22.0
+	// Altura total: gap + título + gap + header + filas.
+	tableH := 10.0 + float64(fontSizeBody) + 13.0 + 4.0 + rowH + float64(len(rows))*rowH
+
+	// Si la tabla completa no cabe en la página actual, saltar a una nueva.
+	d.ensure(tableH)
+
 	d.y += 10
 	d.heading("NÓMINA DE PASAJEROS", fontSizeBody)
 	d.y += 4
@@ -349,7 +403,7 @@ func (d *contractPDF) passengerTable(rows []domain.Passenger) {
 	headers := []string{"Nombres", "Apellidos", "RUT", "Fecha nac.", "Nacionalidad", "Sexo"}
 	d.tableRow(headers, widths, true)
 	for _, r := range rows {
-		d.tableRow([]string{r.Names, r.LastNames, r.DNI, displayDateShort(r.BirthDate), r.Nationality, sexLabel(r.Sex)}, widths, false)
+		d.tableRow([]string{r.Names, r.LastNames, formatRUT(r.DNI), displayDateShort(r.BirthDate), r.Nationality, sexLabel(r.Sex)}, widths, false)
 	}
 }
 
@@ -457,7 +511,7 @@ func (d *contractPDF) signatures(c domain.Content) {
 func people(rows []domain.Person) string {
 	parts := make([]string, 0, len(rows))
 	for _, p := range rows {
-		parts = append(parts, fmt.Sprintf("%s, cédula nacional de identidad número %s", strings.ToUpper(fallback(p.Name)), fallback(p.DNI)))
+		parts = append(parts, fmt.Sprintf("%s, cédula nacional de identidad número %s", strings.ToUpper(fallback(p.Name)), formatRUT(fallback(p.DNI))))
 	}
 	if len(parts) == 0 {
 		return ":::SIN REPRESENTANTE:::"
@@ -506,6 +560,15 @@ func money(v int64) string {
 var spanishMonths = []string{
 	"enero", "febrero", "marzo", "abril", "mayo", "junio",
 	"julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+}
+
+// monthName convierte un número de mes ("01".."12") al nombre en español.
+func monthName(v string) string {
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || n < 1 || n > 12 {
+		return fallback(v)
+	}
+	return spanishMonths[n-1]
 }
 
 // displayDate devuelve la fecha en formato simple: "1 de septiembre de 2026".

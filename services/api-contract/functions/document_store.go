@@ -3,7 +3,10 @@ package functions
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -14,7 +17,25 @@ const approvedPDFContentType = "application/pdf"
 
 type DocumentStore interface {
 	PutPDF(context.Context, string, []byte) error
+	VerifyPDF(context.Context, string, string, int64) error
 	PresignPDF(context.Context, string, time.Duration) (string, error)
+}
+
+func (s *s3DocumentStore) VerifyPDF(ctx context.Context, key, expectedSHA256 string, expectedSize int64) error {
+	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
+	if err != nil {
+		return fmt.Errorf("leer PDF aprobado: %w", err)
+	}
+	defer result.Body.Close()
+	hash := sha256.New()
+	size, err := io.Copy(hash, result.Body)
+	if err != nil {
+		return fmt.Errorf("verificar PDF aprobado: %w", err)
+	}
+	if size != expectedSize || hex.EncodeToString(hash.Sum(nil)) != expectedSHA256 {
+		return fmt.Errorf("la integridad del PDF aprobado no coincide")
+	}
+	return nil
 }
 
 type s3DocumentStore struct {

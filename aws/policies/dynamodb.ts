@@ -1,19 +1,20 @@
-import type { IamResource, IamStatement } from './types.js';
+import type { IamResource, IamStatement } from "./types.js";
 
 /**
  * Grants full CRUD operations on a DynamoDB table and its GSI indexes.
  */
 export function dynamodbCrudPolicy(tableArn: string): IamStatement {
   return {
-    Effect: 'Allow',
+    Effect: "Allow",
     Action: [
-      'dynamodb:Query',
-      'dynamodb:GetItem',
-      'dynamodb:PutItem',
-      'dynamodb:UpdateItem',
-      'dynamodb:DeleteItem',
-      'dynamodb:BatchGetItem',
-      'dynamodb:BatchWriteItem',
+      "dynamodb:Query",
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:BatchGetItem",
+      "dynamodb:BatchWriteItem",
+      "dynamodb:TransactWriteItems",
     ],
     Resource: [tableArn, `${tableArn}/index/*`],
   };
@@ -24,8 +25,8 @@ export function dynamodbCrudPolicy(tableArn: string): IamStatement {
  */
 export function dynamodbReadPolicy(tableArn: string): IamStatement {
   return {
-    Effect: 'Allow',
-    Action: ['dynamodb:Query', 'dynamodb:GetItem', 'dynamodb:BatchGetItem'],
+    Effect: "Allow",
+    Action: ["dynamodb:Query", "dynamodb:GetItem", "dynamodb:BatchGetItem"],
     Resource: [tableArn, `${tableArn}/index/*`],
   };
 }
@@ -35,12 +36,12 @@ export function dynamodbReadPolicy(tableArn: string): IamStatement {
  */
 export function dynamodbStreamReadPolicy(streamArn: IamResource): IamStatement {
   return {
-    Effect: 'Allow',
+    Effect: "Allow",
     Action: [
-      'dynamodb:DescribeStream',
-      'dynamodb:GetRecords',
-      'dynamodb:GetShardIterator',
-      'dynamodb:ListStreams',
+      "dynamodb:DescribeStream",
+      "dynamodb:GetRecords",
+      "dynamodb:GetShardIterator",
+      "dynamodb:ListStreams",
     ],
     Resource: streamArn,
   };

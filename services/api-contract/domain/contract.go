@@ -137,11 +137,25 @@ type Content struct {
 }
 
 type PDFDocument struct {
-	ObjectKey   string `json:"objectKey" dynamodbav:"objectKey"`
-	ContentType string `json:"contentType" dynamodbav:"contentType"`
-	Size        int64  `json:"size" dynamodbav:"size"`
-	SHA256      string `json:"sha256" dynamodbav:"sha256"`
-	GeneratedAt string `json:"generatedAt" dynamodbav:"generatedAt"`
+	ObjectKey        string `json:"objectKey" dynamodbav:"objectKey"`
+	ContentType      string `json:"contentType" dynamodbav:"contentType"`
+	Size             int64  `json:"size" dynamodbav:"size"`
+	SHA256           string `json:"sha256" dynamodbav:"sha256"`
+	GeneratorVersion string `json:"generatorVersion" dynamodbav:"generatorVersion"`
+	GeneratedAt      string `json:"generatedAt" dynamodbav:"generatedAt"`
+	GeneratedBy      string `json:"generatedBy" dynamodbav:"generatedBy"`
+}
+
+type StatusAuditItem struct {
+	PK         string `dynamodbav:"pk"`
+	SK         string `dynamodbav:"sk"`
+	Entity     string `dynamodbav:"entity"`
+	ContractID string `dynamodbav:"contractId"`
+	From       Status `dynamodbav:"from"`
+	To         Status `dynamodbav:"to"`
+	ChangedBy  string `dynamodbav:"changedBy"`
+	ChangedAt  string `dynamodbav:"changedAt"`
+	Version    int    `dynamodbav:"version"`
 }
 
 type Contract struct {
@@ -155,6 +169,8 @@ type Contract struct {
 	UpdatedAt        string            `json:"updatedAt" dynamodbav:"updatedAt"`
 	Version          int               `json:"version" dynamodbav:"version"`
 	PDFDocument      *PDFDocument      `json:"pdfDocument,omitempty" dynamodbav:"pdfDocument,omitempty"`
+	ApprovedAt       string            `json:"approvedAt,omitempty" dynamodbav:"approvedAt,omitempty"`
+	ApprovedBy       string            `json:"approvedBy,omitempty" dynamodbav:"approvedBy,omitempty"`
 }
 type Item struct {
 	PK          string `json:"-" dynamodbav:"pk"`

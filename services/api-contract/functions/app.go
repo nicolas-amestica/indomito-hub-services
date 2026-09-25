@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"go.uber.org/zap"
 	"ind-hub-api-gox-sls-pri-gh/bootstrap"
 	"ind-hub-api-gox-sls-pri-gh/libs/awsddb"
@@ -12,10 +13,11 @@ import (
 )
 
 type App struct {
-	Config    Config
-	DDB       awsddb.Client
-	Documents DocumentStore
-	Stage     string
+	Config          Config
+	DDB             awsddb.Client
+	DDBTransactions *dynamodb.Client
+	Documents       DocumentStore
+	Stage           string
 }
 
 var once sync.Once
@@ -31,7 +33,8 @@ func GetApp(ctx context.Context) (*App, error) {
 			return
 		}
 		config := LoadConfig(base)
-		instance = &App{Config: config, DDB: awsddb.New(cfg), Documents: newS3DocumentStore(cfg, config.DocumentsBucketName), Stage: base.AppStage}
+		ddb := awsddb.New(cfg)
+		instance = &App{Config: config, DDB: ddb, DDBTransactions: ddb, Documents: newS3DocumentStore(cfg, config.DocumentsBucketName), Stage: base.AppStage}
 	})
 	return instance, appErr
 }

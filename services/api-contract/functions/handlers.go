@@ -21,6 +21,8 @@ import (
 	"ind-hub-api-gox-sls-pri-gh/services/api-contract/domain"
 )
 
+const pdfGeneratorVersion = "contract-pdf-go-v1"
+
 type CreateRequest struct {
 	ProgramID        string                   `json:"programId"`
 	ProgramReference *domain.ProgramReference `json:"programReference"`
@@ -177,6 +179,15 @@ func HandleUpdate(ctx context.Context, req events.APIGatewayV2HTTPRequest) (even
 	if !body.Status.Valid() || !domain.CanTransition(current.Status, body.Status) {
 		return errorResponse(409, "La transicion de estado no esta permitida."), nil
 	}
+	previousStatus := current.Status
+	statusChanged := previousStatus != body.Status
+	changedBy := ""
+	if statusChanged {
+		changedBy, err = lambdautil.UserIDFromContext(req)
+		if err != nil {
+			return errorResponse(http.StatusUnauthorized, "No se pudo identificar al usuario."), nil
+		}
+	}
 	if body.Version != current.Version {
 		return errorResponse(409, "El contrato fue modificado por otro usuario. Recargue antes de guardar."), nil
 	}
@@ -204,7 +215,9 @@ func HandleUpdate(ctx context.Context, req events.APIGatewayV2HTTPRequest) (even
 			return errorResponse(500, "No se pudo almacenar el PDF definitivo."), nil
 		}
 		digest := sha256.Sum256(pdf)
-		current.PDFDocument = &domain.PDFDocument{ObjectKey: objectKey, ContentType: approvedPDFContentType, Size: int64(len(pdf)), SHA256: fmt.Sprintf("%x", digest), GeneratedAt: current.UpdatedAt}
+		current.PDFDocument = &domain.PDFDocument{ObjectKey: objectKey, ContentType: approvedPDFContentType, Size: int64(len(pdf)), SHA256: fmt.Sprintf("%x", digest), GeneratorVersion: pdfGeneratorVersion, GeneratedAt: current.UpdatedAt, GeneratedBy: changedBy}
+		current.ApprovedAt = current.UpdatedAt
+		current.ApprovedBy = changedBy
 	}
 	current.GSIPeriodPK = domain.YearPK(period)
 	current.GSIPeriodSK = current.CreatedAt + "#" + id
@@ -212,7 +225,19 @@ func HandleUpdate(ctx context.Context, req events.APIGatewayV2HTTPRequest) (even
 	if err != nil {
 		return errorResponse(500, err.Error()), nil
 	}
-	_, err = app.DDB.PutItem(ctx, &dynamodb.PutItemInput{TableName: aws.String(app.Config.ProgramsTableName), Item: raw, ConditionExpression: aws.String("#status <> :approved AND version = :version"), ExpressionAttributeNames: map[string]string{"#status": "status"}, ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{":approved": &ddbtypes.AttributeValueMemberS{Value: string(domain.StatusApproved)}, ":version": &ddbtypes.AttributeValueMemberN{Value: fmt.Sprint(body.Version)}}})
+	if statusChanged {
+		audit := domain.StatusAuditItem{PK: domain.PK(id), SK: fmt.Sprintf("AUDIT#%s#%s", current.UpdatedAt, domain.NewID()), Entity: "CONTRACT_STATUS_AUDIT", ContractID: id, From: previousStatus, To: body.Status, ChangedBy: changedBy, ChangedAt: current.UpdatedAt, Version: current.Version}
+		auditRaw, marshalErr := attributevalue.MarshalMap(audit)
+		if marshalErr != nil {
+			return errorResponse(500, marshalErr.Error()), nil
+		}
+		_, err = app.DDBTransactions.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []ddbtypes.TransactWriteItem{
+			{Put: &ddbtypes.Put{TableName: aws.String(app.Config.ProgramsTableName), Item: raw, ConditionExpression: aws.String("#status <> :approved AND version = :version"), ExpressionAttributeNames: map[string]string{"#status": "status"}, ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{":approved": &ddbtypes.AttributeValueMemberS{Value: string(domain.StatusApproved)}, ":version": &ddbtypes.AttributeValueMemberN{Value: fmt.Sprint(body.Version)}}}},
+			{Put: &ddbtypes.Put{TableName: aws.String(app.Config.ProgramsTableName), Item: auditRaw, ConditionExpression: aws.String("attribute_not_exists(pk)")}},
+		}})
+	} else {
+		_, err = app.DDB.PutItem(ctx, &dynamodb.PutItemInput{TableName: aws.String(app.Config.ProgramsTableName), Item: raw, ConditionExpression: aws.String("#status <> :approved AND version = :version"), ExpressionAttributeNames: map[string]string{"#status": "status"}, ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{":approved": &ddbtypes.AttributeValueMemberS{Value: string(domain.StatusApproved)}, ":version": &ddbtypes.AttributeValueMemberN{Value: fmt.Sprint(body.Version)}}})
+	}
 	if err != nil {
 		return errorResponse(409, "El contrato cambio o ya fue aprobado."), nil
 	}
@@ -232,6 +257,9 @@ func HandleApprovedPDF(ctx context.Context, req events.APIGatewayV2HTTPRequest) 
 		return errorResponse(404, "El contrato no tiene un PDF aprobado."), nil
 	}
 	const validity = 15 * time.Minute
+	if err := app.Documents.VerifyPDF(ctx, item.PDFDocument.ObjectKey, item.PDFDocument.SHA256, item.PDFDocument.Size); err != nil {
+		return errorResponse(409, "El PDF aprobado no superó la verificación de integridad."), nil
+	}
 	url, err := app.Documents.PresignPDF(ctx, item.PDFDocument.ObjectKey, validity)
 	if err != nil {
 		return errorResponse(500, "No se pudo obtener el PDF aprobado."), nil
