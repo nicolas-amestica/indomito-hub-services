@@ -1,4 +1,4 @@
-package actualizarfavoritov1
+package actualizarcotizacionv1
 
 import (
 	"context"
@@ -20,8 +20,8 @@ import (
 	"ind-hub-api-gox-sls-pri-gh/libs/domain/program"
 	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
 	"ind-hub-api-gox-sls-pri-gh/libs/shared/apperr"
-	"ind-hub-api-gox-sls-pri-gh/services/api-favorite/domain"
-	"ind-hub-api-gox-sls-pri-gh/services/api-favorite/functions"
+	"ind-hub-api-gox-sls-pri-gh/services/api-program/domain"
+	"ind-hub-api-gox-sls-pri-gh/services/api-program/functions"
 )
 
 const (
@@ -75,8 +75,8 @@ func (f *fakeDDB) DeleteItem(context.Context, *dynamodb.DeleteItemInput, ...func
 func testApp(ddb *fakeDDB) *functions.App {
 	return &functions.App{
 		Config: functions.Config{
-			FavoritesTableName: testTableName,
-			FunctionName:       "fn-actualizar-favorito-v1",
+			ProgramsTableName: testTableName,
+			FunctionName:      "fn-actualizar-favorito-v1",
 		},
 		DDB:   ddb,
 		Stage: "test",
@@ -119,7 +119,7 @@ func apiRequest(t *testing.T, request Request, favoriteID string) events.APIGate
 
 	return events.APIGatewayV2HTTPRequest{
 		Body:           string(body),
-		PathParameters: map[string]string{functions.FavoriteIDParam: favoriteID},
+		PathParameters: map[string]string{functions.QuotationIDParam: favoriteID},
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
 			RequestID: testRequestID,
 			Authorizer: &events.APIGatewayV2HTTPRequestContextAuthorizerDescription{

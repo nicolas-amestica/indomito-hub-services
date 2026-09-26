@@ -10,7 +10,7 @@ type Limit struct {
 
 // fieldLimits es el gemelo en Go de `constants/field-limits.ts` del frontend
 // (`ind-hub-app-ngx-pri-gh`). Es la única fuente de estos rangos en el
-// backend: los validadores de api-favorite y api-program la usan en vez de
+// backend: los validadores de api-program la usan en vez de
 // declarar los números otra vez. Una divergencia entre este archivo y
 // field-limits.ts es un defecto.
 //
@@ -39,7 +39,7 @@ type fieldLimits struct {
 }
 
 // FieldLimits son los límites numéricos de los campos del programa,
-// compartidos por api-favorite y api-program para validar el contenido de
+// compartidos por api-program para validar el contenido de
 // favoritos y el cuerpo del presupuesto respectivamente.
 var FieldLimits = fieldLimits{
 	TotalDays:       Limit{Min: 1, Max: 100, Step: 1},

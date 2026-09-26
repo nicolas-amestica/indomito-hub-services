@@ -17,7 +17,6 @@
  */
 export const ApiServices = {
   Catalog: "api-catalog",
-  Favorite: "api-favorite",
   Program: "api-program",
   Contract: "api-contract",
   Identity: "api-identity",

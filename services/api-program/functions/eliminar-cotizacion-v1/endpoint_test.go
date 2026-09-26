@@ -1,4 +1,4 @@
-package eliminarfavoritov1
+package eliminarcotizacionv1
 
 import (
 	"context"
@@ -18,8 +18,8 @@ import (
 
 	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
 	"ind-hub-api-gox-sls-pri-gh/libs/shared/apperr"
-	"ind-hub-api-gox-sls-pri-gh/services/api-favorite/domain"
-	"ind-hub-api-gox-sls-pri-gh/services/api-favorite/functions"
+	"ind-hub-api-gox-sls-pri-gh/services/api-program/domain"
+	"ind-hub-api-gox-sls-pri-gh/services/api-program/functions"
 )
 
 const (
@@ -72,8 +72,8 @@ func (f *fakeDDB) UpdateItem(context.Context, *dynamodb.UpdateItemInput, ...func
 func testApp(ddb *fakeDDB) *functions.App {
 	return &functions.App{
 		Config: functions.Config{
-			FavoritesTableName: testTableName,
-			FunctionName:       "fn-eliminar-favorito-v1",
+			ProgramsTableName: testTableName,
+			FunctionName:      "fn-eliminar-favorito-v1",
 		},
 		DDB:   ddb,
 		Stage: "test",
@@ -87,7 +87,7 @@ func testLogger() (*zap.Logger, *observer.ObservedLogs) {
 
 func apiRequest(favoriteID string) events.APIGatewayV2HTTPRequest {
 	return events.APIGatewayV2HTTPRequest{
-		PathParameters: map[string]string{functions.FavoriteIDParam: favoriteID},
+		PathParameters: map[string]string{functions.QuotationIDParam: favoriteID},
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
 			RequestID: testRequestID,
 			Authorizer: &events.APIGatewayV2HTTPRequestContextAuthorizerDescription{

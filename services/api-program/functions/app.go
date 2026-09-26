@@ -1,5 +1,5 @@
 // Package functions concentra el arranque, la configuracion y las rutas del
-// servicio api-program, que genera el PDF de presupuesto del programa.
+// servicio api-program, que persiste cotizaciones y genera sus PDF.
 //
 // El handler vive en un subpaquete (functions/generar-presupuesto-v1), segun el
 // paradigma endpoint-per-function del repo: el endpoint compila a su propio
@@ -13,28 +13,27 @@
 // 17.9 y 17.12 quedan implementados por construccion, aca y en serverless.ts.
 //
 // Depende de libs/domain/program para los tipos del programa que dibuja, y
-// nunca de api-catalog ni de api-favorite: son modulos Go que despliegan por
+// nunca de api-catalog: son modulos Go que despliegan por
 // separado y el Requirement 17.6 acota las dependencias de codigo de cada
 // servicio a las librerias compartidas del repo y a modulos externos.
 package functions
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"go.uber.org/zap"
 
 	"ind-hub-api-gox-sls-pri-gh/bootstrap"
+	"ind-hub-api-gox-sls-pri-gh/libs/awsddb"
 	"ind-hub-api-gox-sls-pri-gh/libs/logger"
 )
 
 // App agrupa las dependencias compartidas del servicio, que hoy son solo su
 // configuracion.
 //
-// A diferencia de api-catalog y api-favorite, no lleva cliente de DynamoDB:
-// este servicio no consulta ninguna tabla. Ese campo ausente es la mitad en Go
-// del Requirement 17.9; la otra mitad es la ausencia de politicas IAM en
-// serverless.ts.
+// El cliente DynamoDB atiende el CRUD de cotizaciones en la tabla programas.
 //
 // Se construye una sola vez por contenedor de Lambda, no por invocacion. El
 // beneficio es menor que en un servicio con cliente del SDK — no hay handshake
@@ -43,6 +42,7 @@ import (
 type App struct {
 	// Config es la configuracion del servicio resuelta desde el entorno.
 	Config Config
+	DDB    awsddb.Client
 
 	// Stage es el ambiente de despliegue (dev, prd, o local cuando corre bajo
 	// el servidor de desarrollo). Viaja en cada linea de log.
@@ -52,6 +52,7 @@ type App struct {
 var (
 	appOnce sync.Once
 	appInst *App
+	appErr  error
 )
 
 // GetApp devuelve la instancia compartida del servicio, construyendola en la
@@ -71,13 +72,15 @@ func GetApp(ctx context.Context) (*App, error) {
 	appOnce.Do(func() {
 		base := bootstrap.LoadConfig()
 
-		appInst = &App{
-			Config: LoadConfig(base),
-			Stage:  base.AppStage,
+		awsCfg, err := bootstrap.LoadAWSConfig(ctx, base)
+		if err != nil {
+			appErr = fmt.Errorf("no se pudo cargar la configuracion de AWS: %w", err)
+			return
 		}
+		appInst = &App{Config: LoadConfig(base), DDB: awsddb.New(awsCfg), Stage: base.AppStage}
 	})
 
-	return appInst, nil
+	return appInst, appErr
 }
 
 // Logger construye el logger de una invocacion, ya etiquetado con el nombre de

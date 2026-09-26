@@ -1,4 +1,4 @@
-package crearfavoritov1
+package crearcotizacionv1
 
 import (
 	"context"
@@ -18,8 +18,8 @@ import (
 	"ind-hub-api-gox-sls-pri-gh/libs/domain/program"
 	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
 	"ind-hub-api-gox-sls-pri-gh/libs/shared/apperr"
-	"ind-hub-api-gox-sls-pri-gh/services/api-favorite/domain"
-	"ind-hub-api-gox-sls-pri-gh/services/api-favorite/functions"
+	"ind-hub-api-gox-sls-pri-gh/services/api-program/domain"
+	"ind-hub-api-gox-sls-pri-gh/services/api-program/functions"
 )
 
 const (
@@ -83,9 +83,9 @@ func (f *fakeDDB) DeleteItem(
 func testApp(ddb *fakeDDB) *functions.App {
 	return &functions.App{
 		Config: functions.Config{
-			FavoritesTableName: testTableName,
-			FunctionName:       "fn-crear-favorito-v1",
-			Port:               "8082",
+			ProgramsTableName: testTableName,
+			FunctionName:      "fn-crear-favorito-v1",
+			Port:              "8082",
 		},
 		DDB:   ddb,
 		Stage: "test",

@@ -1,5 +1,5 @@
 // Package program contiene los tipos de dominio del programa que comparten
-// api-catalog, api-favorite y api-program. Ningún servicio importa de otro:
+// api-catalog y api-program. Ningún servicio importa de otro:
 // los tres dependen únicamente de esta librería (Requirement 17.5, 17.6).
 package program
 

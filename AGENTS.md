@@ -57,6 +57,7 @@
 
 ## Arquitectura Frontend — Features Angular
 
+- Todo cambio de UI/UX debe validarse en modo claro y oscuro, además de responder correctamente desde 320 px, teléfonos Android/iOS, tablets y escritorio. Los colores deben usar tokens semánticos o variantes `dark:`; no introducir superficies o textos legibles solo en uno de los temas.
 - Todo código de interfaz debe usar componentes PrimeNG y utilidades Tailwind CSS conforme a sus documentaciones oficiales. No incorporar otras librerías de componentes, CSS/SCSS personalizado ni implementaciones artesanales cuando PrimeNG provea el componente; reservar el HTML semántico nativo para estructura y casos sin equivalente en PrimeNG.
 - En formularios, usar siempre el componente o directiva PrimeNG correspondiente (`pInputText`, `p-select`, `p-datepicker`, `p-inputnumber`, `pButton`, `p-fileupload`, etc.). Tailwind se limita a layout, espaciado y composición externa; no debe reconstruir la apariencia interna de controles PrimeNG.
 - No aplicar en contenedores de componentes PrimeNG clases tipográficas heredables que alteren su contenido (`uppercase`, `font-*`, `text-*`, `tracking-*`, entre otras). El texto de la etiqueta debe estilizarse en un elemento hermano independiente cuando sea necesario.
@@ -73,10 +74,10 @@
 | Repo           | Módulo referencia        | Paradigma             |
 | -------------- | ------------------------ | --------------------- |
 | application    | `src/app/indomito-hub/programs` | Feature autocontenida con rutas, stores, servicios y tipos |
-| services       | `services/api-catalog`, `services/api-favorite`, `services/api-program` | Endpoint-per-function |
+| services       | `services/api-catalog`, `services/api-program` | Endpoint-per-function |
 | authorizer     | `src/functions/authorize.ts` | Handler unico + politicas IAM |
 
-> Los servicios reales de catalogos, favoritos y generacion de presupuesto
+> Los servicios reales de catalogos, cotizaciones y generacion de presupuesto
 > viven en `ind-hub-api-gox-sls-pri-gh/services/`. La guia para crear un servicio
 > nuevo esta en el `README.md` de ese repo.
 
@@ -355,7 +356,7 @@ make remove service=services/<nombre>     # Eliminar el stack de AWS
 
 ## Patrón de Referencia
 
-Los servicios `api-catalog`, `api-favorite` y `api-program` son las referencias
+Los servicios `api-catalog` y `api-program` son las referencias
 actuales del paradigma endpoint-per-function. La guia paso a paso para crear un
 servicio nuevo esta en `README.md`, seccion "Crear un servicio nuevo".
 

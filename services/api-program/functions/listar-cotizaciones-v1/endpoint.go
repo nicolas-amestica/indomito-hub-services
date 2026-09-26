@@ -36,7 +36,7 @@
 // el día que la tabla aloje una segunda colección serían ítems de una feature
 // distinta. El scope se valida con [domain.Scope.Valid] y la petición se
 // rechaza antes de armar el Query.
-package listarfavoritosv1
+package listarcotizacionesv1
 
 import (
 	"context"
@@ -58,8 +58,8 @@ import (
 	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
 	"ind-hub-api-gox-sls-pri-gh/libs/logger"
 	"ind-hub-api-gox-sls-pri-gh/libs/shared/apperr"
-	"ind-hub-api-gox-sls-pri-gh/services/api-favorite/domain"
-	"ind-hub-api-gox-sls-pri-gh/services/api-favorite/functions"
+	"ind-hub-api-gox-sls-pri-gh/services/api-program/domain"
+	"ind-hub-api-gox-sls-pri-gh/services/api-program/functions"
 )
 
 // ScopeQueryParam es el nombre del parámetro de consulta que trae el scope de
@@ -121,7 +121,7 @@ func Handle(
 // Cada solicitud construye el suyo con app.Logger, igual que en AWS, así que el
 // log de local y el de una función desplegada tienen la misma forma.
 func Register(e *echo.Echo, app *functions.App, _ *zap.Logger) {
-	functions.ListFavoritesRoute.Register(e, lambdautil.EchoAdapter(
+	functions.ListQuotationsRoute.Register(e, lambdautil.EchoAdapter(
 		func(
 			ctx context.Context,
 			req events.APIGatewayV2HTTPRequest,
@@ -177,7 +177,7 @@ func handle(
 	rawItems, err := queryFavorites(
 		ctx,
 		app.DDB,
-		app.Config.FavoritesTableName,
+		app.Config.ProgramsTableName,
 		partitionKey,
 		scope.SKPrefix(),
 	)

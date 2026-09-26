@@ -14,7 +14,7 @@ package program
 // El paquete sigue sin depender de DynamoDB: son metadatos, no una importación
 // del SDK. La discusión completa de la decisión, y por qué es la contraria a la
 // de services/api-catalog/domain, está en el Godoc de
-// services/api-favorite/domain.FavoriteItem. Un campo nuevo acá tiene que
+// services/api-program/domain.FavoriteItem. Un campo nuevo acá tiene que
 // declarar las dos etiquetas; TestFavoriteItemAttributeNames falla si falta la
 // de persistencia.
 

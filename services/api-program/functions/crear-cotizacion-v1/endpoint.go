@@ -1,7 +1,7 @@
 // Package crearfavoritov1 implementa POST /favoritos para el usuario
 // autenticado. La identidad siempre sale del contexto del authorizer y nunca
 // del cuerpo de la solicitud (Requirement 19.8).
-package crearfavoritov1
+package crearcotizacionv1
 
 import (
 	"context"
@@ -21,8 +21,8 @@ import (
 	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
 	"ind-hub-api-gox-sls-pri-gh/libs/logger"
 	"ind-hub-api-gox-sls-pri-gh/libs/shared/apperr"
-	"ind-hub-api-gox-sls-pri-gh/services/api-favorite/domain"
-	"ind-hub-api-gox-sls-pri-gh/services/api-favorite/functions"
+	"ind-hub-api-gox-sls-pri-gh/services/api-program/domain"
+	"ind-hub-api-gox-sls-pri-gh/services/api-program/functions"
 )
 
 const operationName = "create"
@@ -51,7 +51,7 @@ func Handle(
 
 // Register expone el mismo handler en el servidor local de desarrollo.
 func Register(e *echo.Echo, app *functions.App, _ *zap.Logger) {
-	functions.CreateFavoriteRoute.Register(e, lambdautil.EchoAdapter(
+	functions.CreateQuotationRoute.Register(e, lambdautil.EchoAdapter(
 		func(
 			ctx context.Context,
 			req events.APIGatewayV2HTTPRequest,
@@ -100,7 +100,7 @@ func handle(
 	favorite, err := createFavorite(
 		ctx,
 		app.DDB,
-		app.Config.FavoritesTableName,
+		app.Config.ProgramsTableName,
 		userID,
 		favoriteID,
 		request,

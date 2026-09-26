@@ -104,6 +104,15 @@ func (r Route) Register(e *echo.Echo, handler echo.HandlerFunc) {
 // compartido no exista solo existe en el servidor local (Requirement 19.4).
 var GenerateBudgetRoute = Route{Method: http.MethodPost, Path: "/cotizaciones:presupuesto"}
 
+const QuotationIDParam = "id-cotizacion"
+
+var (
+	ListQuotationsRoute  = Route{Method: http.MethodGet, Path: "/cotizaciones"}
+	CreateQuotationRoute = Route{Method: http.MethodPost, Path: "/cotizaciones"}
+	UpdateQuotationRoute = Route{Method: http.MethodPut, Path: "/cotizaciones/{" + QuotationIDParam + "}"}
+	DeleteQuotationRoute = Route{Method: http.MethodDelete, Path: "/cotizaciones/{" + QuotationIDParam + "}"}
+)
+
 // localShutdownTimeout es el margen que se le da al servidor local para cerrar
 // las conexiones en curso tras un Ctrl+C.
 const localShutdownTimeout = 10 * time.Second

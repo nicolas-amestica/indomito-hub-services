@@ -1,6 +1,6 @@
 // Package actualizarfavoritov1 implementa PUT /favoritos/{id-favorito} para
 // reemplazar el nombre y el contenido de un favorito del usuario autenticado.
-package actualizarfavoritov1
+package actualizarcotizacionv1
 
 import (
 	"context"
@@ -22,8 +22,8 @@ import (
 	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
 	"ind-hub-api-gox-sls-pri-gh/libs/logger"
 	"ind-hub-api-gox-sls-pri-gh/libs/shared/apperr"
-	"ind-hub-api-gox-sls-pri-gh/services/api-favorite/domain"
-	"ind-hub-api-gox-sls-pri-gh/services/api-favorite/functions"
+	"ind-hub-api-gox-sls-pri-gh/services/api-program/domain"
+	"ind-hub-api-gox-sls-pri-gh/services/api-program/functions"
 )
 
 const operationName = "update"
@@ -50,7 +50,7 @@ func Handle(
 }
 
 func Register(e *echo.Echo, app *functions.App, _ *zap.Logger) {
-	functions.UpdateFavoriteRoute.Register(e, lambdautil.EchoAdapter(
+	functions.UpdateQuotationRoute.Register(e, lambdautil.EchoAdapter(
 		func(
 			ctx context.Context,
 			req events.APIGatewayV2HTTPRequest,
@@ -75,7 +75,7 @@ func handle(
 		return lambdautil.ErrorResponse(req, err)
 	}
 
-	favoriteID := strings.TrimSpace(req.PathParameters[functions.FavoriteIDParam])
+	favoriteID := strings.TrimSpace(req.PathParameters[functions.QuotationIDParam])
 	log = log.With(
 		zap.String("favoriteId", favoriteID),
 		zap.String("userId", userID),
@@ -105,7 +105,7 @@ func handle(
 	favorite, err := updateFavorite(
 		ctx,
 		app.DDB,
-		app.Config.FavoritesTableName,
+		app.Config.ProgramsTableName,
 		userID,
 		favoriteID,
 		request,
@@ -126,7 +126,7 @@ func validateFavoriteID(favoriteID string) error {
 	if err := domain.ValidateFavoriteID(favoriteID); err != nil {
 		return apperr.
 			Validation("El identificador del favorito no es válido").
-			WithDetails(map[string]any{"field": functions.FavoriteIDParam})
+			WithDetails(map[string]any{"field": functions.QuotationIDParam})
 	}
 
 	return nil

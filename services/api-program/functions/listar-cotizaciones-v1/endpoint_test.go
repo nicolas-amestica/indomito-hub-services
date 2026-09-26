@@ -1,4 +1,4 @@
-package listarfavoritosv1
+package listarcotizacionesv1
 
 import (
 	"context"
@@ -19,8 +19,8 @@ import (
 
 	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
 	"ind-hub-api-gox-sls-pri-gh/libs/shared/apperr"
-	"ind-hub-api-gox-sls-pri-gh/services/api-favorite/domain"
-	"ind-hub-api-gox-sls-pri-gh/services/api-favorite/functions"
+	"ind-hub-api-gox-sls-pri-gh/services/api-program/domain"
+	"ind-hub-api-gox-sls-pri-gh/services/api-program/functions"
 )
 
 // Datos fijos de los casos. El usuario del contexto y el que las peticiones
@@ -144,9 +144,9 @@ func (f *fakeDDB) DeleteItem(
 func newApp(ddb *fakeDDB) *functions.App {
 	return &functions.App{
 		Config: functions.Config{
-			FavoritesTableName: testTableName,
-			FunctionName:       "fn-listar-favoritos-v1",
-			Port:               "8082",
+			ProgramsTableName: testTableName,
+			FunctionName:      "fn-listar-favoritos-v1",
+			Port:              "8082",
 		},
 		DDB:   ddb,
 		Stage: "test",

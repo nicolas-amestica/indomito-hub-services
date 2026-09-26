@@ -10,7 +10,7 @@
       ],
       "outputPath": "ai/generated/ind-hub-api/.claude/rules/global-rules.md",
       "targetPath": ".claude/rules/global-rules.md",
-      "checksum": "sha256:fd09c4dc45e71a7034d2873e0d2b47ee119e36c97d8bded49f72de4ef3c3376e"
+      "checksum": "sha256:1d97cee0be94d9c091cb5728aaaf3930565d7c49cb062eb852297369590aa348"
     },
     {
       "sourcePaths": [
@@ -18,7 +18,7 @@
       ],
       "outputPath": "ai/generated/ind-hub-api/.claude/rules/repo-rules.md",
       "targetPath": ".claude/rules/repo-rules.md",
-      "checksum": "sha256:521bb563c8e114b885dbdf674cb77a9a0b6ba6640cd863c43dd0cca8d1cc9d18"
+      "checksum": "sha256:8264ac3b5b05a8d708a746d7180d1a4e723d6d50eb2c5dbb521c1fc35effb1c8"
     },
     {
       "sourcePaths": [
@@ -87,7 +87,7 @@
       ],
       "outputPath": "ai/generated/ind-hub-api/AGENTS.md",
       "targetPath": "AGENTS.md",
-      "checksum": "sha256:2afb21bb801ed079ba0c128b93f57fc63b019d02b957631a34eab8cb7c0edd0f"
+      "checksum": "sha256:414286b0b4b9032e5c781b80f55a923c812b2fb605580bd05dbff426e60f1d04"
     },
     {
       "sourcePaths": [
@@ -99,7 +99,7 @@
       ],
       "outputPath": "ai/generated/ind-hub-api/CLAUDE.md",
       "targetPath": ".claude/CLAUDE.md",
-      "checksum": "sha256:905f8ade798b4deda1aadfd43d38355b786927dea522943c40f51918944c101a"
+      "checksum": "sha256:e6e44d238f6237171b16ce626f139dd829c68ad5dd4b41e084313c973ea382d9"
     },
     {
       "sourcePaths": [
@@ -111,7 +111,7 @@
       ],
       "outputPath": "ai/generated/ind-hub-api/GEMINI.md",
       "targetPath": ".gemini/GEMINI.md",
-      "checksum": "sha256:b6df0ae9f173a8e8beb0978dd8fc56d09e5decb188cff5d0112dc8f618958659"
+      "checksum": "sha256:ab0d7a8956c95b916c1ff228dde33edf856797231b745edfb3000c708066707c"
     },
     {
       "sourcePaths": [
@@ -175,6 +175,6 @@
   ],
   "managedBy": "indomito-context-compiler",
   "artifactFormatVersion": 1,
-  "sourceCommit": "4605676eea648acf6965417483e25ed0d6b47005",
+  "sourceCommit": "4250cfff54917c58f7060d7c8ef414f846ce80cd",
   "sourceDirty": true
 }

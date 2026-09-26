@@ -100,7 +100,7 @@ make remove service=services/<nombre>     # Eliminar el stack de AWS
 
 ## Patrón de Referencia
 
-Los servicios `api-catalog`, `api-favorite` y `api-program` son las referencias
+Los servicios `api-catalog` y `api-program` son las referencias
 actuales del paradigma endpoint-per-function. La guia paso a paso para crear un
 servicio nuevo esta en `README.md`, seccion "Crear un servicio nuevo".
 

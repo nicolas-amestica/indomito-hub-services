@@ -4,6 +4,8 @@ import (
 	"ind-hub-api-gox-sls-pri-gh/bootstrap"
 )
 
+const ProgramsTableNameEnv = "PROGRAMS_TABLE_NAME"
+
 // Config es la configuracion propia de api-program, resuelta una vez por
 // arranque en frio a partir del entorno.
 //
@@ -19,6 +21,7 @@ import (
 // ajuste de configuracion sino un cambio de contrato del servicio: obligaria a
 // revisar los Requirements 17.9 y 17.12 antes de escribirlo.
 type Config struct {
+	ProgramsTableName string
 	// FunctionName es el nombre de la funcion en ejecucion
 	// (`fn-generar-presupuesto-v1`). Lo publica serverless.ts por funcion y
 	// viaja en cada linea de log.
@@ -41,7 +44,8 @@ type Config struct {
 // serverless.ts las publique antes de un despliegue.
 func LoadConfig(base bootstrap.Config) Config {
 	return Config{
-		FunctionName: bootstrap.GetEnv("APP_FUNCTION_NAME", base.AppName),
-		Port:         base.Port,
+		ProgramsTableName: bootstrap.GetRequiredEnv(ProgramsTableNameEnv),
+		FunctionName:      bootstrap.GetEnv("APP_FUNCTION_NAME", base.AppName),
+		Port:              base.Port,
 	}
 }
