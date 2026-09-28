@@ -131,7 +131,7 @@ func buildClauses(c domain.Content) []clause {
 	p := c.Payments
 	co := p.Conditions
 	t := c.Trip
-	paymentClause := fmt.Sprintf("La cantidad inicial es de %d pasajeros más %d liberados de pago. Cada pasajero pagante cancela %s, totalizando %s para el grupo. La firma se realiza mediante un abono de %s, quedando un saldo grupal de %s, pagadero en %d cuotas mensuales desde %s.", p.TotalPassengers, p.FreePassengers, money(p.PricePerPerson), money(p.TotalGroup), money(p.DownPayment), money(p.GroupBalance), p.Installments.Quantity, monthName(p.Installments.StartMonth))
+	paymentClause := fmt.Sprintf("La cantidad inicial es de %d pasajeros pagantes, más %d pasajeros liberados de pago. El valor total por cada pasajero pagante asciende a %s, totalizando %s para el grupo. Al momento de la firma se efectuará un abono inicial de %s, quedando un saldo grupal de %s. Dicho saldo será pagado en %d cuotas mensuales, cada una por un valor grupal de %s, equivalentes a una cuota mensual individual de %s por cada pasajero pagante, a contar de %s.", p.TotalPassengers, p.FreePassengers, money(p.PricePerPerson), money(p.TotalGroup), money(p.DownPayment), money(p.GroupBalance), p.Installments.Quantity, money(p.Installments.GroupInstallmentValue), money(p.Installments.IndividualInstallmentValue), monthName(p.Installments.StartMonth))
 	if p.DiscountPercentage > 0 {
 		paymentClause += fmt.Sprintf(" Se aplicará un descuento de %s%% sobre el valor de la cuota única y exclusivamente cuando esta sea pagada en efectivo.", percentage(p.DiscountPercentage))
 	}

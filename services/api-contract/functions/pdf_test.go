@@ -60,6 +60,30 @@ func TestClauseSeventeenMentionsCashDiscountOnlyWhenPositive(t *testing.T) {
 	}
 }
 
+func TestClauseSeventeenStatesGroupAndIndividualMonthlyInstallments(t *testing.T) {
+	content := domain.Content{Payments: domain.Payments{
+		TotalPassengers: 30,
+		FreePassengers:  2,
+		PricePerPerson:  100000,
+		TotalGroup:      3000000,
+		DownPayment:     0,
+		GroupBalance:    3000000,
+		Installments: domain.Installments{
+			Quantity:                   5,
+			GroupInstallmentValue:      600000,
+			IndividualInstallmentValue: 20000,
+			StartMonth:                 "2027-03",
+		},
+	}}
+
+	text := buildClauses(content)[16].text
+	for _, expected := range []string{"5 cuotas mensuales", "$600.000", "$20.000", "por cada pasajero pagante"} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("clause 17 does not contain %q: %q", expected, text)
+		}
+	}
+}
+
 func TestPassengerTableLayoutFitsSixtyRowsOnOnePage(t *testing.T) {
 	rowHeight, fontSize := passengerTableLayout(60, 179)
 	if got := 179 + 61*rowHeight; got > 710.001 {
