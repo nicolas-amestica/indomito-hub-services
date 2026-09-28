@@ -132,11 +132,11 @@ func HandleList(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events
 		return errorResponse(400, "El año es obligatorio y debe usar YYYY."), nil
 	}
 	out, err := app.DDB.Query(ctx, &dynamodb.QueryInput{
-		TableName: aws.String(app.Config.ProgramsTableName), IndexName: aws.String("gsi-periodo-index"),
+		TableName: aws.String(app.Config.ProgramsTableName), IndexName: aws.String("gsi-periodo-resumen-index"),
 		KeyConditionExpression:    aws.String("gsiPeriodPk = :pk"),
-		ExpressionAttributeNames:  map[string]string{"#status": "status", "#name": "name"},
+		ExpressionAttributeNames:  map[string]string{"#status": "status"},
 		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{":pk": &ddbtypes.AttributeValueMemberS{Value: domain.YearPK(year)}},
-		ProjectionExpression:      aws.String("id, period, #status, createdAt, updatedAt, content.plan.#name, content.institution.#name, content.trip.destination, content.payments.totalPassengers"),
+		ProjectionExpression:      aws.String("id, period, #status, createdAt, updatedAt, planName, institutionName, destination, passengerCount"),
 		ScanIndexForward:          aws.Bool(false),
 	})
 	if err != nil {
@@ -146,7 +146,7 @@ func HandleList(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events
 	for _, raw := range out.Items {
 		var item domain.Item
 		if attributevalue.UnmarshalMap(raw, &item) == nil {
-			contracts = append(contracts, item.Contract.Summary())
+			contracts = append(contracts, item.Summary())
 		}
 	}
 	sort.SliceStable(contracts, func(i, j int) bool { return contracts[i].CreatedAt > contracts[j].CreatedAt })
@@ -228,6 +228,7 @@ func HandleUpdate(ctx context.Context, req events.APIGatewayV2HTTPRequest) (even
 	}
 	current.GSIPeriodPK = domain.YearPK(period)
 	current.GSIPeriodSK = current.CreatedAt + "#" + id
+	current.RefreshSummary()
 	raw, err := attributevalue.MarshalMap(current)
 	if err != nil {
 		return errorResponse(500, err.Error()), nil

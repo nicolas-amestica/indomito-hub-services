@@ -39,6 +39,30 @@ func TestNewItemKeepsProgramSnapshot(t *testing.T) {
 	if got := item.ProgramReference.UpdatedAt; got != "2026-09-24T12:00:00Z" {
 		t.Fatalf("program updatedAt = %q, want UTC ISO", got)
 	}
+	wantSummary := ContractSummary{
+		ID: item.ID, PlanName: "Brasil 2027", InstitutionName: "Colegio",
+		Destination: "Brasil", Period: "2027-01", PassengerCount: 1,
+		Status: StatusDraft, CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt,
+	}
+	if got := item.Summary(); got != wantSummary {
+		t.Fatalf("summary = %#v, want %#v", got, wantSummary)
+	}
+}
+
+func TestRefreshSummaryTracksContractChanges(t *testing.T) {
+	item := Item{Contract: Contract{Content: validContent()}}
+	item.RefreshSummary()
+
+	item.Content.Plan.Name = "Sur de Chile"
+	item.Content.Institution.Name = "Instituto"
+	item.Content.Trip.Destination = "Puerto Varas"
+	item.Content.Payments.TotalPassengers = 24
+	item.RefreshSummary()
+
+	if item.PlanName != "Sur de Chile" || item.InstitutionName != "Instituto" ||
+		item.Destination != "Puerto Varas" || item.PassengerCount != 24 {
+		t.Fatalf("materialized summary was not refreshed: %#v", item)
+	}
 }
 
 func validContent() Content {

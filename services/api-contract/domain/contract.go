@@ -198,11 +198,34 @@ func (c Contract) Summary() ContractSummary {
 }
 
 type Item struct {
-	PK          string `json:"-" dynamodbav:"pk"`
-	SK          string `json:"-" dynamodbav:"sk"`
-	GSIPeriodPK string `json:"-" dynamodbav:"gsiPeriodPk"`
-	GSIPeriodSK string `json:"-" dynamodbav:"gsiPeriodSk"`
+	PK              string `json:"-" dynamodbav:"pk"`
+	SK              string `json:"-" dynamodbav:"sk"`
+	GSIPeriodPK     string `json:"-" dynamodbav:"gsiPeriodPk"`
+	GSIPeriodSK     string `json:"-" dynamodbav:"gsiPeriodSk"`
+	PlanName        string `json:"-" dynamodbav:"planName"`
+	InstitutionName string `json:"-" dynamodbav:"institutionName"`
+	Destination     string `json:"-" dynamodbav:"destination"`
+	PassengerCount  int    `json:"-" dynamodbav:"passengerCount"`
 	Contract
+}
+
+// RefreshSummary sincroniza los atributos materializados que proyecta el GSI.
+// El contrato completo sigue siendo la fuente de verdad; estos campos existen
+// únicamente para que el listado no copie ni lea content completo desde el índice.
+func (i *Item) RefreshSummary() {
+	i.PlanName = i.Content.Plan.Name
+	i.InstitutionName = i.Content.Institution.Name
+	i.Destination = i.Content.Trip.Destination
+	i.PassengerCount = i.Content.Payments.TotalPassengers
+}
+
+// Summary construye la respuesta liviana desde los atributos proyectados por el GSI.
+func (i Item) Summary() ContractSummary {
+	return ContractSummary{
+		ID: i.ID, PlanName: i.PlanName, InstitutionName: i.InstitutionName,
+		Destination: i.Destination, Period: i.Period, PassengerCount: i.PassengerCount,
+		Status: i.Status, CreatedAt: i.CreatedAt, UpdatedAt: i.UpdatedAt,
+	}
 }
 
 func NewID() string       { return ulid.Make().String() }
@@ -243,7 +266,9 @@ func NewItem(id, programID string, programReference *ProgramReference, period st
 	}
 	stamp := now.UTC().Format(time.RFC3339Nano)
 	c := Contract{ID: id, ProgramID: programID, ProgramReference: programReference, Period: period, Status: StatusDraft, Content: content, CreatedAt: stamp, UpdatedAt: stamp, Version: 1}
-	return Item{PK: PK(id), SK: SK, GSIPeriodPK: YearPK(period), GSIPeriodSK: stamp + "#" + id, Contract: c}, nil
+	item := Item{PK: PK(id), SK: SK, GSIPeriodPK: YearPK(period), GSIPeriodSK: stamp + "#" + id, Contract: c}
+	item.RefreshSummary()
+	return item, nil
 }
 
 func NormalizeDates(content *Content, programReference *ProgramReference) error {
