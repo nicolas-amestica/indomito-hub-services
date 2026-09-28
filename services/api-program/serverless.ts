@@ -52,6 +52,7 @@ const PROGRAMS_TABLE_NAME = `\${cf:${DDB_STACK}.ProgramasTableName}`;
  */
 const endpoints: GoHttpEndpoint[] = [
   { name: 'fn-listar-cotizaciones-v1', method: 'GET', path: '/cotizaciones', public: false, memorySize: 128, timeout: 6, description: 'Lista las cotizaciones del usuario autenticado', policies: [dynamodbReadPolicy(PROGRAMS_TABLE_ARN)] },
+  { name: 'fn-obtener-cotizacion-v1', method: 'GET', path: '/cotizaciones/{id-cotizacion}', public: false, memorySize: 128, timeout: 6, description: 'Obtiene el detalle de una cotizacion del usuario autenticado', policies: [dynamodbReadPolicy(PROGRAMS_TABLE_ARN)] },
   { name: 'fn-crear-cotizacion-v1', method: 'POST', path: '/cotizaciones', public: false, memorySize: 128, timeout: 6, description: 'Crea una cotizacion para el usuario autenticado', policies: [dynamodbCrudPolicy(PROGRAMS_TABLE_ARN)] },
   { name: 'fn-actualizar-cotizacion-v1', method: 'PUT', path: '/cotizaciones/{id-cotizacion}', public: false, memorySize: 128, timeout: 6, description: 'Actualiza una cotizacion del usuario autenticado', policies: [dynamodbCrudPolicy(PROGRAMS_TABLE_ARN)] },
   { name: 'fn-eliminar-cotizacion-v1', method: 'DELETE', path: '/cotizaciones/{id-cotizacion}', public: false, memorySize: 128, timeout: 6, description: 'Elimina una cotizacion del usuario autenticado', policies: [dynamodbCrudPolicy(PROGRAMS_TABLE_ARN)] },

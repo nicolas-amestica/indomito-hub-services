@@ -13,6 +13,7 @@ import (
 	deleteQuotation "ind-hub-api-gox-sls-pri-gh/services/api-program/functions/eliminar-cotizacion-v1"
 	budget "ind-hub-api-gox-sls-pri-gh/services/api-program/functions/generar-presupuesto-v1"
 	list "ind-hub-api-gox-sls-pri-gh/services/api-program/functions/listar-cotizaciones-v1"
+	get "ind-hub-api-gox-sls-pri-gh/services/api-program/functions/obtener-cotizacion-v1"
 )
 
 func main() {
@@ -21,6 +22,7 @@ func main() {
 	if err := functions.RunLocal(
 		context.Background(),
 		list.Register,
+		get.Register,
 		create.Register,
 		update.Register,
 		deleteQuotation.Register,

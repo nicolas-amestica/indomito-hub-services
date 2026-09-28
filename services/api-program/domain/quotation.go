@@ -73,6 +73,16 @@ type Favorite struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+// FavoriteSummary contiene solo los datos necesarios para listar una cotización.
+// El contenido se obtiene bajo demanda mediante GET /cotizaciones/{id-cotizacion}.
+type FavoriteSummary struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Scope     Scope     `json:"scope"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
 // FavoriteItem es la representación en DynamoDB de un favorito:
 // pk = USER#<userId>, sk = FAV#PROGRAMA#<ulid>.
 //
@@ -201,5 +211,17 @@ func (i FavoriteItem) Favorite() (Favorite, error) {
 		Content:   i.Content,
 		CreatedAt: i.CreatedAt,
 		UpdatedAt: i.UpdatedAt,
+	}, nil
+}
+
+// Summary traduce un ítem proyectado de DynamoDB al resumen usado por listados.
+func (i FavoriteItem) Summary() (FavoriteSummary, error) {
+	scope, id, err := ParseFavoriteSK(i.SK)
+	if err != nil {
+		return FavoriteSummary{}, err
+	}
+
+	return FavoriteSummary{
+		ID: id, Name: i.Name, Scope: scope, CreatedAt: i.CreatedAt, UpdatedAt: i.UpdatedAt,
 	}, nil
 }

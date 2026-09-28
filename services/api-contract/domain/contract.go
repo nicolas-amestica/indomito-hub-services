@@ -173,6 +173,30 @@ type Contract struct {
 	ApprovedAt       string            `json:"approvedAt,omitempty" dynamodbav:"approvedAt,omitempty"`
 	ApprovedBy       string            `json:"approvedBy,omitempty" dynamodbav:"approvedBy,omitempty"`
 }
+
+// ContractSummary contiene únicamente las columnas necesarias para el listado.
+type ContractSummary struct {
+	ID              string `json:"id"`
+	PlanName        string `json:"planName"`
+	InstitutionName string `json:"institutionName"`
+	Destination     string `json:"destination"`
+	Period          string `json:"period"`
+	PassengerCount  int    `json:"passengerCount"`
+	Status          Status `json:"status"`
+	CreatedAt       string `json:"createdAt"`
+	UpdatedAt       string `json:"updatedAt"`
+}
+
+// Summary proyecta un contrato parcialmente leído al modelo liviano del listado.
+func (c Contract) Summary() ContractSummary {
+	return ContractSummary{
+		ID: c.ID, PlanName: c.Content.Plan.Name, InstitutionName: c.Content.Institution.Name,
+		Destination: c.Content.Trip.Destination, Period: c.Period,
+		PassengerCount: c.Content.Payments.TotalPassengers, Status: c.Status,
+		CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
+	}
+}
+
 type Item struct {
 	PK          string `json:"-" dynamodbav:"pk"`
 	SK          string `json:"-" dynamodbav:"sk"`

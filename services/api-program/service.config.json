@@ -11,6 +11,7 @@
   ],
   "functions": [
     { "name": "fn-listar-cotizaciones-v1", "entrypoint": "./cmd/fn-listar-cotizaciones-v1" },
+    { "name": "fn-obtener-cotizacion-v1", "entrypoint": "./cmd/fn-obtener-cotizacion-v1" },
     { "name": "fn-crear-cotizacion-v1", "entrypoint": "./cmd/fn-crear-cotizacion-v1" },
     { "name": "fn-actualizar-cotizacion-v1", "entrypoint": "./cmd/fn-actualizar-cotizacion-v1" },
     { "name": "fn-eliminar-cotizacion-v1", "entrypoint": "./cmd/fn-eliminar-cotizacion-v1" },

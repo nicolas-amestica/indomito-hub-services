@@ -131,15 +131,22 @@ func HandleList(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events
 	if len(year) != 4 {
 		return errorResponse(400, "El año es obligatorio y debe usar YYYY."), nil
 	}
-	out, err := app.DDB.Query(ctx, &dynamodb.QueryInput{TableName: aws.String(app.Config.ProgramsTableName), IndexName: aws.String("gsi-periodo-index"), KeyConditionExpression: aws.String("gsiPeriodPk = :pk"), ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{":pk": &ddbtypes.AttributeValueMemberS{Value: domain.YearPK(year)}}, ScanIndexForward: aws.Bool(false)})
+	out, err := app.DDB.Query(ctx, &dynamodb.QueryInput{
+		TableName: aws.String(app.Config.ProgramsTableName), IndexName: aws.String("gsi-periodo-index"),
+		KeyConditionExpression:    aws.String("gsiPeriodPk = :pk"),
+		ExpressionAttributeNames:  map[string]string{"#status": "status", "#name": "name"},
+		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{":pk": &ddbtypes.AttributeValueMemberS{Value: domain.YearPK(year)}},
+		ProjectionExpression:      aws.String("id, period, #status, createdAt, updatedAt, content.plan.#name, content.institution.#name, content.trip.destination, content.payments.totalPassengers"),
+		ScanIndexForward:          aws.Bool(false),
+	})
 	if err != nil {
 		return errorResponse(500, "No se pudieron listar los contratos."), nil
 	}
-	contracts := make([]domain.Contract, 0, len(out.Items))
+	contracts := make([]domain.ContractSummary, 0, len(out.Items))
 	for _, raw := range out.Items {
 		var item domain.Item
 		if attributevalue.UnmarshalMap(raw, &item) == nil {
-			contracts = append(contracts, item.Contract)
+			contracts = append(contracts, item.Contract.Summary())
 		}
 	}
 	sort.SliceStable(contracts, func(i, j int) bool { return contracts[i].CreatedAt > contracts[j].CreatedAt })

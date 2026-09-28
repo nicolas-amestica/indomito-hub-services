@@ -275,9 +275,11 @@ func queryFavorites(
 		// palabras reservadas de DynamoDB, pero la expresión queda legible y
 		// deja de importar si alguna vez lo fueran.
 		ExpressionAttributeNames: map[string]string{
-			"#pk": "pk",
-			"#sk": "sk",
+			"#pk":   "pk",
+			"#sk":   "sk",
+			"#name": "name",
 		},
+		ProjectionExpression: aws.String("#pk, #sk, #name, createdAt, updatedAt"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":pk":       &types.AttributeValueMemberS{Value: partitionKey},
 			":skPrefix": &types.AttributeValueMemberS{Value: sortKeyPrefix},
@@ -327,8 +329,8 @@ func queryFavorites(
 func favoritesFromItems(
 	log *zap.Logger,
 	rawItems []map[string]types.AttributeValue,
-) []domain.Favorite {
-	favorites := make([]domain.Favorite, 0, len(rawItems))
+) []domain.FavoriteSummary {
+	favorites := make([]domain.FavoriteSummary, 0, len(rawItems))
 
 	for _, rawItem := range rawItems {
 		var item domain.FavoriteItem
@@ -342,7 +344,7 @@ func favoritesFromItems(
 			continue
 		}
 
-		favorite, err := item.Favorite()
+		favorite, err := item.Summary()
 		if err != nil {
 			log.Warn("favoriteItemDiscarded",
 				zap.String("reason", "malformedSortKey"),

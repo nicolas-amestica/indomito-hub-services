@@ -108,6 +108,7 @@ const QuotationIDParam = "id-cotizacion"
 
 var (
 	ListQuotationsRoute  = Route{Method: http.MethodGet, Path: "/cotizaciones"}
+	GetQuotationRoute    = Route{Method: http.MethodGet, Path: "/cotizaciones/{" + QuotationIDParam + "}"}
 	CreateQuotationRoute = Route{Method: http.MethodPost, Path: "/cotizaciones"}
 	UpdateQuotationRoute = Route{Method: http.MethodPut, Path: "/cotizaciones/{" + QuotationIDParam + "}"}
 	DeleteQuotationRoute = Route{Method: http.MethodDelete, Path: "/cotizaciones/{" + QuotationIDParam + "}"}
