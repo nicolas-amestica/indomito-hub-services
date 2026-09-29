@@ -1,0 +1,39 @@
+{
+  "name": "api-payment",
+  "localPort": 8095,
+  "localEntrypoint": "./cmd/local-api",
+  "defaultArtifactDir": ".serverless-artifacts",
+  "requiredEnvironment": [
+    "APP_NAME",
+    "APP_STAGE",
+    "APP_REGION",
+    "PAYMENTS_TABLE_NAME",
+    "PAYMENTS_BASE_URL"
+  ],
+  "functions": [
+    {
+      "name": "fn-configuracion-pagos-v1",
+      "entrypoint": "./cmd/fn-configuracion-pagos-v1"
+    },
+    {
+      "name": "fn-crear-prueba-pago-v1",
+      "entrypoint": "./cmd/fn-crear-prueba-pago-v1"
+    },
+    {
+      "name": "fn-obtener-prueba-pago-v1",
+      "entrypoint": "./cmd/fn-obtener-prueba-pago-v1"
+    },
+    {
+      "name": "fn-verificar-prueba-pago-v1",
+      "entrypoint": "./cmd/fn-verificar-prueba-pago-v1"
+    },
+    {
+      "name": "fn-notificacion-khipu-v1",
+      "entrypoint": "./cmd/fn-notificacion-khipu-v1"
+    },
+    {
+      "name": "fn-retorno-pago-v1",
+      "entrypoint": "./cmd/fn-retorno-pago-v1"
+    }
+  ]
+}
