@@ -87,6 +87,9 @@ func ComposePDF(c domain.Content, preview bool) ([]byte, error) {
 
 	// Cláusulas.
 	for _, clause := range buildClauses(c) {
+		if clause.number == 23 && c.Payments.Conditions.RefundPolicyVersion >= 2 {
+			continue // La ratificación se mantiene junto a las firmas, no en una página huérfana.
+		}
 		// Estimar la altura total de la cláusula para no cortarla entre páginas.
 		clauseH := d.estimateClauseHeight(clause, c)
 		d.ensure(clauseH)
@@ -110,6 +113,9 @@ func ComposePDF(c domain.Content, preview bool) ([]byte, error) {
 
 	// Página de firmas.
 	d.addPage()
+	if c.Payments.Conditions.RefundPolicyVersion >= 2 {
+		d.justifiedParagraph("En comprobante, previa lectura, firman y ratifican como representantes.", fontSizeBody)
+	}
 	d.signatures(c)
 
 	bytes, err := p.GetBytesPdfReturnErr()
@@ -131,13 +137,41 @@ func buildClauses(c domain.Content) []clause {
 	p := c.Payments
 	co := p.Conditions
 	t := c.Trip
-	paymentClause := fmt.Sprintf("La cantidad inicial es de %d pasajeros pagantes, más %d pasajeros liberados de pago. El valor total por cada pasajero pagante asciende a %s, totalizando %s para el grupo. Al momento de la firma se efectuará un abono inicial de %s, quedando un saldo grupal de %s. Dicho saldo será pagado en %d cuotas mensuales, cada una por un valor grupal de %s, equivalentes a una cuota mensual individual de %s por cada pasajero pagante, a contar de %s.", p.TotalPassengers, p.FreePassengers, money(p.PricePerPerson), money(p.TotalGroup), money(p.DownPayment), money(p.GroupBalance), p.Installments.Quantity, money(p.Installments.GroupInstallmentValue), money(p.Installments.IndividualInstallmentValue), monthName(p.Installments.StartMonth))
+	travelDates := fmt.Sprintf("con fecha de salida el %s y retorno el %s", displayDateFull(t.DepartureDate), displayDateFull(t.ReturnDate))
+	if t.DepartureDate == "" && t.ReturnDate == "" {
+		travelDates = "con fecha por definir, que será acordada posteriormente por las partes mediante un anexo"
+	}
+	start := monthName(p.Installments.StartMonth)
+	if dates, err := p.Installments.DueDates(); err == nil {
+		start = displayDate(dates[0] + "T00:00:00Z")
+	}
+	paymentClause := fmt.Sprintf("La cantidad inicial es de %d pasajeros pagantes, más %d pasajeros liberados de pago. El valor total por cada pasajero pagante asciende a %s, totalizando %s para el grupo. Al momento de la firma se efectuará un abono inicial de %s, quedando un saldo grupal de %s. Dicho saldo será pagado en %d cuotas mensuales, cada una por un valor grupal de %s, equivalentes a una cuota mensual individual de %s por cada pasajero pagante, a contar de %s.", p.TotalPassengers, p.FreePassengers, money(p.PricePerPerson), money(p.TotalGroup), money(p.DownPayment), money(p.GroupBalance), p.Installments.Quantity, money(p.Installments.GroupInstallmentValue), money(p.Installments.IndividualInstallmentValue), start)
+	if p.Installments.StartDay > 0 && p.Installments.StartYear > 0 {
+		paymentClause += fmt.Sprintf(" El vencimiento será el día %d de cada mes; si un mes no contempla dicho día, vencerá el último día de ese mes, manteniéndose el día originalmente pactado para los meses siguientes.", p.Installments.StartDay)
+	}
+	withdrawalClause := fmt.Sprintf("En caso de que el pasajero, los pasajeros o el grupo completo desista del viaje, perderá automáticamente el %d%% del valor total del viaje como compensación por reservas y gastos operacionales.", co.CancellationPenaltyPercentage)
+	passengerChangeClause := "En la eventualidad de que no se cumpla con la cantidad de pasajeros acordada en el artículo DÉCIMO SÉPTIMO, se deberá cancelar la cantidad total acordada en el artículo anterior. En caso de no alcanzar el monto, se debe avisar con anterioridad al Operador para buscar una solución que implique el cambio del programa."
+	if co.RefundPolicyVersion >= 2 {
+		withdrawalClause = withdrawalPolicyClause
+		passengerChangeClause = "La baja de uno o más pasajeros no modificará automáticamente el valor de las cuotas de los pasajeros que continúen en el viaje. Para mantener dichos valores, las partes podrán acordar la incorporación de reemplazantes o la adecuación de los servicios contratados. Toda alta, baja, sustitución o modificación de servicios deberá constar en un anexo aprobado por las partes. Los pagos del pasajero saliente no se transferirán automáticamente al reemplazante; las devoluciones se regirán por el artículo VIGÉSIMO PRIMERO."
+	}
+	validityClause := fmt.Sprintf("El presente contrato tendrá vigencia únicamente en las fechas estipuladas. Cualquier cambio deberá avisarse por escrito con %d días de anticipación a la salida.", co.CancellationNoticeDays)
+	if t.DepartureDate == "" && t.ReturnDate == "" {
+		validityClause = fmt.Sprintf("Las fechas de ejecución del viaje se encuentran por definir y se formalizarán mediante un anexo acordado por las partes. Una vez definidas, cualquier cambio deberá avisarse por escrito con %d días de anticipación a la salida, sin perjuicio de los acuerdos que las partes formalicen y de los derechos legales aplicables.", co.CancellationNoticeDays)
+	}
 	if p.DiscountPercentage > 0 {
 		paymentClause += fmt.Sprintf(" Se aplicará un descuento de %s%% sobre el valor de la cuota única y exclusivamente cuando esta sea pagada en efectivo.", percentage(p.DiscountPercentage))
 	}
 	paymentClause += fmt.Sprintf(" El viaje debe estar pagado como máximo %d días antes de la salida. Si el dólar supera %s, el viaje deberá reprogramarse o pagarse la diferencia. Las transferencias o depósitos se efectuarán a la cuenta corriente %s de %s, RUT %s, %s. Enviar comprobante a %s.", p.DaysBeforePayment, money(p.MaxExchangeRate), fallback(p.BankAccount.AccountNumber), fallback(p.BankAccount.AccountHolder), formatRUT(fallback(p.BankAccount.HolderDNI)), fallback(p.BankAccount.Bank), fallback(p.BankAccount.Email))
+	if c.PaymentPortal != nil {
+		paymentClause += fmt.Sprintf(" Para consultar y pagar las cuotas individuales, ingrese a %s e identifique al pasajero mediante su RUT y el código del viaje %s. La consulta estará disponible una vez que el Operador complete la puesta en marcha de la cobranza. Antes de pagar deberá indicar un correo electrónico válido para recibir el comprobante de pago, que no constituye una boleta ni factura tributaria. El código es de uso del grupo; su eventual reemplazo por seguridad será comunicado por el Operador y no modificará los importes ni vencimientos pactados.", c.PaymentPortal.URL, c.PaymentPortal.TripCode)
+	}
+	rosterClause := "El Operador habilitará a los Representantes o al Pasajero el acceso a un portal en línea para registrar y actualizar la lista de pasajeros del programa. Es responsabilidad exclusiva del Pasajero y de los Representantes mantener dicha lista completa, veraz y al día, con todos los datos exigidos. La lista registrada es la que se presentará en pasos fronterizos y trámites aduaneros. Cualquier omisión, dato faltante o desactualización y sus consecuencias serán de exclusiva responsabilidad del Pasajero y de los Representantes."
+	if co.RefundPolicyVersion >= 2 {
+		rosterClause = "Los Representantes deberán entregar información completa y veraz de los pasajeros e informar oportunamente cualquier cambio. Las altas, bajas y sustituciones se formalizarán mediante anexo aprobado por las partes, sin alterar el contrato original ni transferir pagos automáticamente. El portal de pagos permite consultar y pagar cuotas; no habilita modificaciones de la nómina. Antes de la salida, las partes revisarán la nómina vigente para los trámites del viaje."
+	}
 	return []clause{
-		{1, "PRIMERO:", fmt.Sprintf("El Operador y el Pasajero han convenido la realización de un programa de viaje con destino a %s, con fecha de salida el %s y retorno el %s, partiendo desde %s, domiciliado en %s, y retornando al mismo lugar de origen. El programa detallado ha sido firmado por los comparecientes y forma parte integrante de este contrato por acuerdo unánime de ambas partes.", fallback(t.Destination), displayDateFull(t.DepartureDate), displayDateFull(t.ReturnDate), fallback(t.DeparturePoint), fallback(c.Institution.Address))},
+		{1, "PRIMERO:", fmt.Sprintf("El Operador y el Pasajero han convenido la realización de un programa de viaje con destino a %s, %s, partiendo desde %s, domiciliado en %s, y retornando al mismo lugar de origen. El programa detallado ha sido firmado por los comparecientes y forma parte integrante de este contrato por acuerdo unánime de ambas partes.", fallback(t.Destination), travelDates, fallback(t.DeparturePoint), fallback(c.Institution.Address))},
 		{2, "SEGUNDO:", "El transporte de los pasajeros se realizará en los medios pactados en el presente contrato, ya sean aéreos, terrestres o marítimos, cuya prestación es de exclusiva responsabilidad del Operador."},
 		{3, "TERCERO:", "El alojamiento hotelero de los pasajeros se realizará en los hoteles, habitaciones y regímenes pactados. Sin perjuicio de lo anterior, estos podrán ser modificados garantizando la misma categoría y condiciones de los servicios contratados, asegurando que todos los pasajeros del grupo permanezcan en un mismo establecimiento."},
 		{4, "CUARTO:", "El Operador podrá introducir cambios en las rutas y horarios previamente establecidos, siempre que sean acordados con los Representantes del viaje, por las siguientes razones: a) De fuerza mayor, cuando pudieran afectar la seguridad de los pasajeros; b) Aquellas destinadas a mejorar el cumplimiento de los objetivos previstos."},
@@ -154,11 +188,11 @@ func buildClauses(c domain.Content) []clause {
 		{15, "DÉCIMO QUINTO:", "Será de exclusiva responsabilidad del Pasajero cumplir con toda la documentación y requisitos para ingresar al país de destino, como la presentación de documentos vigentes en aeropuertos y aduanas. Los costos adicionales por incumplimiento serán de exclusiva responsabilidad del Pasajero."},
 		{16, "DÉCIMO SEXTO:", "El programa contratado incluirá los siguientes servicios:"},
 		{17, "DÉCIMO SÉPTIMO:", paymentClause},
-		{18, "DÉCIMO OCTAVO:", "En la eventualidad de que no se cumpla con la cantidad de pasajeros acordada en el artículo DÉCIMO SÉPTIMO, se deberá cancelar la cantidad total acordada en el artículo anterior. En caso de no alcanzar el monto, se debe avisar con anterioridad al Operador para buscar una solución que implique el cambio del programa."},
+		{18, "DÉCIMO OCTAVO:", passengerChangeClause},
 		{19, "DÉCIMO NOVENO:", fmt.Sprintf("Ante cualquier reclamo respecto de los servicios contratados, el Pasajero deberá informar por escrito dentro de %d días. Las dificultades que no puedan solucionarse armoniosamente se someterán a un árbitro arbitrador designado de común acuerdo y, en subsidio, a la justicia ordinaria.", co.ComplaintDeadlineDays)},
-		{20, "VIGÉSIMO:", fmt.Sprintf("El presente contrato tendrá vigencia únicamente en las fechas estipuladas. Cualquier cambio deberá avisarse por escrito con %d días de anticipación a la salida.", co.CancellationNoticeDays)},
-		{21, "VIGÉSIMO PRIMERO:", fmt.Sprintf("En caso de que el pasajero, los pasajeros o el grupo completo desista del viaje, perderá automáticamente el %d%% del valor total del viaje como compensación por reservas y gastos operacionales.", co.CancellationPenaltyPercentage)},
-		{22, "VIGÉSIMO SEGUNDO:", "El Operador habilitará a los Representantes o al Pasajero el acceso a un portal en línea para registrar y actualizar la lista de pasajeros del programa. Es responsabilidad exclusiva del Pasajero y de los Representantes mantener dicha lista completa, veraz y al día, con todos los datos exigidos. La lista registrada es la que se presentará en pasos fronterizos y trámites aduaneros. Cualquier omisión, dato faltante o desactualización y sus consecuencias serán de exclusiva responsabilidad del Pasajero y de los Representantes."},
+		{20, "VIGÉSIMO:", validityClause},
+		{21, "VIGÉSIMO PRIMERO:", withdrawalClause},
+		{22, "VIGÉSIMO SEGUNDO:", rosterClause},
 		{23, "", "En comprobante, previa lectura, firman y ratifican como representantes."}}
 }
 

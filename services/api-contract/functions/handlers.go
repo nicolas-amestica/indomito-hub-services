@@ -21,7 +21,7 @@ import (
 	"ind-hub-api-gox-sls-pri-gh/services/api-contract/domain"
 )
 
-const pdfGeneratorVersion = "contract-pdf-go-v1"
+const pdfGeneratorVersion = "contract-pdf-go-v3"
 
 type CreateRequest struct {
 	ProgramID        string                   `json:"programId"`
@@ -53,6 +53,15 @@ var RegisterUpdate = register(UpdateRoute, HandleUpdate)
 var RegisterPDF = register(PDFRoute, HandlePDF)
 var RegisterApprovedPDF = register(ApprovedPDFRoute, HandleApprovedPDF)
 var RegisterConfiguration = register(ConfigurationRoute, HandleConfiguration)
+var RegisterCreateAmendment = register(CreateAmendmentRoute, HandleCreateAmendment)
+var RegisterListAmendments = register(ListAmendmentsRoute, HandleListAmendments)
+var RegisterApproveAmendment = register(ApproveAmendmentRoute, HandleApproveAmendment)
+var RegisterApprovedAmendmentPDF = register(ApprovedAmendmentPDFRoute, HandleApprovedAmendmentPDF)
+var RegisterPrepareSignedDocument = register(PrepareSignedDocumentRoute, HandlePrepareSignedDocument)
+var RegisterFinalizeSignedDocument = register(FinalizeSignedDocumentRoute, HandleFinalizeSignedDocument)
+var RegisterListSignedDocuments = register(ListSignedDocumentsRoute, HandleListSignedDocuments)
+var RegisterSignedDocumentPDF = register(SignedDocumentPDFRoute, HandleSignedDocumentPDF)
+var RegisterSignedDocumentVersionPDF = register(SignedDocumentVersionPDFRoute, HandleSignedDocumentPDF)
 
 func HandleConfiguration(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	app, err := GetApp(ctx)
@@ -132,11 +141,11 @@ func HandleList(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events
 		return errorResponse(400, "El año es obligatorio y debe usar YYYY."), nil
 	}
 	out, err := app.DDB.Query(ctx, &dynamodb.QueryInput{
-		TableName: aws.String(app.Config.ProgramsTableName), IndexName: aws.String("gsi-periodo-resumen-index"),
+		TableName: aws.String(app.Config.ProgramsTableName), IndexName: aws.String("gsi-periodo-documental-index"),
 		KeyConditionExpression:    aws.String("gsiPeriodPk = :pk"),
 		ExpressionAttributeNames:  map[string]string{"#status": "status"},
 		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{":pk": &ddbtypes.AttributeValueMemberS{Value: domain.YearPK(year)}},
-		ProjectionExpression:      aws.String("id, period, #status, createdAt, updatedAt, planName, institutionName, destination, passengerCount"),
+		ProjectionExpression:      aws.String("id, period, #status, createdAt, updatedAt, planName, institutionName, destination, passengerCount, signatureStatus"),
 		ScanIndexForward:          aws.Bool(false),
 	})
 	if err != nil {
@@ -158,6 +167,10 @@ func HandleUpdate(ctx context.Context, req events.APIGatewayV2HTTPRequest) (even
 	if err != nil {
 		return lambdautil.ErrorResponse(req, err)
 	}
+	return updateContract(ctx, req, app)
+}
+
+func updateContract(ctx context.Context, req events.APIGatewayV2HTTPRequest, app *App) (events.APIGatewayV2HTTPResponse, error) {
 	id := req.PathParameters[ContractIDParam]
 	current, code, err := getItem(ctx, app, id)
 	if err != nil {
@@ -174,6 +187,7 @@ func HandleUpdate(ctx context.Context, req events.APIGatewayV2HTTPRequest) (even
 	if current.Status == domain.StatusApproved {
 		return errorResponse(409, "El contrato aprobado es inmutable."), nil
 	}
+	domain.UseCurrentTerms(&body.Content)
 	if err := domain.ValidateContent(body.Content); err != nil {
 		return errorResponse(400, err.Error()), nil
 	}
@@ -206,22 +220,34 @@ func HandleUpdate(ctx context.Context, req events.APIGatewayV2HTTPRequest) (even
 		return errorResponse(400, "La referencia del programa no coincide con programId."), nil
 	}
 	current.Content = body.Content
+	current.Content.PaymentPortal = nil // Nunca aceptar código ni URL propuestos por el navegador.
 	current.ProgramID = strings.TrimSpace(body.ProgramID)
 	current.ProgramReference = body.ProgramReference
 	current.Status = body.Status
 	current.Period = period
 	current.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	current.Version++
+	var paymentConfig PaymentAccessConfig
 	if body.Status == domain.StatusApproved {
+		if app.Config.PaymentsTableName != "" {
+			paymentConfig, err = app.PaymentAccess(ctx)
+			if err != nil {
+				return errorResponse(503, "La configuración del portal de pagos no está disponible; el contrato no fue aprobado."), nil
+			}
+			current.Content.PaymentPortal, err = issuePaymentPortal(paymentConfig)
+			if err != nil {
+				return errorResponse(503, "No se pudo emitir el código del viaje."), nil
+			}
+		}
 		pdf, err := ComposePDF(current.Content, false)
 		if err != nil {
 			return errorResponse(500, "No se pudo generar el PDF definitivo."), nil
 		}
-		objectKey := fmt.Sprintf("contracts/%s/approved/v%d.pdf", id, current.Version)
+		digest := sha256.Sum256(pdf)
+		objectKey := fmt.Sprintf("contracts/%s/approved/v%d-%x.pdf", id, current.Version, digest)
 		if err := app.Documents.PutPDF(ctx, objectKey, pdf); err != nil {
 			return errorResponse(500, "No se pudo almacenar el PDF definitivo."), nil
 		}
-		digest := sha256.Sum256(pdf)
 		current.PDFDocument = &domain.PDFDocument{ObjectKey: objectKey, ContentType: approvedPDFContentType, Size: int64(len(pdf)), SHA256: fmt.Sprintf("%x", digest), GeneratorVersion: pdfGeneratorVersion, GeneratedAt: current.UpdatedAt, GeneratedBy: changedBy}
 		current.ApprovedAt = current.UpdatedAt
 		current.ApprovedBy = changedBy
@@ -239,14 +265,29 @@ func HandleUpdate(ctx context.Context, req events.APIGatewayV2HTTPRequest) (even
 		if marshalErr != nil {
 			return errorResponse(500, marshalErr.Error()), nil
 		}
-		_, err = app.DDBTransactions.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []ddbtypes.TransactWriteItem{
+		writes := []ddbtypes.TransactWriteItem{
 			{Put: &ddbtypes.Put{TableName: aws.String(app.Config.ProgramsTableName), Item: raw, ConditionExpression: aws.String("#status <> :approved AND version = :version"), ExpressionAttributeNames: map[string]string{"#status": "status"}, ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{":approved": &ddbtypes.AttributeValueMemberS{Value: string(domain.StatusApproved)}, ":version": &ddbtypes.AttributeValueMemberN{Value: fmt.Sprint(body.Version)}}}},
 			{Put: &ddbtypes.Put{TableName: aws.String(app.Config.ProgramsTableName), Item: auditRaw, ConditionExpression: aws.String("attribute_not_exists(pk)")}},
-		}})
+		}
+		if body.Status == domain.StatusApproved && app.Config.PaymentsTableName != "" {
+			paymentWrites, buildErr := paymentApprovalWrites(app.Config.PaymentsTableName, current, paymentConfig)
+			if buildErr != nil {
+				return errorResponse(500, "No se pudo preparar la aprobación para cobranza."), nil
+			}
+			writes = append(writes, paymentWrites...)
+		}
+		_, err = app.DDBTransactions.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: writes})
 	} else {
 		_, err = app.DDB.PutItem(ctx, &dynamodb.PutItemInput{TableName: aws.String(app.Config.ProgramsTableName), Item: raw, ConditionExpression: aws.String("#status <> :approved AND version = :version"), ExpressionAttributeNames: map[string]string{"#status": "status"}, ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{":approved": &ddbtypes.AttributeValueMemberS{Value: string(domain.StatusApproved)}, ":version": &ddbtypes.AttributeValueMemberN{Value: fmt.Sprint(body.Version)}}})
 	}
 	if err != nil {
+		// Un timeout puede ocurrir después del commit. Recuperar solo nuestra misma aprobación.
+		if body.Status == domain.StatusApproved && current.PDFDocument != nil {
+			persisted, _, readErr := getItem(ctx, app, id)
+			if readErr == nil && persisted.Status == domain.StatusApproved && persisted.Version == current.Version && persisted.PDFDocument != nil && persisted.PDFDocument.SHA256 == current.PDFDocument.SHA256 {
+				return lambdautil.SuccessResponse(200, persisted.Contract)
+			}
+		}
 		return errorResponse(409, "El contrato cambio o ya fue aprobado."), nil
 	}
 	return lambdautil.SuccessResponse(200, current.Contract)
@@ -280,6 +321,8 @@ func HandlePDF(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.
 	if err := lambdautil.BindJSON(req, &body); err != nil {
 		return lambdautil.ErrorResponse(req, err)
 	}
+	domain.UseCurrentTerms(&body.Content)
+	body.Content.PaymentPortal = nil
 	domain.NormalizePayments(&body.Content)
 	if err := domain.NormalizeDates(&body.Content, nil); err != nil {
 		return errorResponse(400, err.Error()), nil

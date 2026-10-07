@@ -192,6 +192,11 @@ func normalizeDocumentID(value string) string {
 
 // isValidRUT valida un RUT chileno: entre 7 y 8 dígitos de cuerpo más el
 // dígito verificador de módulo 11, que puede ser un dígito o la letra K.
+// IsValidRUT valida exclusivamente un RUT chileno, sin aceptar el fallback de DNI/CPF.
+func IsValidRUT(value string) bool {
+	return isValidRUT(normalizeDocumentID(value))
+}
+
 func isValidRUT(normalized string) bool {
 	if len(normalized) < 8 || len(normalized) > 9 {
 		return false

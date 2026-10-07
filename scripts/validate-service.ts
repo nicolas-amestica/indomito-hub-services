@@ -67,6 +67,20 @@ async function main() {
 const servicePath = resolve(getArg('service'));
 const stage = getArg('stage', 'dev');
 const region = getArg('region', 'us-east-1');
+const defaultProfiles: Record<string, string> = { dev: 'pa-dev', prd: 'pa-prd' };
+const awsProfile = process.env.AWS_PROFILE || defaultProfiles[stage];
+
+if (!awsProfile) {
+  throw new Error(`No hay perfil AWS configurado para stage=${stage}`);
+}
+
+const {
+  AWS_ACCESS_KEY_ID: _awsAccessKeyID,
+  AWS_SECRET_ACCESS_KEY: _awsSecretAccessKey,
+  AWS_SESSION_TOKEN: _awsSessionToken,
+  AWS_DEFAULT_PROFILE: _awsDefaultProfile,
+  ...processEnvWithoutAmbientAwsCredentials
+} = process.env;
 
 const serviceConfig = JSON.parse(
   readFileSync(join(servicePath, 'service.config.json'), 'utf8'),
@@ -84,7 +98,12 @@ try {
     cwd: servicePath,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'inherit'],
-    env: { ...process.env, STAGE: stage, AWS_PROFILE: '', NODE_OPTIONS: '--disable-warning=DEP0169' },
+    env: {
+      ...processEnvWithoutAmbientAwsCredentials,
+      STAGE: stage,
+      AWS_PROFILE: awsProfile,
+      NODE_OPTIONS: '--no-deprecation',
+    },
   });
 
   const yamlStart = output.indexOf('service:');
@@ -212,6 +231,26 @@ for (const fnDir of cmdFnDirs) {
   }
 }
 
+// --- Validation 15: manifest and Serverless contain exactly the same functions ---
+const manifestFunctionNames = serviceConfig.functions.map(fn => fn.name);
+const duplicateManifestNames = manifestFunctionNames.filter(
+  (name, index) => manifestFunctionNames.indexOf(name) !== index,
+);
+const manifestFunctionSet = new Set(manifestFunctionNames);
+const serverlessFunctionNames = Object.keys(slsFunctions);
+
+for (const name of [...new Set(duplicateManifestNames)].sort()) {
+  errors.push(`[V15] Función duplicada en service.config.json: ${name}`);
+}
+
+for (const name of serverlessFunctionNames.filter(name => !manifestFunctionSet.has(name)).sort()) {
+  errors.push(`[V15] Función de Serverless ausente en service.config.json: ${name}`);
+}
+
+for (const name of manifestFunctionNames.filter(name => !(name in slsFunctions)).sort()) {
+  errors.push(`[V15] Función de service.config.json ausente en Serverless: ${name}`);
+}
+
 // --- Report results ---
 if (errors.length > 0) {
   console.error(`\nValidación fallida para ${serviceConfig.name} (${errors.length} errores):\n`);
@@ -224,7 +263,7 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log(`✓ Validación correcta para ${serviceConfig.name} (14 checks), stage=${stage}, region=${region}`);
+console.log(`✓ Validación correcta para ${serviceConfig.name} (15 checks), stage=${stage}, region=${region}`);
 
 }
 

@@ -21,6 +21,11 @@ type DocumentStore interface {
 	PresignPDF(context.Context, string, time.Duration) (string, error)
 }
 
+type SignedDocumentStore interface {
+	PresignSignedPDFUpload(context.Context, string, time.Duration) (string, error)
+	VerifySignedPDF(context.Context, string, string, int64) error
+}
+
 func (s *s3DocumentStore) VerifyPDF(ctx context.Context, key, expectedSHA256 string, expectedSize int64) error {
 	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
 	if err != nil {
@@ -74,4 +79,43 @@ func (s *s3DocumentStore) PresignPDF(ctx context.Context, key string, duration t
 		return "", fmt.Errorf("firmar URL del PDF aprobado: %w", err)
 	}
 	return result.URL, nil
+}
+
+func (s *s3DocumentStore) PresignSignedPDFUpload(ctx context.Context, key string, duration time.Duration) (string, error) {
+	result, err := s.presigner.PresignPutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(s.bucket), Key: aws.String(key), ContentType: aws.String(approvedPDFContentType),
+	}, s3.WithPresignExpires(duration))
+	if err != nil {
+		return "", fmt.Errorf("firmar URL de carga del contrato firmado: %w", err)
+	}
+	return result.URL, nil
+}
+
+func (s *s3DocumentStore) VerifySignedPDF(ctx context.Context, key, expectedSHA256 string, expectedSize int64) error {
+	if expectedSize < 5 || expectedSize > maxSignedPDFSize {
+		return fmt.Errorf("tamaño de PDF firmado fuera de rango")
+	}
+	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
+	if err != nil {
+		return fmt.Errorf("leer PDF firmado: %w", err)
+	}
+	defer result.Body.Close()
+	if result.ContentType == nil || *result.ContentType != approvedPDFContentType {
+		return fmt.Errorf("el archivo cargado no declara application/pdf")
+	}
+	content, err := io.ReadAll(io.LimitReader(result.Body, maxSignedPDFSize+1))
+	if err != nil {
+		return fmt.Errorf("leer PDF firmado: %w", err)
+	}
+	if int64(len(content)) != expectedSize || int64(len(content)) > maxSignedPDFSize {
+		return fmt.Errorf("el tamaño del PDF firmado no coincide")
+	}
+	if !bytes.HasPrefix(content, []byte("%PDF-")) {
+		return fmt.Errorf("el archivo no contiene una cabecera PDF válida")
+	}
+	digest := sha256.Sum256(content)
+	if hex.EncodeToString(digest[:]) != expectedSHA256 {
+		return fmt.Errorf("la huella del PDF firmado no coincide")
+	}
+	return nil
 }

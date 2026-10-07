@@ -58,7 +58,7 @@ deploy-quick: check-service
 	npx tsx scripts/deploy-service.ts --service $(service) --stage $(stage) --region $(region) --skip-build --skip-validate
 
 package: check-service build validate
-	cd $(service) && NODE_OPTIONS='--disable-warning=DEP0169' npx serverless package --stage $(stage) --region $(region)
+	cd $(service) && NODE_OPTIONS='--no-deprecation' npx serverless package --stage $(stage) --region $(region)
 
 clean: check-service
 	rm -rf $(service)/.serverless

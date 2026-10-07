@@ -16,4 +16,5 @@ use (
 	./services/api-identity
 	./services/api-program
 	./services/api-payment
+	./services/payment-receipts
 )

@@ -30,6 +30,23 @@ const serviceConfig = JSON.parse(readFileSync(configPath, 'utf8')) as ServiceCon
 const artifactsDir = join(servicePath, '.serverless-artifacts');
 const defaultArtifactDir = serviceConfig.defaultArtifactDir ?? '.serverless-artifacts';
 const builtEntrypoints = new Map<string, string>();
+const functionNames = new Set<string>();
+const artifactPaths = new Set<string>();
+
+for (const fn of serviceConfig.functions) {
+  const artifact = fn.artifact ?? join(defaultArtifactDir, `${fn.name}.zip`);
+
+  if (functionNames.has(fn.name)) {
+    throw new Error(`Duplicate function name in service.config.json: ${fn.name}`);
+  }
+
+  if (artifactPaths.has(artifact)) {
+    throw new Error(`Duplicate artifact path in service.config.json: ${artifact}`);
+  }
+
+  functionNames.add(fn.name);
+  artifactPaths.add(artifact);
+}
 
 if (existsSync(artifactsDir)) {
   rmSync(artifactsDir, { recursive: true, force: true });

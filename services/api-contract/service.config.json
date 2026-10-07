@@ -39,6 +39,42 @@
     {
       "name": "fn-obtener-configuracion-contrato-v1",
       "entrypoint": "./cmd/fn-obtener-configuracion-contrato-v1"
+    },
+    {
+      "name": "fn-crear-anexo-contrato-v1",
+      "entrypoint": "./cmd/fn-crear-anexo-contrato-v1"
+    },
+    {
+      "name": "fn-listar-anexos-contrato-v1",
+      "entrypoint": "./cmd/fn-listar-anexos-contrato-v1"
+    },
+    {
+      "name": "fn-aprobar-anexo-contrato-v1",
+      "entrypoint": "./cmd/fn-aprobar-anexo-contrato-v1"
+    },
+    {
+      "name": "fn-obtener-pdf-anexo-contrato-v1",
+      "entrypoint": "./cmd/fn-obtener-pdf-anexo-contrato-v1"
+    },
+    {
+      "name": "fn-preparar-carga-contrato-firmado-v1",
+      "entrypoint": "./cmd/fn-preparar-carga-contrato-firmado-v1"
+    },
+    {
+      "name": "fn-confirmar-carga-contrato-firmado-v1",
+      "entrypoint": "./cmd/fn-confirmar-carga-contrato-firmado-v1"
+    },
+    {
+      "name": "fn-listar-contratos-firmados-v1",
+      "entrypoint": "./cmd/fn-listar-contratos-firmados-v1"
+    },
+    {
+      "name": "fn-obtener-contrato-firmado-v1",
+      "entrypoint": "./cmd/fn-obtener-contrato-firmado-v1"
+    },
+    {
+      "name": "fn-obtener-version-contrato-firmado-v1",
+      "entrypoint": "./cmd/fn-obtener-version-contrato-firmado-v1"
     }
   ]
 }

@@ -80,8 +80,11 @@ type Installments struct {
 	GroupInstallmentValue      int64  `json:"groupInstallmentValue" dynamodbav:"groupInstallmentValue"`
 	IndividualInstallmentValue int64  `json:"individualInstallmentValue" dynamodbav:"individualInstallmentValue"`
 	StartMonth                 string `json:"startMonth" dynamodbav:"startMonth"`
+	StartYear                  int    `json:"startYear,omitempty" dynamodbav:"startYear,omitempty"`
+	StartDay                   int    `json:"startDay,omitempty" dynamodbav:"startDay,omitempty"`
 }
 type Conditions struct {
+	RefundPolicyVersion            int   `json:"refundPolicyVersion,omitempty" dynamodbav:"refundPolicyVersion,omitempty"`
 	DepositPercentageWithFlight    int   `json:"depositPercentageWithFlight" dynamodbav:"depositPercentageWithFlight"`
 	DepositPercentageWithoutFlight int   `json:"depositPercentageWithoutFlight" dynamodbav:"depositPercentageWithoutFlight"`
 	SpecialProgramDeposit          int64 `json:"specialProgramDeposit" dynamodbav:"specialProgramDeposit"`
@@ -128,13 +131,14 @@ type ProgramReference struct {
 	Content   map[string]any `json:"content" dynamodbav:"content"`
 }
 type Content struct {
-	Representatives       []Person    `json:"representatives" dynamodbav:"representatives"`
-	Institution           Institution `json:"institution" dynamodbav:"institution"`
-	ClientRepresentatives []Person    `json:"clientRepresentatives" dynamodbav:"clientRepresentatives"`
-	Trip                  Trip        `json:"trip" dynamodbav:"trip"`
-	Plan                  Plan        `json:"plan" dynamodbav:"plan"`
-	Payments              Payments    `json:"payments" dynamodbav:"payments"`
-	Passengers            []Passenger `json:"passengers" dynamodbav:"passengers"`
+	PaymentPortal         *PaymentPortal `json:"paymentPortal,omitempty" dynamodbav:"paymentPortal,omitempty"`
+	Representatives       []Person       `json:"representatives" dynamodbav:"representatives"`
+	Institution           Institution    `json:"institution" dynamodbav:"institution"`
+	ClientRepresentatives []Person       `json:"clientRepresentatives" dynamodbav:"clientRepresentatives"`
+	Trip                  Trip           `json:"trip" dynamodbav:"trip"`
+	Plan                  Plan           `json:"plan" dynamodbav:"plan"`
+	Payments              Payments       `json:"payments" dynamodbav:"payments"`
+	Passengers            []Passenger    `json:"passengers" dynamodbav:"passengers"`
 }
 
 type PDFDocument struct {
@@ -145,6 +149,27 @@ type PDFDocument struct {
 	GeneratorVersion string `json:"generatorVersion" dynamodbav:"generatorVersion"`
 	GeneratedAt      string `json:"generatedAt" dynamodbav:"generatedAt"`
 	GeneratedBy      string `json:"generatedBy" dynamodbav:"generatedBy"`
+}
+
+type SignatureStatus string
+
+const (
+	SignatureNotRequired SignatureStatus = "NOT_REQUIRED"
+	SignaturePending     SignatureStatus = "PENDING_SIGNED_UPLOAD"
+	SignatureUploaded    SignatureStatus = "SIGNED_UPLOADED"
+)
+
+type SignedDocument struct {
+	ID                string `json:"id" dynamodbav:"id"`
+	ObjectKey         string `json:"-" dynamodbav:"objectKey"`
+	ContentType       string `json:"contentType" dynamodbav:"contentType"`
+	Size              int64  `json:"size" dynamodbav:"size"`
+	SHA256            string `json:"sha256" dynamodbav:"sha256"`
+	ApprovedVersion   int    `json:"approvedVersion" dynamodbav:"approvedVersion"`
+	ApprovedPDFSHA256 string `json:"approvedPdfSha256" dynamodbav:"approvedPdfSha256"`
+	UploadedAt        string `json:"uploadedAt" dynamodbav:"uploadedAt"`
+	UploadedBy        string `json:"uploadedBy" dynamodbav:"uploadedBy"`
+	ReplacementReason string `json:"replacementReason,omitempty" dynamodbav:"replacementReason,omitempty"`
 }
 
 type StatusAuditItem struct {
@@ -172,19 +197,22 @@ type Contract struct {
 	PDFDocument      *PDFDocument      `json:"pdfDocument,omitempty" dynamodbav:"pdfDocument,omitempty"`
 	ApprovedAt       string            `json:"approvedAt,omitempty" dynamodbav:"approvedAt,omitempty"`
 	ApprovedBy       string            `json:"approvedBy,omitempty" dynamodbav:"approvedBy,omitempty"`
+	SignatureStatus  SignatureStatus   `json:"signatureStatus,omitempty" dynamodbav:"signatureStatus,omitempty"`
+	SignedDocument   *SignedDocument   `json:"signedDocument,omitempty" dynamodbav:"signedDocument,omitempty"`
 }
 
 // ContractSummary contiene únicamente las columnas necesarias para el listado.
 type ContractSummary struct {
-	ID              string `json:"id"`
-	PlanName        string `json:"planName"`
-	InstitutionName string `json:"institutionName"`
-	Destination     string `json:"destination"`
-	Period          string `json:"period"`
-	PassengerCount  int    `json:"passengerCount"`
-	Status          Status `json:"status"`
-	CreatedAt       string `json:"createdAt"`
-	UpdatedAt       string `json:"updatedAt"`
+	ID              string          `json:"id"`
+	PlanName        string          `json:"planName"`
+	InstitutionName string          `json:"institutionName"`
+	Destination     string          `json:"destination"`
+	Period          string          `json:"period"`
+	PassengerCount  int             `json:"passengerCount"`
+	Status          Status          `json:"status"`
+	CreatedAt       string          `json:"createdAt"`
+	UpdatedAt       string          `json:"updatedAt"`
+	SignatureStatus SignatureStatus `json:"signatureStatus"`
 }
 
 // Summary proyecta un contrato parcialmente leído al modelo liviano del listado.
@@ -193,7 +221,7 @@ func (c Contract) Summary() ContractSummary {
 		ID: c.ID, PlanName: c.Content.Plan.Name, InstitutionName: c.Content.Institution.Name,
 		Destination: c.Content.Trip.Destination, Period: c.Period,
 		PassengerCount: c.Content.Payments.TotalPassengers, Status: c.Status,
-		CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
+		CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt, SignatureStatus: c.EffectiveSignatureStatus(),
 	}
 }
 
@@ -217,6 +245,7 @@ func (i *Item) RefreshSummary() {
 	i.InstitutionName = i.Content.Institution.Name
 	i.Destination = i.Content.Trip.Destination
 	i.PassengerCount = i.Content.Payments.TotalPassengers
+	i.Contract.SignatureStatus = i.Contract.EffectiveSignatureStatus()
 }
 
 // Summary construye la respuesta liviana desde los atributos proyectados por el GSI.
@@ -224,8 +253,18 @@ func (i Item) Summary() ContractSummary {
 	return ContractSummary{
 		ID: i.ID, PlanName: i.PlanName, InstitutionName: i.InstitutionName,
 		Destination: i.Destination, Period: i.Period, PassengerCount: i.PassengerCount,
-		Status: i.Status, CreatedAt: i.CreatedAt, UpdatedAt: i.UpdatedAt,
+		Status: i.Status, CreatedAt: i.CreatedAt, UpdatedAt: i.UpdatedAt, SignatureStatus: i.EffectiveSignatureStatus(),
 	}
+}
+
+func (c Contract) EffectiveSignatureStatus() SignatureStatus {
+	if c.Status != StatusApproved {
+		return SignatureNotRequired
+	}
+	if c.SignedDocument != nil && strings.TrimSpace(c.SignedDocument.ID) != "" {
+		return SignatureUploaded
+	}
+	return SignaturePending
 }
 
 func NewID() string       { return ulid.Make().String() }
@@ -242,6 +281,8 @@ func YearPK(period string) string {
 	return "CONTRACT#YEAR#" + year
 }
 func NewItem(id, programID string, programReference *ProgramReference, period string, content Content, now time.Time) (Item, error) {
+	content.PaymentPortal = nil // Las instrucciones de acceso solo las emite el servidor al aprobar.
+	UseCurrentTerms(&content)
 	NormalizePayments(&content)
 	if err := NormalizeDates(&content, programReference); err != nil {
 		return Item{}, err
@@ -368,13 +409,15 @@ func ValidateContent(content Content) error {
 		return errors.New("los datos de la institucion son obligatorios")
 	}
 	trip := content.Trip
-	if strings.TrimSpace(trip.City) == "" || strings.TrimSpace(trip.Destination) == "" || strings.TrimSpace(trip.DeparturePoint) == "" || trip.ContractDate == "" || trip.DepartureDate == "" || trip.ReturnDate == "" || trip.Days < 1 || trip.Nights < 0 {
+	if strings.TrimSpace(trip.City) == "" || strings.TrimSpace(trip.Destination) == "" || strings.TrimSpace(trip.DeparturePoint) == "" || trip.ContractDate == "" || trip.Days < 1 || trip.Nights < 0 {
 		return errors.New("los datos del viaje son obligatorios")
 	}
-	departure, departureErr := time.Parse(time.RFC3339Nano, trip.DepartureDate)
-	returnDate, returnErr := time.Parse(time.RFC3339Nano, trip.ReturnDate)
-	if departureErr != nil || returnErr != nil || int(returnDate.Sub(departure).Hours()/24)+1 != trip.Days {
-		return errors.New("el rango de viaje debe coincidir exactamente con la cantidad de dias")
+	if trip.DepartureDate != "" || trip.ReturnDate != "" {
+		departure, departureErr := time.Parse(time.RFC3339Nano, trip.DepartureDate)
+		returnDate, returnErr := time.Parse(time.RFC3339Nano, trip.ReturnDate)
+		if departureErr != nil || returnErr != nil || returnDate.Before(departure) || int(returnDate.Sub(departure).Hours()/24)+1 != trip.Days {
+			return errors.New("el rango de viaje debe estar completo y coincidir exactamente con la cantidad de dias")
+		}
 	}
 	if strings.TrimSpace(content.Plan.Name) == "" || len(content.Plan.ServicesIncluded) == 0 {
 		return errors.New("el programa y sus servicios son obligatorios")
@@ -385,6 +428,11 @@ func ValidateContent(content Content) error {
 		}
 	}
 	payment := content.Payments
+	if payment.Conditions.RefundPolicyVersion >= 2 || payment.Installments.StartYear != 0 || payment.Installments.StartDay != 0 {
+		if _, err := payment.Installments.DueDates(); err != nil {
+			return err
+		}
+	}
 	if payment.DiscountPercentage < 0 || payment.DiscountPercentage > 100 {
 		return errors.New("el porcentaje de descuento debe estar entre 0 y 100")
 	}

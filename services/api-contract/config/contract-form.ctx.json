@@ -23,7 +23,7 @@
     ],
     "defaults": {
       "daysBeforePayment": 10,
-      "specialProgramDeposit": 100000
+      "specialProgramDeposit": 3000000
     },
     "countries": [
       {

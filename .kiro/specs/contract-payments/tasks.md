@@ -1,0 +1,127 @@
+# Implementación y evidencia
+
+> Tablero principal ordenado por estado: [progress.md](progress.md). Actualizarlo al iniciar o cerrar cada tarea; este archivo conserva la evidencia técnica detallada.
+
+> Instrucción vigente: implementar y validar localmente; desplegar únicamente si fuera imprescindible para continuar desarrollando. Hasta ahora no es necesario; los pasos AWS/SSM/IAM siguen pendientes. No habilitar checkout público por haber compilado el código.
+
+- [x] Consolidar requisitos aceptados, patrones de acceso y hallazgos de contrato.
+- [x] Correcciones de navegación administrativa y formularios reportadas el 2026-10-07; pendientes de despliegue DEV.
+  - [x] Separar inicialización administrativa base de HMAC/SSM: tesorería, caja, proveedores, alertas, abono grupal, nómina y consulta de acceso dejan de fallar antes de DynamoDB sin ampliar permisos.
+  - [x] Mantener SSM solo en puesta en marcha, alta por anexo y rotación/revocación; acceso histórico obtiene contrato por clave con permiso de lectura explícito.
+  - [x] Abono grupal usa DatePicker `DD-MM-YYYY`, conserva payload ISO `YYYY-MM-DD` y muestra asterisco/mensaje requerido en todos sus campos obligatorios.
+  - [x] Referencia bancaria explica en lenguaje simple que corresponde al número/código de operación visible en la cartola, exige copiarlo sin reutilizarlo y lo asocia al input para accesibilidad.
+  - [x] Contrato unifica mes/año/día en un DatePicker, pero conserva `startMonth/startYear/startDay` en API, calendario, DynamoDB y PDF.
+  - [x] Valor predeterminado de programa especial configurado en $3.000.000; contratos existentes no se reescriben.
+  - [x] Sexo restringido a Femenino/Masculino en formulario, planilla e importador; lectura histórica del modelo permanece compatible.
+  - [x] 423 pruebas Angular, build DEV, Go race/vet, build y 15 checks de api-payment correctos.
+- [x] Experiencia Khipu, verificación pública de comprobantes y operación tributaria manual, cerrada localmente el 2026-10-07; falta despliegue/recorrido AWS.
+  - [x] Un clic abre una pestaña segura, crea el checkout y navega a Khipu; retorno/cancelación vuelven al portal sin acreditar el pago.
+  - [x] Comprobante v3 con QR y código estable; verificación pública mínima por clave directa, sin Scan/GSI ni exposición de datos personales.
+  - [x] Cada pago Khipu confirmado crea idempotentemente una solicitud de boleta de ventas electrónica pendiente, separada de pago/comprobante/caja.
+  - [x] Panel administrativo para listar pendientes, cargar el PDF privado emitido en SII y registrar folio/fecha; el navegador no propone ni altera el monto fuente.
+  - [x] Contrato tributario v2 compatible con futuro envío automático de boletas y facturas; en esta etapa solo emisión manual de boleta de ventas electrónica.
+  - [x] Código vigente del portal visible y copiable únicamente en administración; contratos existentes usan lectura directa del contrato aprobado, sin Scan/GSI ni reescritura masiva.
+  - [ ] Envío administrativo posterior del PDF de la boleta mediante outbox durable y trabajador SMTP; no bloquear el registro manual ni confundir correo con aceptación SII.
+- [ ] Fechas de viaje opcionales: formulario, API, PDF y regresiones.
+  - [x] Código y pruebas: fechas vacías, rangos incompletos/invertidos, conservación de duración y fecha de firma.
+  - [x] Mes/año/día de primera cuota y calendario mensual con último día de meses cortos.
+  - [x] Política de devolución v2 y preservación de documentos aprobados históricos.
+  - [x] Build Angular y pruebas Go con race; render de PDF de demostración.
+  - [ ] Revisión visual del formulario autenticado en 320/390/tablet/escritorio y ambos temas; despliegue DEV.
+- [ ] Núcleo financiero: reparto, calendario, liberados, cobros, descuentos y bajas.
+  - [x] Dominio puro y regresiones para reparto exacto, liberados explícitos, descuentos, bajas y cobros tardíos.
+- [ ] Diario, caja, conciliación, devoluciones y pruebas de invariantes.
+  - [x] Partidas equilibradas, proyección de caja efectiva, conciliación con comisión real y devolución parcial.
+  - [x] Compromisos/anticipos de proveedor y recuperación esperada versus recibida.
+- [ ] Persistencia transaccional, idempotencia, deduplicación y pruebas concurrentes.
+  - [x] Escritura atómica de cuenta/evento/comando/referencia/outbox; pruebas de carreras y respuesta perdida.
+  - [x] Condición transaccional de plan ACTIVE para impedir commits financieros con una lectura anterior al bloqueo de nómina; permisos ConditionCheckItem limitados a TRIP. Regresiones de rollback completo y replay previamente confirmado.
+  - [ ] Integración contra DynamoDB real, trabajadores, índices de consulta y carga/costo.
+- [ ] Aprobación contractual, código único, política versionada y outbox.
+  - [x] Código aleatorio del servidor, índice HMAC único y registro pendiente en la transacción de aprobación.
+  - [x] Instrucciones RUT+código en PDF y cláusula de nómina alineada con anexos, sin alterar documentos históricos.
+  - [x] Pruebas del handler: entrada falsificada, fallo SSM/S3/transacción y respuesta perdida después del commit.
+  - [ ] Configurar nuevos SSM en DEV, validar transacción real, rotación/revocación y trabajador/listado pendiente.
+- [ ] Puesta en marcha y anexos por lotes; publicar solo versiones completas.
+  - [x] PreparePlan reanudable, publicación al completar y prueba con 150 cuentas.
+  - [x] API de puesta en marcha desde contrato aprobado v2, liberados explícitos y permisos administrativos cerrados.
+  - [x] Instantánea SETUP inmutable separada de META; recuperación de selección/estado al recargar sin GSI.
+  - [x] Dominio de alta mediante anexo con importes/calendario explícitos y cuenta independiente, sin heredar pagos, descuentos ni devoluciones; liberado identificado sin deuda. No está conectado aún a API/UI.
+  - [x] Preparación interna de borradores reanudables separada de la aplicación: 150 propuestas, tres acciones como máximo por transacción, replay, interrupciones y concurrencia. No modifica cuentas, contrato ni diario financiero.
+  - [x] Consulta interna paginada de propuestas (20) con impacto de deuda y detección de versiones obsoletas, sin GSI; prueba de pago posterior al borrador preservado. Falta resumen agregado, relación explícita de reemplazo y API/UI. Ver `annex-operations.md` y ANNEX-03 en `progress.md`.
+  - [x] Relación bidireccional de reemplazo y resumen agregado completo: altas, bajas, liberados, deuda agregada/cancelada y delta neto, sin transferir pagos. Compatibilidad de huella para borradores sin reemplazos y pruebas repetidas de concurrencia.
+  - [x] Persistir aprobación/prevalidación/efectos de anexos por lotes, recuperar interrupciones y publicar solo al completar. El formulario y cierre de nómina permanecen en tareas separadas.
+    - [x] Bloqueo transaccional `UPDATING_ROSTER` y prevalidación completa de todas las propuestas antes del primer efecto; rechazo atómico libera la gira y una transición VALIDATING interrumpida se reanuda.
+    - [x] Aplicar efectos por cuenta con marcas idempotentes, alta/baja independiente sin trasladar dinero, lookup HMAC condicional y publicación APPLIED/ACTIVE únicamente al completar.
+  - [x] Recepción durable durante modificaciones de nómina: bandeja para notificación autenticada y trabajador DynamoDB Streams que persiste antes de responder, confirma asíncronamente y conserva PENDING ante bloqueo o falla. Veinte trabajadores concurrentes no duplican dinero. Falta validación AWS y seguimiento administrativo.
+  - [ ] Anexos y aprovisionamiento/verificación de permisos en DEV.
+- [ ] API administrativa y UI de cuentas, nómina, anexos y pagos manuales.
+  - [x] Pantalla de puesta en marcha conectada al API, selección de liberados y confirmación sin duplicados.
+  - [x] API/pantalla por cuenta: abono individual recibido, primera cuota completa manual, descuento, aprobación/pago de devolución y resolución auditada después de devolver todos los fondos pendientes; importes y versión validados en servidor.
+  - [ ] API/formulario de anexos: preparar, recuperar, previsualizar impacto, aprobar/reanudar y diferenciar claramente DRAFT, APPLYING, REJECTED y APPLIED.
+    - [x] API privada: crear/obtener/paginar/resumir/aplicar, IAM por claves TRIP/ACCOUNT, auditoría de preparación y aprobación separada, y RUT convertido a HMAC sin persistir documento crudo.
+    - [x] Servicio y formulario Angular con confirmación explícita, impacto antes de aprobar, recuperación del ID en URL y reanudación de VALIDATING/APPLYING con clave estable.
+    - [x] Proyección administrativa de nómina por `TRIP#id / MEMBER#accountId`, creada/actualizada en las mismas transacciones de cuenta y consultada en páginas de 50 sin Scan/GSI.
+    - [x] Migrar de forma idempotente planes existentes sin proyección MEMBER: contrato aprobado + SETUP como fuentes internas, cuenta protegida por versión y publicación de esquema solo al completar; no altera cuentas, dinero ni huellas históricas.
+    - [x] Reingreso de una misma identidad únicamente como reemplazo explícito: cuenta financiera nueva, participación anterior inactiva y enlazada, sin heredar dinero. El lookup público cambia con condición atómica desde la cuenta anterior; sesiones breves ya emitidas conservan acceso a su cuenta histórica y las colisiones ajenas rechazan el anexo completo.
+    - [x] Cierre formal de nómina idempotente y auditado, con motivo/fecha/operador y evento inmutable. Impide preparar y aplicar anexos, pero conserva el plan ACTIVE para pagos tardíos, comprobantes y devoluciones; UI con confirmación irreversible explícita.
+  - [ ] Revisión responsive autenticada, pruebas DynamoDB reales y despliegue de esta pantalla.
+  - [x] Recuperación durable de operaciones monetarias: cuentas, proveedores y liquidaciones fijan clave cliente en URL y consultan resultado aplicado después de recarga; abonos/descuentos/anexos conservan sus mecanismos propios.
+- [ ] Portal público RUT+código y sesiones acotadas en authorizer.
+  - [x] Frontera `/pagos/portal` en authorizer, clave independiente y JWT HS256 de máximo 10 minutos; pruebas de aislamiento administrativo y rutas explícitas.
+  - [x] Emisión de JWT después del lookup exitoso, clave SecureString independiente y pruebas de firma/privacidad/duración; helper de ámbito revalida código y cuenta publicados.
+  - [x] Checkout y lectura de intento usan cuenta del contexto validado, revocación y propiedad; no reciben importe/cuenta desde navegador.
+  - [x] Integración frontend de checkout con correo requerido, sesión solo en memoria, referencia estable ante respuesta perdida y consulta explícita del estado; 366 pruebas frontend y build payments DEV correctos.
+  - [x] Recuperar el intento abierto al reingresar RUT+código después de recargar/vencer sesión; bloqueo de nuevo cobro ante error de lectura, sin almacenamiento web, índices ni consultas adicionales al proveedor. 369 pruebas frontend, build payments DEV y pruebas Go con race correctos.
+  - [x] Conservar primera referencia de revisión en la cuenta y recuperarla al consultar; bloquear nuevos intentos y enlaces mientras existan fondos en revisión, incluyendo registros anteriores sin referencia. 371 pruebas frontend/build DEV y Go race/vet/lint correctos.
+  - [x] Proyección transaccional ATTEMPT/OUTCOME aun sin CHECKOUT; resolución auditada tras devolución efectiva completa, sin borrar acumulados históricos ni generar caja nueva.
+  - [ ] Resolución por reasignación de fondos, reversas del proveedor y prueba integrada Go→authorizer/AWS antes de habilitar checkout visible.
+  - [x] Consulta mínima por claves HMAC, relaciones creadas en puesta en marcha y publicación solo ACTIVE; sin Scan/GSI.
+  - [x] Contadores concurrentes por IP y credenciales, errores genéricos y permisos públicos sin escritura financiera.
+  - [x] Pantalla principal sin OTP; distingue pendiente/pagado/ajustado, sin habilitar checkout. 360 pruebas frontend y build payments DEV correctos; Go race correcto.
+  - [ ] Sesión acotada para checkout/comprobantes, protección de borde, pruebas IAM/DynamoDB reales, responsive y despliegue.
+- [ ] Checkout Khipu por cuota y reconciliación de casos ambiguos/tardíos.
+  - [x] Servicio interno de reserva transaccional de cuota completa; replay sin modificar caja y validación del intento contra monto/cuota/estado original.
+  - [x] Autorización persistente de envío de un solo uso; pruebas con 20 solicitudes concurrentes, respuesta perdida y cuenta modificada.
+  - [x] Servicio interno DEV conectado al adaptador Khipu: verifica DemoBank, envía una vez y conserva resultado pendiente inmutable; pruebas con proveedor simulado, sin cargos reales.
+  - [x] Confirmación interna mediante verificador: cuenta, evento, referencia única y outbox atómicos; concurrencia, respuesta perdida y pago tardío probados con simulación.
+  - [x] Diferencias de importe auténtico se registran por su valor real en fondos no aplicados, sin pago parcial de cuota; se conserva verificación estricta del flujo de pruebas anterior.
+  - [x] Endpoint Lambda de notificación de cuotas conectado a confirmación; firma sobre cuerpo original, pruebas de replay/alteración/fecha/base64 y permisos DynamoDB acotados.
+  - [ ] Desplegar/verificar webhook en AWS; gestionar revisión administrativa de discrepancias y reversas.
+  - [x] Handlers Lambda de reserva/creación y consulta de intento, correo requerido e idempotencia por cuenta; resultado ambiguo no reenvía POST Khipu.
+- [x] Comprobantes S3, trabajador Go SMTP/TLS, descarga y reenvío seguro.
+  - [x] PDF determinista privado, hash y escritura condicional sin sobrescritura; outbox transaccional, leases, reintentos limitados y cola de fallos declarada.
+  - [x] Listado de 20 por cuenta y descarga firmada por 120 segundos reservados a administración; el portal no expone historial ni URL S3.
+  - [x] Reenvío público único derivado del intento confirmado, ligado a la sesión que creó el checkout y disponible solo mientras la vista sigue abierta. Administración puede reenviar sin límite numérico, siempre con comando, actor y entrega auditables.
+  - [x] Cierre de jobs y recuperación manual paginada por día, simulación por defecto y opción explícita de envío. No usa Scan/GSI ni reinicia automáticamente entregas agotadas.
+  - [x] Componente histórico conectado solo a administración; portal con formulario efímero post-confirmación, validación de correo y reintento estable.
+  - [x] 381 pruebas frontend; builds admin/payments DEV. Trabajador Go con race/vet/build/validate/package; compatibilidad DynamoDB y pruebas IAM locales.
+  - [x] Revisión anterior del portal en 320/390/768/1440 px; la nueva vista de reenvío efímero compila y tiene pruebas funcionales, pero requiere nueva inspección visual después del despliegue.
+  - [x] Definición S3 privada/cifrada/versionada, HTTPS obligatorio y Retain; pruebas locales de infraestructura sin GSI nuevo.
+  - [ ] Validación real S3/Streams/SMTP/SQS/IAM después del deploy del usuario; backfill explícito de comprobantes históricos y seguimiento de entregas fallidas en UI administrativa.
+- [ ] Tesorería por grupo/consolidada, proveedores, caja y alertas.
+  - [x] Persistencia y API por gira: proyecciones `TRIP/CASH` y `CASH/mes` sin GSI, conciliación Khipu parcial/total con comisión real, referencia bancaria única, fondos en tránsito y UI administrativa recuperable. Incluye abonos grupales, movimientos manuales y protección de reversas ya liquidadas. Ver `treasury-operations.md`.
+  - [x] Proveedores/servicios: compromiso, pago, devolución acordada y recuperación real separados; API/UI idempotente y movimientos bancarios proyectados en caja. Ver `supplier-operations.md`.
+  - [x] Caja por gira y consolidado de movimientos hasta 12 meses: efectivo separado de deuda, devoluciones, fondos en tránsito y exposición de proveedores; acceso mensual sin Scan/GSI.
+  - [x] Panel de devoluciones por gira: cuotas pagadas, fondos excepcionales, total aprobado, pagado y obligación pendiente; gestión individual auditada y pagos parciales/totales.
+  - [x] Alertas de corte y morosidad.
+    - [x] Vista por gira con fecha de evaluación, vencido, saldo, cuentas morosas y corte calculado desde términos vigentes; fecha de viaje indefinida no inventa corte.
+    - [x] Resumen global anual reutiliza el GSI liviano de contratos, pagina en servidor y evita Scan, GSI financiero y fan-out del navegador.
+- [x] Anexos de servicios y fecha de viaje sin reescribir contrato histórico ni recalcular cuotas ajenas.
+  - [x] Modelo de dominio con instantáneas antes/después, contrato base aprobado/versionado, validación de fechas/servicios y aprobación separada; sin campos financieros.
+  - [x] Persistencia inmutable, revisión efectiva y un único borrador pendiente; aprobación transaccional, PDF propio, API/UI, listado paginado y proyección `TERMS#CURRENT` para alertas sin recalcular cuotas.
+- [x] Preparar contratos versionados y fronteras futuras BI/DTE sin declarar certificación ni desplegar infraestructura con costo recurrente.
+- [ ] Validar IAM/SSM/costos, responsive claro/oscuro y pruebas de seguridad.
+  - [x] Auditoría local de IAM declarado, PII, abuso, idempotencia, costos y CORS; suites locales correctas.
+  - [ ] Evidencia IAM/SSM/AWS efectiva, visual autenticada y mediciones reales después del despliegue del usuario.
+- [ ] Usuario: desplegar DEV y verificar recorrido completo con banco de demostración una vez cerrados los bloqueos funcionales.
+
+- [ ] Contrato firmado presencialmente y carga obligatoria posterior (`CONTRACT-05`).
+  - [x] Modelo separado, compatibilidad histórica y proyección liviana del estado documental.
+  - [x] API de preparación/finalización idempotente, historial y descarga temporal; PDF, integridad, concurrencia y reemplazo auditado.
+  - [x] UI administrativa PrimeNG/Tailwind para estado, carga, confirmación, historial y ambas descargas.
+  - [x] Reutilización del permiso administrativo de contratos, GSI de reemplazo compatible y pruebas locales completas.
+  - [ ] Desplegar GSI nuevo, `api-contract` y `api-payment`; comprobar lectores y retirar el GSI anterior en un segundo despliegue.
+  - [ ] Recorrido autenticado DEV a cargo del usuario.
+
+No marcar una etapa completa por existir modelos o pantallas: debe estar integrada y probada. No hay autorización para cargos reales ni cambios en PRD.

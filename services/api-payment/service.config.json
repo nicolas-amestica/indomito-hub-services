@@ -8,9 +8,43 @@
     "APP_STAGE",
     "APP_REGION",
     "PAYMENTS_TABLE_NAME",
-    "PAYMENTS_BASE_URL"
+    "PAYMENTS_BASE_URL",
+    "PAYMENTS_PORTAL_URL"
   ],
   "functions": [
+    {"name":"fn-verificar-comprobante-publico-v1","entrypoint":"./cmd/fn-verificar-comprobante-publico-v1"},
+    {"name":"fn-listar-solicitudes-tributarias-v1","entrypoint":"./cmd/fn-listar-solicitudes-tributarias-v1"},
+    {"name":"fn-registrar-boleta-manual-v1","entrypoint":"./cmd/fn-registrar-boleta-manual-v1"},
+    {"name":"fn-descargar-boleta-manual-v1","entrypoint":"./cmd/fn-descargar-boleta-manual-v1"},
+    {"name":"fn-obtener-cuenta-portal-v1","entrypoint":"./cmd/fn-obtener-cuenta-portal-v1"},
+    {"name":"fn-reenviar-comprobante-portal-v1","entrypoint":"./cmd/fn-reenviar-comprobante-portal-v1"},
+    {"name":"fn-reenviar-comprobante-cuenta-v1","entrypoint":"./cmd/fn-reenviar-comprobante-cuenta-v1"},
+    {"name":"fn-listar-comprobantes-cuenta-v1","entrypoint":"./cmd/fn-listar-comprobantes-cuenta-v1"},
+    {"name":"fn-descargar-comprobante-cuenta-v1","entrypoint":"./cmd/fn-descargar-comprobante-cuenta-v1"},
+    {"name":"fn-obtener-cuenta-cobranza-v1","entrypoint":"./cmd/fn-obtener-cuenta-cobranza-v1"},
+    {"name":"fn-registrar-operacion-cuenta-v1","entrypoint":"./cmd/fn-registrar-operacion-cuenta-v1"},
+    {"name":"fn-crear-checkout-cuota-v1","entrypoint":"./cmd/fn-crear-checkout-cuota-v1"},
+    {"name":"fn-obtener-intento-cuota-v1","entrypoint":"./cmd/fn-obtener-intento-cuota-v1"},
+    {
+      "name": "fn-notificacion-cuota-khipu-v1",
+      "entrypoint": "./cmd/fn-notificacion-cuota-khipu-v1"
+    },
+    {
+      "name": "fn-procesar-notificacion-cuota-khipu-v1",
+      "entrypoint": "./cmd/fn-procesar-notificacion-cuota-khipu-v1"
+    },
+    {
+      "name": "fn-consultar-cuotas-v1",
+      "entrypoint": "./cmd/fn-consultar-cuotas-v1"
+    },
+    {
+      "name": "fn-obtener-puesta-marcha-v1",
+      "entrypoint": "./cmd/fn-obtener-puesta-marcha-v1"
+    },
+    {
+      "name": "fn-confirmar-puesta-marcha-v1",
+      "entrypoint": "./cmd/fn-confirmar-puesta-marcha-v1"
+    },
     {
       "name": "fn-configuracion-pagos-v1",
       "entrypoint": "./cmd/fn-configuracion-pagos-v1"
@@ -34,6 +68,39 @@
     {
       "name": "fn-retorno-pago-v1",
       "entrypoint": "./cmd/fn-retorno-pago-v1"
-    }
+    },
+    {"name":"fn-aplicar-anexo-v1","entrypoint":"./cmd/fn-aplicar-anexo-v1"},
+    {"name":"fn-aprobar-descuento-grupal-v1","entrypoint":"./cmd/fn-aprobar-descuento-grupal-v1"},
+    {"name":"fn-cambiar-acceso-gira-v1-rotate","entrypoint":"./cmd/fn-cambiar-acceso-gira-v1"},
+    {"name":"fn-cambiar-acceso-gira-v1-revoke","entrypoint":"./cmd/fn-cambiar-acceso-gira-v1"},
+    {"name":"fn-cerrar-nomina-v1","entrypoint":"./cmd/fn-cerrar-nomina-v1"},
+    {"name":"fn-conciliar-intento-khipu-v1","entrypoint":"./cmd/fn-conciliar-intento-khipu-v1"},
+    {"name":"fn-conciliar-liquidacion-v1","entrypoint":"./cmd/fn-conciliar-liquidacion-v1"},
+    {"name":"fn-crear-anexo-v1","entrypoint":"./cmd/fn-crear-anexo-v1"},
+    {"name":"fn-crear-descuento-grupal-v1","entrypoint":"./cmd/fn-crear-descuento-grupal-v1"},
+    {"name":"fn-descargar-comprobante-gira-v1","entrypoint":"./cmd/fn-descargar-comprobante-gira-v1"},
+    {"name":"fn-listar-alertas-cobranza-v1","entrypoint":"./cmd/fn-listar-alertas-cobranza-v1"},
+    {"name":"fn-listar-comprobantes-gira-v1","entrypoint":"./cmd/fn-listar-comprobantes-gira-v1"},
+    {"name":"fn-listar-devoluciones-gira-v1","entrypoint":"./cmd/fn-listar-devoluciones-gira-v1"},
+    {"name":"fn-listar-fallos-comprobantes-v1","entrypoint":"./cmd/fn-listar-fallos-comprobantes-v1"},
+    {"name":"fn-listar-intentos-cuenta-v1","entrypoint":"./cmd/fn-listar-intentos-cuenta-v1"},
+    {"name":"fn-listar-liquidaciones-v1","entrypoint":"./cmd/fn-listar-liquidaciones-v1"},
+    {"name":"fn-listar-nomina-v1","entrypoint":"./cmd/fn-listar-nomina-v1"},
+    {"name":"fn-listar-proveedores-v1","entrypoint":"./cmd/fn-listar-proveedores-v1"},
+    {"name":"fn-migrar-comprobantes-v1","entrypoint":"./cmd/fn-migrar-comprobantes-v1"},
+    {"name":"fn-migrar-nomina-v1","entrypoint":"./cmd/fn-migrar-nomina-v1"},
+    {"name":"fn-obtener-abono-grupal-v1","entrypoint":"./cmd/fn-obtener-abono-grupal-v1"},
+    {"name":"fn-obtener-acceso-gira-v1","entrypoint":"./cmd/fn-obtener-acceso-gira-v1"},
+    {"name":"fn-obtener-alertas-cobranza-v1","entrypoint":"./cmd/fn-obtener-alertas-cobranza-v1"},
+    {"name":"fn-obtener-anexo-v1","entrypoint":"./cmd/fn-obtener-anexo-v1"},
+    {"name":"fn-obtener-caja-consolidada-v1","entrypoint":"./cmd/fn-obtener-caja-consolidada-v1"},
+    {"name":"fn-obtener-caja-gira-v1","entrypoint":"./cmd/fn-obtener-caja-gira-v1"},
+    {"name":"fn-obtener-descuento-grupal-v1","entrypoint":"./cmd/fn-obtener-descuento-grupal-v1"},
+    {"name":"fn-obtener-operacion-financiera-v1","entrypoint":"./cmd/fn-obtener-operacion-financiera-v1"},
+    {"name":"fn-previsualizar-anexo-v1","entrypoint":"./cmd/fn-previsualizar-anexo-v1"},
+    {"name":"fn-registrar-abono-grupal-v1","entrypoint":"./cmd/fn-registrar-abono-grupal-v1"},
+    {"name":"fn-registrar-operacion-proveedor-v1","entrypoint":"./cmd/fn-registrar-operacion-proveedor-v1"},
+    {"name":"fn-reintentar-comprobante-v1","entrypoint":"./cmd/fn-reintentar-comprobante-v1"},
+    {"name":"fn-resumir-impacto-anexo-v1","entrypoint":"./cmd/fn-resumir-impacto-anexo-v1"}
   ]
 }

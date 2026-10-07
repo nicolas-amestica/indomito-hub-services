@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://girasindomito.cl/schemas/payments/tax-document-request-v2.json",
+  "title": "Tax document request v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "requestId", "sourceEventId", "receiptId", "tripId", "accountId", "documentKind", "documentSubtype", "issuanceMode", "currency", "grossAmount", "effectiveDate", "status", "requestedAt"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "requestId": { "type": "string", "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" },
+    "sourceEventId": { "type": "string", "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" },
+    "receiptId": { "type": "string", "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" },
+    "tripId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "accountId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "documentKind": { "enum": ["BOLETA", "FACTURA", "NOTA_CREDITO", "NOTA_DEBITO"] },
+    "documentSubtype": { "enum": ["BOLETA_VENTA_ELECTRONICA", "FACTURA_ELECTRONICA", "NOTA_CREDITO_ELECTRONICA", "NOTA_DEBITO_ELECTRONICA"] },
+    "issuanceMode": { "enum": ["MANUAL_SII", "AUTOMATED_PROVIDER"] },
+    "currency": { "const": "CLP" },
+    "grossAmount": { "type": "integer", "minimum": 1, "maximum": 1000000000000 },
+    "effectiveDate": { "type": "string", "format": "date" },
+    "status": { "enum": ["PENDING_MANUAL_ISSUE", "MANUAL_RECORDED", "READY", "SUBMITTED", "ACCEPTED", "REJECTED", "VOIDED", "REQUIRES_REVIEW"] },
+    "requestedAt": { "type": "string", "format": "date-time" },
+    "issuerConfigurationVersion": { "type": "integer", "minimum": 1 },
+    "externalDocumentId": { "type": "string", "maxLength": 128 },
+    "externalStatusCode": { "type": "string", "maxLength": 64 },
+    "reversalOfRequestId": { "type": "string", "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" }
+  }
+}

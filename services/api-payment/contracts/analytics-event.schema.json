@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://girasindomito.cl/schemas/payments/analytics-event-v1.json",
+  "title": "Payment analytics event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "eventId", "eventType", "occurredAt", "tripId", "currency", "amount", "sourceReference"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "eventId": { "type": "string", "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" },
+    "eventType": { "enum": ["PAYMENT_RECEIVED", "PAYMENT_REVERSED", "DISCOUNT_APPLIED", "REFUND_APPROVED", "REFUND_PAID", "SUPPLIER_COMMITTED", "SUPPLIER_PAID", "SUPPLIER_REFUND_RECEIVED", "KHIPU_SETTLED", "BANK_ADJUSTMENT"] },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "effectiveDate": { "type": "string", "format": "date" },
+    "tripId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "accountId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "currency": { "const": "CLP" },
+    "amount": { "type": "integer", "minimum": 0, "maximum": 1000000000000 },
+    "sourceReference": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "reversalOf": { "type": "string", "maxLength": 256 },
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "channel": { "enum": ["KHIPU", "BANK_TRANSFER", "MANUAL", "GROUP"] },
+        "status": { "type": "string", "maxLength": 64 }
+      }
+    }
+  }
+}

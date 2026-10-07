@@ -83,6 +83,48 @@ func TestVerifyKhipuPayment(t *testing.T) {
 			if (err == nil) != tc.valid {
 				t.Fatalf("valid=%v err=%v", tc.valid, err)
 			}
+			received, receivedErr := k.VerifyReceived(context.Background(), base.PaymentID, base.TransactionID)
+			wantReceived := tc.valid || tc.name == "wrong amount"
+			if (receivedErr == nil) != wantReceived {
+				t.Fatalf("received valid=%v err=%v", wantReceived, receivedErr)
+			}
+			if wantReceived && received.Amount != payment.Amount {
+				t.Fatal("actual amount replaced with expected amount")
+			}
+		})
+	}
+}
+
+func TestInspectKhipuSeparatesPendingManualAndReversed(t *testing.T) {
+	for _, detail := range []struct{ status, detail string }{{"pending", "pending"}, {"verifying", "pending"}, {"done", "marked-paid-by-receiver"}, {"done", "reversed"}} {
+		payment := VerifiedPayment{PaymentID: "abc123def456", TransactionID: "internal-attempt", ReceiverID: 123, Amount: "20000.0000", Currency: "CLP", Status: detail.status, StatusDetail: detail.detail, ExpiresDate: time.Now().Add(time.Hour)}
+		k, _ := NewKhipu("synthetic-test-key", 123)
+		k.client.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+			body, _ := json.Marshal(payment)
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(body)))}, nil
+		})
+		if got, err := k.InspectPayment(context.Background(), payment.PaymentID, payment.TransactionID); err != nil || got.StatusDetail != detail.detail {
+			t.Fatalf("inspect %s/%s: %+v %v", detail.status, detail.detail, got, err)
+		}
+		if _, err := k.VerifyReceived(context.Background(), payment.PaymentID, payment.TransactionID); err == nil {
+			t.Fatal("non-normal state accepted as received")
+		}
+	}
+}
+
+func TestConfirmedCLPAmount(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want int64
+	}{
+		{"1", 1}, {"20000.0000", 20000}, {"1000000000000", 1000000000000},
+		{"0", 0}, {"-1", 0}, {"+1", 0}, {"1e4", 0}, {"1.1", 0}, {"1.", 0}, {" 1", 0}, {"1000000000001", 0}, {"1.00000", 0},
+	} {
+		t.Run(tc.raw, func(t *testing.T) {
+			got, err := ConfirmedCLPAmount(tc.raw)
+			if (err == nil) != (tc.want > 0) || got != tc.want {
+				t.Fatalf("got %d %v", got, err)
+			}
 		})
 	}
 }

@@ -42,7 +42,7 @@ func TestNewItemKeepsProgramSnapshot(t *testing.T) {
 	wantSummary := ContractSummary{
 		ID: item.ID, PlanName: "Brasil 2027", InstitutionName: "Colegio",
 		Destination: "Brasil", Period: "2027-01", PassengerCount: 1,
-		Status: StatusDraft, CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt,
+		Status: StatusDraft, CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt, SignatureStatus: SignatureNotRequired,
 	}
 	if got := item.Summary(); got != wantSummary {
 		t.Fatalf("summary = %#v, want %#v", got, wantSummary)
@@ -74,7 +74,7 @@ func validContent() Content {
 		Plan:                  Plan{Name: "Brasil 2027", ServicesIncluded: []Service{{Description: "Transporte"}}},
 		Payments: Payments{
 			FreePassengers: 1, PricePerPerson: 500000, DownPayment: 100000, DaysBeforePayment: 10, MaxExchangeRate: 1100,
-			Installments: Installments{Quantity: 5, StartMonth: "Enero"},
+			Installments: Installments{Quantity: 5, StartMonth: "Enero", StartYear: 2027, StartDay: 5},
 			Conditions:   Conditions{SpecialProgramDeposit: 100000},
 			BankAccount:  BankAccount{AccountNumber: "90278249343", AccountHolder: "Giras Indomito Ltda.", HolderDNI: "77.654.796-4", Bank: "Banco Estado · Cuenta Vista", Email: "pagos@work.girasindomito.cl"},
 		},

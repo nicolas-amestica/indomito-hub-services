@@ -42,6 +42,15 @@ function checkAwsCli(): void {
   }
 }
 
+function checkNodeRuntime(): void {
+  const major = Number.parseInt(process.versions.node.split('.')[0] ?? '', 10);
+  if (!Number.isInteger(major) || major < 18 || major > 24) {
+    log('red', '✗', `Node ${process.versions.node} no es compatible con este flujo de Serverless.`);
+    log('yellow', '💡', 'Usa Node 18, 20, 22 o 24 antes de desplegar.');
+    process.exit(1);
+  }
+}
+
 function isSsoSessionActive(profile: string): boolean {
   try {
     execSync(`aws sts get-caller-identity --profile ${profile}`, {
@@ -137,7 +146,9 @@ console.log('');
 log('cyan', isRemove ? '🗑️' : '🚀', `${isRemove ? 'Remove' : 'Deploy'}: ${service} → stage=${stage}, region=${region}, profile=${profile}`);
 console.log('');
 
-// 1. Verificar AWS CLI
+// 1. Verificar runtime y AWS CLI. Serverless 4.43 termina silenciosamente en
+// Node 26 durante la lectura de artefactos S3 y puede aparentar un deploy exitoso.
+checkNodeRuntime();
 checkAwsCli();
 log('green', '✓', 'AWS CLI disponible');
 
@@ -203,7 +214,7 @@ execFileSync('npx', ['serverless', slsCommand, '--stage', stage, '--region', reg
     ...processEnvWithoutAwsProfile,
     ...awsCredentials,
     STAGE: stage,
-    NODE_OPTIONS: '--disable-warning=DEP0169',
+    NODE_OPTIONS: '--no-deprecation',
   },
 });
 

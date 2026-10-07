@@ -1,0 +1,15 @@
+{
+  "name": "payment-receipts",
+  "defaultArtifactDir": ".serverless-artifacts",
+  "requiredEnvironment": [
+    "APP_STAGE",
+    "PAYMENTS_TABLE_NAME",
+    "RECEIPTS_BUCKET_NAME"
+  ],
+  "functions": [
+    {
+      "name": "fn-procesar-comprobantes-v1",
+      "entrypoint": "./cmd/fn-procesar-comprobantes-v1"
+    }
+  ]
+}

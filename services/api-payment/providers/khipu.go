@@ -127,24 +127,66 @@ type VerifiedPayment struct {
 	Status           string    `json:"status"`
 	StatusDetail     string    `json:"status_detail"`
 	ConciliationDate time.Time `json:"conciliation_date"`
+	ExpiresDate      time.Time `json:"expires_date"`
 }
 
 // Verify checks the authoritative API, not the browser return or webhook values.
 // Refunded/reversed/manually marked and pending payments require separate handling.
 func (k *Khipu) Verify(ctx context.Context, paymentID, transactionID string, amount int64) (VerifiedPayment, error) {
+	if amount <= 0 || amount > 1_000_000_000_000 {
+		return VerifiedPayment{}, ErrVerification
+	}
+	out, err := k.VerifyReceived(ctx, paymentID, transactionID)
+	if err != nil {
+		return VerifiedPayment{}, err
+	}
+	actual, err := ConfirmedCLPAmount(out.Amount)
+	if err != nil || actual != amount {
+		return VerifiedPayment{}, ErrVerification
+	}
+	return out, nil
+}
+
+// ConfirmedCLPAmount valida pesos enteros sin redondear ni aceptar notación exponencial.
+func ConfirmedCLPAmount(raw string) (int64, error) {
+	if !clpAmount.MatchString(raw) {
+		return 0, ErrVerification
+	}
+	whole, _, _ := strings.Cut(raw, ".")
+	actual, err := strconv.ParseInt(whole, 10, 64)
+	if err != nil || actual <= 0 || actual > 1_000_000_000_000 {
+		return 0, ErrVerification
+	}
+	return actual, nil
+}
+
+// VerifyReceived verifica el ingreso real sin exigir coincidencia con la cuota esperada.
+// Las diferencias de importe se concilian en el dominio; identidad y cobrador siempre son obligatorios.
+func (k *Khipu) VerifyReceived(ctx context.Context, paymentID, transactionID string) (VerifiedPayment, error) {
+	out, err := k.InspectPayment(ctx, paymentID, transactionID)
+	if err != nil {
+		return VerifiedPayment{}, err
+	}
+	if out.Status != "done" || out.StatusDetail != "normal" || out.ConciliationDate.IsZero() {
+		return VerifiedPayment{}, ErrVerification
+	}
+	return out, nil
+}
+
+// InspectPayment devuelve el estado autoritativo sin confundir pendiente, pago,
+// marcado manual o reversa. Solo se expone al reconciliador administrativo.
+func (k *Khipu) InspectPayment(ctx context.Context, paymentID, transactionID string) (VerifiedPayment, error) {
 	var out VerifiedPayment
-	if !khipuID.MatchString(paymentID) || transactionID == "" || amount <= 0 || amount > 1_000_000_000_000 {
+	if !khipuID.MatchString(paymentID) || transactionID == "" {
 		return out, ErrVerification
 	}
 	if err := k.request(ctx, http.MethodGet, "/v3/payments/"+paymentID, nil, &out); err != nil {
 		return VerifiedPayment{}, err
 	}
-	if !clpAmount.MatchString(out.Amount) {
-		return VerifiedPayment{}, ErrVerification
-	}
-	whole, _, _ := strings.Cut(out.Amount, ".")
-	actual, err := strconv.ParseInt(whole, 10, 64)
-	if err != nil || actual != amount || out.PaymentID != paymentID || out.TransactionID != transactionID || out.ReceiverID != k.receiverID || out.Currency != "CLP" || out.Status != "done" || out.StatusDetail != "normal" || out.ConciliationDate.IsZero() {
+	_, err := ConfirmedCLPAmount(out.Amount)
+	validStatus := out.Status == "pending" || out.Status == "verifying" || out.Status == "done"
+	validDetail := out.StatusDetail == "pending" || out.StatusDetail == "normal" || out.StatusDetail == "marked-paid-by-receiver" || out.StatusDetail == "rejected-by-payer" || out.StatusDetail == "marked-as-abuse" || out.StatusDetail == "reversed"
+	if err != nil || out.PaymentID != paymentID || out.TransactionID != transactionID || out.ReceiverID != k.receiverID || out.Currency != "CLP" || !validStatus || !validDetail {
 		return VerifiedPayment{}, ErrVerification
 	}
 	return out, nil

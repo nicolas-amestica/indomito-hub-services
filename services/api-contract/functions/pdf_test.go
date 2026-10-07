@@ -21,6 +21,50 @@ func TestComposePDFIncludesPassengerSection(t *testing.T) {
 	}
 }
 
+func TestClauseOneSupportsUndefinedTravelDates(t *testing.T) {
+	content := domain.Content{}
+	text := buildClauses(content)[0].text
+	if !strings.Contains(text, "fecha por definir") || !strings.Contains(text, "anexo") {
+		t.Fatalf("missing undefined date wording: %s", text)
+	}
+	content.Trip.DepartureDate = "2027-01-10T00:00:00Z"
+	content.Trip.ReturnDate = "2027-01-14T00:00:00Z"
+	if text = buildClauses(content)[0].text; strings.Contains(text, "fecha por definir") {
+		t.Fatalf("known dates must retain dated clause: %s", text)
+	}
+}
+
+func TestCurrentRefundPolicyIsExplicitAndPreservesHistoricalClause(t *testing.T) {
+	c := domain.Content{}
+	c.Payments.Conditions.CancellationPenaltyPercentage = 25
+	if !strings.Contains(buildClauses(c)[20].text, "25% del valor total") {
+		t.Fatal("historical clause changed")
+	}
+	domain.UseCurrentTerms(&c)
+	text := buildClauses(c)[20].text
+	for _, term := range []string{"abono inicial efectivamente pagado no será reembolsable", "No se establece un porcentaje fijo", "cuotas", "por escrito", "excluido el abono inicial", "derechos irrenunciables", "pagos duplicados"} {
+		if !strings.Contains(text, term) {
+			t.Fatalf("missing %q: %s", term, text)
+		}
+	}
+	if strings.Contains(text, "25%") || strings.Contains(text, "0% del valor total") {
+		t.Fatal("legacy penalty remains")
+	}
+	if !strings.Contains(buildClauses(c)[17].text, "no modificará automáticamente el valor de las cuotas") {
+		t.Fatal("remaining passenger amount not protected")
+	}
+}
+
+func TestPaymentClauseIncludesCompleteDueDateAndShortMonthRule(t *testing.T) {
+	c := domain.Content{Payments: domain.Payments{Installments: domain.Installments{Quantity: 5, StartYear: 2027, StartMonth: "01", StartDay: 31}}}
+	text := buildClauses(c)[16].text
+	for _, term := range []string{"31 de enero de 2027", "día 31 de cada mes", "último día de ese mes", "meses siguientes"} {
+		if !strings.Contains(text, term) {
+			t.Fatalf("missing %q: %s", term, text)
+		}
+	}
+}
+
 func TestFormatRUTAddsDotsAndHyphen(t *testing.T) {
 	for input, expected := range map[string]string{
 		"12345678-5":   "12.345.678-5",
@@ -105,5 +149,31 @@ func TestComposePDFSupportsSixtyNumberedPassengers(t *testing.T) {
 	}
 	if !bytes.HasPrefix(pdf, []byte("%PDF")) {
 		t.Fatal("invalid PDF")
+	}
+}
+
+func TestComposeAmendmentPDFSupportsUndefinedAndDefinedDates(t *testing.T) {
+	content := domain.Content{
+		Institution:           domain.Institution{Name: "Colegio Prueba"},
+		Representatives:       []domain.Person{{Name: "Operador", DNI: "16915292-6"}},
+		ClientRepresentatives: []domain.Person{{Name: "Apoderado", DNI: "12345678-5"}},
+	}
+	amendment := domain.ContractAmendment{
+		ContractID: "01ARZ3NDEKTSV4RRFFQ69G5FAV", BaseContractVersion: 4,
+		Reason: "Definir fechas del viaje", Before: domain.ContractTermsSnapshot{Days: 4, Nights: 3, Services: []domain.Service{{Description: "Transporte"}}},
+		After: domain.ContractTermsSnapshot{DepartureDate: "2027-10-05T00:00:00Z", ReturnDate: "2027-10-08T00:00:00Z", Days: 4, Nights: 3, Services: []domain.Service{{Description: "Transporte"}, {Description: "Excursión"}}},
+	}
+	if got := amendmentDates(amendment.Before); !strings.Contains(got, "por definir") {
+		t.Fatalf("undefined date wording missing: %q", got)
+	}
+	if got := amendmentDates(amendment.After); !strings.Contains(got, "5 de octubre de 2027") || !strings.Contains(got, "8 de octubre de 2027") {
+		t.Fatalf("defined dates missing: %q", got)
+	}
+	pdf, err := ComposeAmendmentPDF(content, amendment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(pdf, []byte("%PDF")) || len(pdf) < 1000 {
+		t.Fatalf("invalid amendment PDF: %d bytes", len(pdf))
 	}
 }
