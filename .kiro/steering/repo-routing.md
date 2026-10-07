@@ -17,7 +17,8 @@ description: Mapa de repos y reglas de routing cross-repo
 | Alias          | Stack                               | Responsabilidad                                           |
 | ----------------| -------------------------------------| -----------------------------------------------------------|
 | infrastructure | TypeScript, Serverless Framework v4 | Infraestructura AWS (DynamoDB, S3, SSM, CDN, API Gateway) |
-| application    | Angular 22, Signals, TailwindCSS    | SPA: viajes, cotizaciones, pasajeros, dashboards          |
+| app-ngx-hub    | Angular 22, Signals, TailwindCSS    | SPA administrativa: viajes, contratos, cobranza y tesorería |
+| app-ngx-pay    | Angular 22, Signals, TailwindCSS    | SPA pública: consulta de cuotas, checkout y comprobantes   |
 | services       | Go 1.25, Echo v4, DynamoDB          | Backend: viajes, cotizaciones, contratos, destinos        |
 | authorizer     | TypeScript, Serverless Framework v4 | Lambda Authorizer compartido (JWT propio HMAC-SHA256)     |
 | orchestrator   | —                                   | Documentación centralizada, steering, estándares          |
@@ -30,7 +31,7 @@ mantención correctiva. Region us-west-2, no us-east-1.
 
 | Alias              | Directorio                     | Stack                                          | Reemplazado por            |
 | ------------------ | ------------------------------ | ---------------------------------------------- | -------------------------- |
-| legacy-application | `portal_admin_ng_dev_pri_usw2` | Angular 21, PrimeNG 21, @ngrx/signals          | application                |
+| legacy-application | `portal_admin_ng_dev_pri_usw2` | Angular 21, PrimeNG 21, @ngrx/signals          | app-ngx-hub                |
 | legacy-services    | `portal-admin-sls-dev-pri-usw2`| Serverless v4: Node.js 22, Go 1.24, Python     | services + authorizer      |
 
 Reglas rápidas:
@@ -46,17 +47,18 @@ Detalle completo en `docs/standards/architecture/legacy-systems.md`.
 
 ## Dominios
 
-| Ambiente | Frontend                         | API                                                   |
-| -------- | -------------------------------- | ----------------------------------------------------- |
-| dev      | nuevo.admin.dev.girasindomito.cl | API Gateway default (asignado automáticamente por AWS)|
-| prd      | nuevo.admin.girasindomito.cl     | API Gateway default (asignado automáticamente por AWS)|
+| Ambiente | Frontend administrativo           | Frontend de pagos             | API                                                   |
+| -------- | --------------------------------- | ----------------------------- | ----------------------------------------------------- |
+| dev      | nuevo.admin.dev.girasindomito.cl  | pagos.dev.girasindomito.cl    | API Gateway default (asignado automáticamente por AWS)|
+| prd      | nuevo.admin.girasindomito.cl      | pendiente                     | API Gateway default (asignado automáticamente por AWS)|
 
 ## Routing
 
 | Tipo de cambio                             | Repo destino   |
 | ------------------------------------------ | -------------- |
 | Infraestructura AWS compartida             | infrastructure |
-| UI, componentes, stores                    | application    |
+| UI administrativa, componentes, stores     | app-ngx-hub    |
+| Portal público de pagos                    | app-ngx-pay    |
 | Endpoints, lógica de negocio, API          | services       |
 | Validación de tokens, políticas de acceso  | authorizer     |
 | Estándares, steering, documentación        | orchestrator   |
@@ -67,7 +69,7 @@ Detalle completo en `docs/standards/architecture/legacy-systems.md`.
 
 1. **Contratos de API**: documentar en orquestador → implementar backend → consumir frontend
 2. **Nuevos módulos**: backend (handler+service+domain) + frontend (store, ruta, componentes)
-3. **Auth**: coordinar authorizer (validación de tokens) ↔ services (emisión de tokens) ↔ application (interceptores, guards)
+3. **Auth administrativo**: coordinar authorizer (validación de tokens) ↔ services (emisión de tokens) ↔ app-ngx-hub (interceptores, guards). `app-ngx-pay` solo consume contratos públicos explícitos del backend.
 4. **Commits**: siempre separados por repo. Nunca mezclar frontend y backend en un commit.
 
 ## Orden de Despliegue del API

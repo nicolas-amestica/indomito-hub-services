@@ -124,4 +124,11 @@
   - [ ] Desplegar GSI nuevo, `api-contract` y `api-payment`; comprobar lectores y retirar el GSI anterior en un segundo despliegue.
   - [ ] Recorrido autenticado DEV a cargo del usuario.
 
+- [x] Separar frontends administrativo y público (`FRONTEND-01`).
+  - [x] Crear `app-ngx-pay` en `ind-pay-app-ngx-pri-gh`, conservando Angular/PrimeNG/Tailwind y únicamente consulta, checkout, retorno y verificación pública.
+  - [x] Retirar del `app-ngx-hub` el entrypoint, rutas, servicios, configuraciones y scripts de build/deploy del portal público sin eliminar cobranza, tesorería ni comprobantes administrativos.
+  - [x] Dar a ambos repositorios configuración, pruebas, artefacto y scripts independientes; mantener el mismo backend y los recursos CDN/S3 DEV existentes.
+  - [x] Renombrar el alias del orquestador a `app-ngx-hub`, registrar `app-ngx-pay`, actualizar fuentes canónicas y sincronizar consumidores.
+  - [x] Validar pruebas y build DEV de ambos frontends, además de typecheck, pruebas y sync del orquestador. Sin despliegues.
+
 No marcar una etapa completa por existir modelos o pantallas: debe estar integrada y probada. No hay autorización para cargos reales ni cambios en PRD.

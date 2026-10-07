@@ -7,7 +7,8 @@ Estado: implementación en curso. No habilitar cobros reales hasta cerrar las pr
 | Repositorio | Responsabilidad |
 | --- | --- |
 | services | Contratos, dominio financiero, API, persistencia, comprobantes |
-| application | Puesta en marcha, anexos, cobranza, devoluciones, portal público |
+| app-ngx-hub | Puesta en marcha, anexos, cobranza, devoluciones y operación administrativa |
+| app-ngx-pay | Consulta y pago público de cuotas, retorno Khipu y verificación de comprobantes |
 | authorizer | Sesiones públicas acotadas y permisos administrativos |
 | infrastructure | DynamoDB, S3 privado, trabajadores, configuración SSM |
 | orchestrator | Contratos de integración y guía operativa |
@@ -34,6 +35,7 @@ Estado: implementación en curso. No habilitar cobros reales hasta cerrar las pr
 18. La misma solicitud versionada debe permitir que un futuro facturador certificado procese automáticamente boletas y facturas sin permisos para modificar cuotas, caja, comprobantes ni eventos financieros. Los datos tributarios personales permanecen fuera de BI.
 19. Aprobar un contrato conserva el PDF definitivo generado por el sistema y abre una obligación documental independiente: cargar posteriormente una copia PDF firmada presencialmente por todas las partes. La carga es obligatoria, pero no tiene fecha máxima ni estado de atraso y su ausencia no desaprueba el contrato ni bloquea pagos o puesta en marcha.
 20. El PDF firmado nunca reemplaza ni modifica el PDF aprobado. Cada carga publicada es inmutable, queda vinculada a la versión y huella del contrato aprobado, registra huella, tamaño, actor y fecha, y permite reemplazo solo mediante una versión nueva con motivo auditado. Solo administración puede cargar, consultar o descargar estos documentos.
+21. Los frontends administrativo y público son aplicaciones Angular independientes. `app-ngx-hub` no compila, empaqueta ni despliega rutas o servicios del portal público; `app-ngx-pay` no contiene autenticación, IAM, menús, cobranza, tesorería ni otra feature administrativa. Ambos conservan Angular 22, PrimeNG 22, TailwindCSS 4, el mismo lenguaje visual y el mismo backend, pero tienen repositorio, configuración, pruebas, artefacto, bucket/CDN y ciclo de despliegue propios. La separación no modifica contratos HTTP ni obliga a cambios de backend.
 
 ## Hallazgos que condicionan la migración
 

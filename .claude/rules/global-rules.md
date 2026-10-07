@@ -13,7 +13,7 @@
 
 - **Producto**: Indómito Hub — plataforma de gestión de viajes con especialización en giras de estudios
 - **Arquitectura**: multi-repo con orquestador centralizado (`orchestrator`)
-- **Repos**: `application` (Angular), `services` (Go microservicios), `authorizer` (Lambda Authorizer TypeScript), `infrastructure` (Infraestructura AWS)
+- **Repos**: `app-ngx-hub` (Angular administrativo), `app-ngx-pay` (Angular público de pagos), `services` (Go microservicios), `authorizer` (Lambda Authorizer TypeScript), `infrastructure` (Infraestructura AWS)
 - **Región AWS**: us-east-1 (Norte de Virginia) para todos los servicios
 - **Perfiles AWS**: `pa-dev` (desarrollo), `pa-prd` (producción)
 - **Ambientes**: dev y prd (sin QA)
@@ -73,7 +73,8 @@
 
 | Repo           | Módulo referencia        | Paradigma             |
 | -------------- | ------------------------ | --------------------- |
-| application    | `src/app/indomito-hub/programs` | Feature autocontenida con rutas, stores, servicios y tipos |
+| app-ngx-hub    | `src/app/indomito-hub/programs` | Feature administrativa autocontenida con rutas, stores, servicios y tipos |
+| app-ngx-pay    | `src/app/payment-portal` | Portal público mínimo, sin sesión ni features administrativas |
 | services       | `services/api-catalog`, `services/api-program` | Endpoint-per-function |
 | authorizer     | `src/functions/authorize.ts` | Handler unico + politicas IAM |
 
@@ -104,7 +105,8 @@ tipo(scope): descripcion breve en espanol sin tildes
 | Repo           | Scopes                                                                                   |
 | -------------- | ---------------------------------------------------------------------------------------- |
 | infrastructure | `ddb`, `s3`, `ssm`, `cdn`, `waf`, `iot`, `api-gateway`, `config`, `deps`                |
-| application    | `core`, `app-auth`, `accounting`, `analytics`, `assign-installment`, `shared`, `client`, `configuration`, `documents`, `help`, `home`, `inbox`, `informative-media`, `layout`, `meet`, `passenger`, `payment`, `payment-history`, `profile`, `program`, `ticket`, `tools` |
+| app-ngx-hub    | `core`, `app-auth`, `accounting`, `analytics`, `assign-installment`, `shared`, `client`, `configuration`, `documents`, `help`, `home`, `inbox`, `informative-media`, `layout`, `meet`, `passenger`, `payment`, `payment-history`, `profile`, `program`, `ticket`, `tools` |
+| app-ngx-pay    | `core`, `shared`, `payment`, `receipt`, `configuration`, `tools` |
 | services       | `auth`, `accounting`, `balance`, `configuration`, `contract`, `entity`, `extraction`, `favorites`, `maintainer`, `meet`, `notification`, `payment`, `program`, `ticket`, `tools`, `whatsapp-agent`, `trigger`, `config`, `deps` |
 | authorizer     | `authorizer`, `auth`, `iot`, `config`, `deps`                                            |
 | orchestrator   | `docs`, `tools`, `steering`, `workspace`, `config`                                       |
@@ -114,7 +116,7 @@ tipo(scope): descripcion breve en espanol sin tildes
 > Authorizer que valida esos tokens en el API Gateway compartido (ya existe).
 > Son repos distintos — usar el scope del repo que se modifica.
 >
-> La mayoría de scopes de `services` y `application` son de módulos aún no
+> La mayoría de scopes de `services` y `app-ngx-hub` son de módulos aún no
 > implementados. Ver la tabla de correspondencia módulo ↔ servicio ↔ scope en
 > `docs/standards/product/module-definitions.md` para saber cuáles existen hoy.
 
@@ -145,7 +147,8 @@ Título: `tipo(scope): descripcion breve sin tildes` (max 70 chars). Descripció
 | Alias          | Stack                               | Responsabilidad                                           |
 | ----------------| -------------------------------------| -----------------------------------------------------------|
 | infrastructure | TypeScript, Serverless Framework v4 | Infraestructura AWS (DynamoDB, S3, SSM, CDN, API Gateway) |
-| application    | Angular 22, Signals, TailwindCSS    | SPA: viajes, cotizaciones, pasajeros, dashboards          |
+| app-ngx-hub    | Angular 22, Signals, TailwindCSS    | SPA administrativa: viajes, contratos, cobranza y tesorería |
+| app-ngx-pay    | Angular 22, Signals, TailwindCSS    | SPA pública: consulta de cuotas, checkout y comprobantes   |
 | services       | Go 1.25, Echo v4, DynamoDB          | Backend: viajes, cotizaciones, contratos, destinos        |
 | authorizer     | TypeScript, Serverless Framework v4 | Lambda Authorizer compartido (JWT propio HMAC-SHA256)     |
 | orchestrator   | —                                   | Documentación centralizada, steering, estándares          |
@@ -158,7 +161,7 @@ mantención correctiva. Region us-west-2, no us-east-1.
 
 | Alias              | Directorio                     | Stack                                          | Reemplazado por            |
 | ------------------ | ------------------------------ | ---------------------------------------------- | -------------------------- |
-| legacy-application | `portal_admin_ng_dev_pri_usw2` | Angular 21, PrimeNG 21, @ngrx/signals          | application                |
+| legacy-application | `portal_admin_ng_dev_pri_usw2` | Angular 21, PrimeNG 21, @ngrx/signals          | app-ngx-hub                |
 | legacy-services    | `portal-admin-sls-dev-pri-usw2`| Serverless v4: Node.js 22, Go 1.24, Python     | services + authorizer      |
 
 Reglas rápidas:
@@ -174,17 +177,18 @@ Detalle completo en `docs/standards/architecture/legacy-systems.md`.
 
 ## Dominios
 
-| Ambiente | Frontend                         | API                                                   |
-| -------- | -------------------------------- | ----------------------------------------------------- |
-| dev      | nuevo.admin.dev.girasindomito.cl | API Gateway default (asignado automáticamente por AWS)|
-| prd      | nuevo.admin.girasindomito.cl     | API Gateway default (asignado automáticamente por AWS)|
+| Ambiente | Frontend administrativo           | Frontend de pagos             | API                                                   |
+| -------- | --------------------------------- | ----------------------------- | ----------------------------------------------------- |
+| dev      | nuevo.admin.dev.girasindomito.cl  | pagos.dev.girasindomito.cl    | API Gateway default (asignado automáticamente por AWS)|
+| prd      | nuevo.admin.girasindomito.cl      | pendiente                     | API Gateway default (asignado automáticamente por AWS)|
 
 ## Routing
 
 | Tipo de cambio                             | Repo destino   |
 | ------------------------------------------ | -------------- |
 | Infraestructura AWS compartida             | infrastructure |
-| UI, componentes, stores                    | application    |
+| UI administrativa, componentes, stores     | app-ngx-hub    |
+| Portal público de pagos                    | app-ngx-pay    |
 | Endpoints, lógica de negocio, API          | services       |
 | Validación de tokens, políticas de acceso  | authorizer     |
 | Estándares, steering, documentación        | orchestrator   |
@@ -195,7 +199,7 @@ Detalle completo en `docs/standards/architecture/legacy-systems.md`.
 
 1. **Contratos de API**: documentar en orquestador → implementar backend → consumir frontend
 2. **Nuevos módulos**: backend (handler+service+domain) + frontend (store, ruta, componentes)
-3. **Auth**: coordinar authorizer (validación de tokens) ↔ services (emisión de tokens) ↔ application (interceptores, guards)
+3. **Auth administrativo**: coordinar authorizer (validación de tokens) ↔ services (emisión de tokens) ↔ app-ngx-hub (interceptores, guards). `app-ngx-pay` solo consume contratos públicos explícitos del backend.
 4. **Commits**: siempre separados por repo. Nunca mezclar frontend y backend en un commit.
 
 ## Orden de Despliegue del API
@@ -230,7 +234,8 @@ Para features cross-repo que necesitan la experiencia completa de Kiro:
 | Criterio                          | Repo                                  |
 | --------------------------------- | ------------------------------------- |
 | Backend con nuevo módulo/endpoint | `services`                            |
-| Feature principalmente de UI      | `application`                         |
+| Feature administrativa de UI      | `app-ngx-hub`                         |
+| Feature pública de pagos          | `app-ngx-pay`                         |
 | Infraestructura AWS compartida    | `infrastructure`                      |
 | Si no hay repo dominante          | `services` (mayor superficie)         |
 

@@ -32,7 +32,8 @@ Para features cross-repo que necesitan la experiencia completa de Kiro:
 | Criterio                          | Repo                                  |
 | --------------------------------- | ------------------------------------- |
 | Backend con nuevo módulo/endpoint | `services`                            |
-| Feature principalmente de UI      | `application`                         |
+| Feature administrativa de UI      | `app-ngx-hub`                         |
+| Feature pública de pagos          | `app-ngx-pay`                         |
 | Infraestructura AWS compartida    | `infrastructure`                      |
 | Si no hay repo dominante          | `services` (mayor superficie)         |
 

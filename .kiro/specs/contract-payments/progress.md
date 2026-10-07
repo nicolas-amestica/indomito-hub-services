@@ -80,6 +80,7 @@ Actualizado: 2026-10-07. Tablero principal de seguimiento solicitado por el usua
 | ACCESS-02 | Código de pago accesible en administración | Cerrada localmente 2026-10-07: aprobación nueva conserva código administrativo; contratos existentes se resuelven por clave conocida desde el contrato aprobado, sin listado público ni migración masiva. |
 | FIX-01 | Corregir siete endpoints administrativos con 502 | Cerrada localmente 2026-10-07: CloudWatch y rol efectivo confirmaron que todos cargaban un secreto SSM innecesario sin permiso. Se separó bootstrap base/seguro, se conservó mínimo privilegio y se añadió lectura contractual solo al fallback de acceso. |
 | UX-01 | Fechas, requeridos, abono especial y sexo | Cerrada localmente 2026-10-07: DatePicker en abono grupal y fecha unificada de primera cuota, payloads históricos preservados, predeterminado $3.000.000 y sexo limitado a dos opciones en UI/Excel/importador. |
+| FRONTEND-01 | Separar `app-ngx-hub` y `app-ngx-pay` | Cerrada localmente 2026-10-07: dos repositorios Angular con entrypoints, dependencias, pruebas, artefactos y deploys independientes; el Hub conserva solo administración y Pay solo el portal público. Backend intacto y orquestador sincronizado. Sin despliegues. |
 
 ## 2. En curso
 
@@ -96,6 +97,8 @@ Actualizado: 2026-10-07. Tablero principal de seguimiento solicitado por el usua
 - AWS-02 y la validación visual autenticada de QA-01 requieren datos/credenciales funcionales de prueba y el despliegue del usuario.
 
 ## Registro de actualizaciones
+
+- **2026-10-07:** FRONTEND-01 cerrado localmente. Se creó `ind-pay-app-ngx-pri-gh` desde el historial del frontend existente con remoto de solo lectura, se redujo a la superficie pública de pagos y se normalizaron su proyecto Angular, puerto 4400, dependencias, artefacto y script DEV. `ind-hub-app-ngx-pri-gh` dejó de contener el portal, sus entrypoints y builds alternativos, conservando módulos financieros administrativos. El orquestador reemplazó el alias anterior por `app-ngx-hub`, agregó `app-ngx-pay` y sincronizó el contexto de ambos. No hubo cambios de backend ni despliegues.
 
 - **2026-10-07:** corregida la estrategia de despliegue CONTRACT-05 después de que AWS rechazara modificar la proyección del GSI existente. La fase de expansión conserva `gsi-periodo-resumen-index`, crea `gsi-periodo-documental-index` y cambia los lectores de contratos y alertas. Después de desplegar/verificar ambos servicios se retirará el índice anterior para volver a un solo GSI. No usar eliminación manual, Scan ni recreación con downtime.
 - **2026-10-07:** CONTRACT-05 cerrado en alcance local. El estado firmado es independiente de aprobación/cobranza; históricos aprobados se muestran pendientes sin migración. La API prepara PUT S3 prefirmado, verifica hasta 25 MiB, `%PDF-`, tipo, tamaño y SHA-256, y publica una sola versión activa con condición transaccional, historial y recuperación idempotente. Angular distingue generado/firmado, exige confirmación, motivo al reemplazar y pagina el historial. Go race/vet, build y 15 checks de `api-contract`, 425 pruebas Angular, build DEV y prueba/typecheck de infraestructura correctos. No se modificó IAM porque `CONTRACT_CREATE` ya autoriza `/contratos`; sin despliegues.

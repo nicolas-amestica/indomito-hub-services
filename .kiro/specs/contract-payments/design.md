@@ -74,6 +74,16 @@ Una confirmación Khipu y su solicitud tributaria se escriben en la misma transa
 
 El código vigente de acceso se lee por claves conocidas desde la aprobación o el contrato aprobado y se expone únicamente a administración. No se lista, registra en logs ni devuelve por endpoints públicos. Contratos nuevos guardan también el valor administrativo en la aprobación; los existentes se resuelven por `GetItem` directo, sin migración masiva ni GSI.
 
+## Separación de frontends
+
+`app-ngx-hub` conserva el repositorio físico `ind-hub-app-ngx-pri-gh` y contiene exclusivamente la SPA administrativa autenticada. `app-ngx-pay` vive en `ind-pay-app-ngx-pri-gh` y contiene exclusivamente el portal público. Cada repositorio tiene un único `main.ts`, `angular.json`, `package.json`, conjunto de pruebas y script de despliegue; no existe un build alternativo que compile el otro frontend.
+
+La separación es física, no un paquete compartido en tiempo de ejecución. El preset PrimeNG, los tokens visuales y los helpers mínimos se copiaron al nuevo repositorio al crear la frontera para conservar el mismo stack; desde ese punto cada cambio transversal debe coordinarse y validarse en ambos. Esto evita que una actualización o dependencia administrativa aumente el bundle o la superficie pública. No se crea una librería común ni se modifica el backend en esta etapa.
+
+En DEV, `app-ngx-hub` continúa publicando administración y `app-ngx-pay` publica `pagos.dev.girasindomito.cl` en el bucket/CDN existente de pagos. El portal se ejecuta localmente en el puerto 4400. Un despliegue del Hub nunca sincroniza el bucket de pagos y viceversa. La futura habilitación productiva del portal exige su propia configuración de infraestructura y no se infiere por disponer de `environment.production.ts`.
+
+El orquestador usa únicamente los aliases `app-ngx-hub` y `app-ngx-pay`, distribuye contexto Angular a ambos y mantiene rutas/scopes diferenciados. Los contratos HTTP, sesiones públicas acotadas, CORS y servicios Go permanecen sin cambios.
+
 ## Seguridad y operaciones pendientes
 
 Authorizer compartido valida JWT público con audience/tipo y alcance de una participación, distinto del administrativo. Entrada pública RUT+código limita intentos antes de revelar existencia; nunca incluir secretos en URL/logs. Khipu mantiene DEMO BANK en DEV y validación autoritativa de receptor, moneda, referencia y monto. Confirmación discrepante se registra como fondos por resolver.
