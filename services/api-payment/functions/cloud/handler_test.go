@@ -92,7 +92,8 @@ func (g *fakeGateway) Verify(_ context.Context, id, ref string, amount int64) (p
 func setup() (*App, *fakeDB, *fakeGateway) {
 	d := &fakeDB{items: map[string]map[string]types.AttributeValue{}}
 	g := &fakeGateway{}
-	return &App{DB: d, Gateway: g, Table: "test", BaseURL: "https://api.example", WebhookSecret: "synthetic-secret", Now: time.Now}, d, g
+	webhookSigningKeyFixture := "synthetic-webhook-key"
+	return &App{DB: d, Gateway: g, Table: "test", BaseURL: "https://api.example", WebhookSecret: webhookSigningKeyFixture, Now: time.Now}, d, g
 }
 func req(id, owner string) events.APIGatewayV2HTTPRequest {
 	r := events.APIGatewayV2HTTPRequest{Body: "{}", Headers: map[string]string{"Idempotency-Key": id}, PathParameters: map[string]string{"id": id}}

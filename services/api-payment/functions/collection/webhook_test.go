@@ -46,7 +46,8 @@ func webhookFixture(t *testing.T) (WebhookApp, *transactionDB, *webhookVerifier,
 		t.Fatal(err)
 	}
 	v := &webhookVerifier{verifierFake: verifierFake{result: providers.VerifiedPayment{PaymentID: "abcdefghijkl", TransactionID: id, ReceiverID: 123, Amount: "20000", Currency: "CLP", Status: "done", StatusDetail: "normal", ConciliationDate: now}}}
-	a := WebhookApp{Accounts: s, Verifier: v, Secret: "synthetic-webhook-secret", Zone: time.UTC, Now: func() time.Time { return now }}
+	webhookSigningKeyFixture := "synthetic-webhook-key"
+	a := WebhookApp{Accounts: s, Verifier: v, Secret: webhookSigningKeyFixture, Zone: time.UTC, Now: func() time.Time { return now }}
 	return a, db, v, signedWebhook(`{"payment_id":"abcdefghijkl","transaction_id":"`+id+`"}`, a.Secret, now)
 }
 

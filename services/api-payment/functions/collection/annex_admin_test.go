@@ -70,7 +70,8 @@ func TestAnnexAdminCreatesPreviewsAndAppliesWithoutPersistingRawRUT(t *testing.T
 
 func TestAnnexAdminRejectsPublicIdentityAndInjectedAudit(t *testing.T) {
 	s, db, input := annexDraftFixture(t)
-	app := AnnexAdminApp{Accounts: s, LookupSecret: "annex-admin-test-secret-with-32-bytes", Now: time.Now}
+	lookupSigningKeyFixture := "annex-admin-test-key-with-32-bytes"
+	app := AnnexAdminApp{Accounts: s, LookupSecret: lookupSigningKeyFixture, Now: time.Now}
 	req := annexAdminRequest("POST", input.TripID, "", map[string]any{"id": input.ID, "reason": "Motivo valido", "withdrawals": input.Withdrawals, "admissions": input.Admissions, "audit": map[string]any{"actor": "forged"}})
 	response, err := app.HandleCreateAnnex(context.Background(), req)
 	if err != nil || response.StatusCode != 400 || db.commits != 0 {
