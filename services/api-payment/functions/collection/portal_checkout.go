@@ -20,14 +20,18 @@ type PortalApp struct {
 	URLs            CheckoutURLs
 	Now             func() time.Time
 	CheckoutEnabled bool
+	Recaptcha       interface {
+		Assess(context.Context, string, string, string, string) error
+	}
 }
 
 // PortalAttempt excluye correo, referencias bancarias y datos internos de la cuenta.
 type PortalAttempt struct {
-	ID           string `json:"id"`
-	Status       string `json:"status"`
-	PaymentURL   string `json:"paymentUrl,omitempty"`
-	ReceiptReady bool   `json:"receiptReady,omitempty"`
+	ID            string `json:"id"`
+	Status        string `json:"status"`
+	PaymentURL    string `json:"paymentUrl,omitempty"`
+	ReceiptReady  bool   `json:"receiptReady,omitempty"`
+	LastCheckedAt string `json:"lastCheckedAt,omitempty"`
 }
 
 func portalResponse(status int, data any) events.APIGatewayV2HTTPResponse {
@@ -55,9 +59,10 @@ func (a PortalApp) HandleCheckout(ctx context.Context, req events.APIGatewayV2HT
 		return portalFailure(503)
 	}
 	var body struct {
-		Email string `json:"email"`
+		Email          string `json:"email"`
+		RecaptchaToken string `json:"recaptchaToken"`
 	}
-	if len(req.Body) > 1024 || decodeAdmin(req, &body) != nil {
+	if len(req.Body) > 12*1024 || decodeAdmin(req, &body) != nil {
 		return portalFailure(400)
 	}
 	address, err := mail.ParseAddress(body.Email)
@@ -75,6 +80,9 @@ func (a PortalApp) HandleCheckout(ctx context.Context, req events.APIGatewayV2HT
 	}
 	if !validPortalID(requestID) {
 		return portalFailure(400)
+	}
+	if a.Recaptcha == nil || a.Recaptcha.Assess(ctx, body.RecaptchaToken, "khipu_checkout", req.RequestContext.HTTP.SourceIP, req.Headers["user-agent"]) != nil {
+		return portalFailure(403)
 	}
 	account, err := a.Accounts.PassengerAccount(ctx, req)
 	if err != nil {
@@ -105,8 +113,11 @@ func (a PortalApp) HandleCheckout(ctx context.Context, req events.APIGatewayV2HT
 		return portalFailure(409)
 	}
 	// Una repetición después de confirmación no inicia el cobro de la cuota siguiente.
-	if current, readErr := a.attemptView(ctx, account, id); readErr == nil && (current.Status == "CONFIRMED" || current.Status == "REVIEW_REQUIRED") {
-		return portalResponse(200, current)
+	if current, readErr := a.attemptView(ctx, account, id); readErr == nil {
+		switch current.Status {
+		case "CONFIRMED", "REVIEW_REQUIRED", "PROVIDER_REVIEW_REQUIRED", "UNPAID_FINAL", "REVERSED":
+			return portalResponse(200, current)
+		}
 	}
 	if account.RequiresPaymentReview() {
 		return portalFailure(409)
@@ -187,6 +198,18 @@ func (a PortalApp) attemptView(ctx context.Context, account domain.Account, id s
 	if !errors.Is(outcomeErr, ErrNotFound) {
 		return PortalAttempt{}, outcomeErr
 	}
+	providerState, providerStateErr := a.Accounts.read(ctx, "ATTEMPT#"+id, "PROVIDER_STATUS")
+	if providerStateErr == nil {
+		if providerState.AccountID != account.ID || providerState.AttemptID != id || providerState.Status == "" {
+			return PortalAttempt{}, ErrReplayMismatch
+		}
+		view.Status = providerState.Status
+		if providerState.CheckedAt > 0 {
+			view.LastCheckedAt = time.Unix(providerState.CheckedAt, 0).UTC().Format(time.RFC3339)
+		}
+	} else if !errors.Is(providerStateErr, ErrNotFound) {
+		return PortalAttempt{}, providerStateErr
+	}
 	checkout, err := a.Accounts.read(ctx, "ATTEMPT#"+id, "CHECKOUT")
 	if errors.Is(err, ErrNotFound) {
 		return view, nil
@@ -211,7 +234,7 @@ func (a PortalApp) attemptView(ctx context.Context, account domain.Account, id s
 	if !errors.Is(err, ErrNotFound) {
 		return PortalAttempt{}, err
 	}
-	if account.Active && !account.RequiresPaymentReview() && account.OpenAttemptID == id && checkout.Checkout.ExpiresAt.After(a.Now()) {
+	if view.Status == "RECONCILIATION_REQUIRED" && account.Active && !account.RequiresPaymentReview() && account.OpenAttemptID == id && checkout.Checkout.ExpiresAt.After(a.Now()) {
 		view.Status = "PENDING_PAYMENT"
 		view.PaymentURL = checkout.Checkout.PaymentURL
 	}

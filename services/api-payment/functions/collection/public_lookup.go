@@ -24,7 +24,8 @@ type PublicApp struct {
 	SessionSecret string
 	// CheckoutEnabled se habilita únicamente desde configuración segura del backend.
 	// El valor cero mantiene el portal en modo consulta ante despliegues incompletos.
-	CheckoutEnabled bool
+	CheckoutEnabled  bool
+	RecaptchaSiteKey string
 }
 
 type publicLookupRequest struct {
@@ -44,18 +45,22 @@ type PublicInstallment struct {
 
 // PublicAccount es una vista de consulta; esta etapa todavía no habilita checkout.
 type PublicAccount struct {
-	ReviewRequired  bool                `json:"reviewRequired"`
-	ReviewAttemptID string              `json:"reviewAttemptId,omitempty"`
-	OpenAttemptID   string              `json:"openAttemptId,omitempty"`
-	Session         *PassengerSession   `json:"session,omitempty"`
-	Active          bool                `json:"active"`
-	Free            bool                `json:"free"`
-	CheckoutEnabled bool                `json:"checkoutEnabled"`
-	Installments    []PublicInstallment `json:"installments"`
+	ReviewRequired   bool                `json:"reviewRequired"`
+	ReviewAttemptID  string              `json:"reviewAttemptId,omitempty"`
+	OpenAttemptID    string              `json:"openAttemptId,omitempty"`
+	Session          *PassengerSession   `json:"session,omitempty"`
+	Active           bool                `json:"active"`
+	Free             bool                `json:"free"`
+	CheckoutEnabled  bool                `json:"checkoutEnabled"`
+	RecaptchaSiteKey string              `json:"recaptchaSiteKey,omitempty"`
+	Installments     []PublicInstallment `json:"installments"`
 }
 
-func publicAccountView(account collection.Account, checkoutEnabled bool) PublicAccount {
+func publicAccountView(account collection.Account, checkoutEnabled bool, recaptchaSiteKey ...string) PublicAccount {
 	view := PublicAccount{Active: account.Active, Free: account.Free, OpenAttemptID: account.OpenAttemptID, CheckoutEnabled: checkoutEnabled, Installments: []PublicInstallment{}}
+	if checkoutEnabled && len(recaptchaSiteKey) == 1 {
+		view.RecaptchaSiteKey = recaptchaSiteKey[0]
+	}
 	view.ReviewRequired = account.RequiresPaymentReview()
 	view.ReviewAttemptID = account.ReviewAttemptID
 	for i, quota := range account.Installments {
@@ -187,7 +192,7 @@ func (a PublicApp) HandleLookup(ctx context.Context, req events.APIGatewayV2HTTP
 		}
 		return lookupFailure(req, apperr.CodeResourceNotFound)
 	}
-	view := publicAccountView(account, a.CheckoutEnabled)
+	view := publicAccountView(account, a.CheckoutEnabled, a.RecaptchaSiteKey)
 	if a.SessionSecret != "" {
 		codeKey, keyErr := paymentaccess.CodeKey(a.LookupSecret, body.TripCode)
 		if keyErr != nil {

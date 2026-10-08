@@ -11,6 +11,8 @@ const tableStreamArn = "${cf:indomito-hub-infra-ddb-dev.PagosTableStreamArn}";
 const contractsArn = "${cf:indomito-hub-infra-ddb-dev.ProgramasTableArn}";
 const contractsName = "${cf:indomito-hub-infra-ddb-dev.ProgramasTableName}";
 const baseUrl = "${cf:indomito-hub-infra-api-gateway-dev.HttpApiUrl}";
+const reconciliationQueueArn = { 'Fn::GetAtt': ['PaymentReconciliationQueue', 'Arn'] };
+const reconciliationQueueUrl = { Ref: 'PaymentReconciliationQueue' } as unknown as string;
 const secrets = ["api-key", "webhook-secret", "receiver-id"].map((name) =>
   ssmReadPolicy({"Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/dev/payments/khipu/${name}`}),
 );
@@ -20,6 +22,7 @@ const write: IamStatement = { Effect:"Allow", Action:["dynamodb:GetItem","dynamo
 const contractRead: IamStatement = { Effect:"Allow", Action:["dynamodb:GetItem"], Resource:contractsArn };
 const lookupSecret = ssmReadPolicy({"Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/dev/payments/lookup-secret`});
 const sessionSecret = ssmReadPolicy({"Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/dev/auth/payment-session-secret`});
+const recaptchaConfig = ssmReadPolicy({"Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/dev/payments/recaptcha/config`});
 const lookupRead: IamStatement = {Effect:"Allow",Action:["dynamodb:GetItem"],Resource:tableArn,Condition:{"ForAllValues:StringLike":{"dynamodb:LeadingKeys":["CODE#*","TRIP#*","ACCOUNT#*","RATE#*"]}}};
 const rateWrite: IamStatement = {Effect:"Allow",Action:["dynamodb:PutItem"],Resource:tableArn,Condition:{"ForAllValues:StringLike":{"dynamodb:LeadingKeys":["RATE#*"]}}};
 const annexRead:IamStatement={Effect:'Allow',Action:['dynamodb:GetItem','dynamodb:Query'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['TRIP#*','ACCOUNT#*']}}};
@@ -82,7 +85,7 @@ const endpoints: GoHttpEndpoint[] = [
   {name:"fn-crear-checkout-cuota-v1",method:"POST",path:"/pagos/portal/checkout",public:false,timeout:29,policies:[
     activePlanCheck,
     {Effect:"Allow",Action:["dynamodb:GetItem"],Resource:tableArn,Condition:{"ForAllValues:StringLike":{"dynamodb:LeadingKeys":["CODE#*","TRIP#*","ACCOUNT#*","ATTEMPT#*","COMMAND#*"]}}},
-    {Effect:"Allow",Action:["dynamodb:PutItem"],Resource:tableArn,Condition:{"ForAllValues:StringLike":{"dynamodb:LeadingKeys":["ACCOUNT#*","ATTEMPT#*","COMMAND#*"]}}},...secrets,
+    {Effect:"Allow",Action:["dynamodb:PutItem","dynamodb:TransactWriteItems"],Resource:tableArn,Condition:{"ForAllValues:StringLike":{"dynamodb:LeadingKeys":["ACCOUNT#*","ATTEMPT#*","COMMAND#*","RECONCILIATION#PENDING"]}}},...secrets,recaptchaConfig,
   ]},
   {name:"fn-obtener-intento-cuota-v1",method:"GET",path:"/pagos/portal/intentos/{id}",public:false,timeout:10,policies:[
     {Effect:"Allow",Action:["dynamodb:GetItem"],Resource:tableArn,Condition:{"ForAllValues:StringLike":{"dynamodb:LeadingKeys":["CODE#*","TRIP#*","ACCOUNT#*","ATTEMPT#*","COMMAND#*"]}}},
@@ -91,6 +94,17 @@ const endpoints: GoHttpEndpoint[] = [
     {Effect:"Allow",Action:["dynamodb:GetItem"],Resource:tableArn,Condition:{"ForAllValues:StringLike":{"dynamodb:LeadingKeys":["CODE#*","TRIP#*","ACCOUNT#*"]}}},
   ]},
   {name:'fn-conciliar-intento-khipu-v1',method:'POST',path:'/pagos/intentos/{attemptId}/conciliacion',public:false,timeout:29,policies:[activePlanCheck,{Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['ATTEMPT#*','ACCOUNT#*','TRIP#*','COMMAND#*','REFERENCE#*']}}},{Effect:'Allow',Action:['dynamodb:PutItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['ATTEMPT#*','ACCOUNT#*','TRIP#*','COMMAND#*','REFERENCE#*','RECEIPT#*','JOB#*','CASH#*','TAX_REQUEST#*','TAX_QUEUE#PENDING']}}},...secrets]},
+  {name:'fn-conciliar-intentos-automaticamente-v1',timeout:29,memorySize:128,events:[{sqs:{arn:reconciliationQueueArn,batchSize:1,functionResponseType:'ReportBatchItemFailures'}}],policies:[
+    {Effect:'Allow',Action:['sqs:ReceiveMessage','sqs:DeleteMessage','sqs:GetQueueAttributes','sqs:ChangeMessageVisibility'],Resource:reconciliationQueueArn},
+    activePlanCheck,
+    {Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['ATTEMPT#*','ACCOUNT#*','TRIP#*','COMMAND#*','REFERENCE#*']}}},
+    {Effect:'Allow',Action:['dynamodb:PutItem','dynamodb:DeleteItem','dynamodb:TransactWriteItems'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['RECONCILIATION#PENDING','ATTEMPT#*','ACCOUNT#*','TRIP#*','COMMAND#*','REFERENCE#*','RECEIPT#*','JOB#*','CASH#*','TAX_REQUEST#*','TAX_QUEUE#PENDING']}}},
+    ...secrets,
+  ]},
+  {name:'fn-programar-conciliacion-khipu-v1',timeout:10,memorySize:128,env:{PAYMENT_RECONCILIATION_QUEUE_URL:reconciliationQueueUrl},events:[{stream:{type:'dynamodb',arn:tableStreamArn,startingPosition:'LATEST',batchSize:1,maximumRetryAttempts:5,maximumRecordAgeInSeconds:3600,bisectBatchOnFunctionError:true,functionResponseType:'ReportBatchItemFailures',filterPatterns:[{eventName:['INSERT'],dynamodb:{NewImage:{pk:{S:['RECONCILIATION#PENDING']},status:{S:['PENDING']}}}}]}}],policies:[
+    {Effect:'Allow',Action:['sqs:SendMessage'],Resource:reconciliationQueueArn},
+    {Effect:'Allow',Action:['dynamodb:DescribeStream','dynamodb:GetRecords','dynamodb:GetShardIterator','dynamodb:ListStreams'],Resource:tableStreamArn},
+  ]},
   {name:"fn-notificacion-cuota-khipu-v1",method:"POST",path:"/pagos/cuotas/khipu/notificaciones",public:true,timeout:29, policies:[
     {Effect:"Allow",Action:["dynamodb:GetItem"],Resource:tableArn,Condition:{"ForAllValues:StringLike":{"dynamodb:LeadingKeys":["ATTEMPT#*","ACCOUNT#*","TRIP#*","COMMAND#*","REFERENCE#*"]}}},
     {Effect:"Allow",Action:["dynamodb:PutItem"],Resource:tableArn,Condition:{"ForAllValues:StringLike":{"dynamodb:LeadingKeys":["PROVIDER_NOTIFICATION#*","PROVIDER_JOB#*"]}}},
@@ -103,7 +117,7 @@ const endpoints: GoHttpEndpoint[] = [
     {Effect:"Allow",Action:["dynamodb:DescribeStream","dynamodb:GetRecords","dynamodb:GetShardIterator","dynamodb:ListStreams"],Resource:tableStreamArn},
     ...secrets,
   ]},
-  {name:"fn-consultar-cuotas-v1",method:"POST",path:"/pagos/consultas",public:true,timeout:10, policies:[lookupRead,rateWrite,lookupSecret,sessionSecret]},
+  {name:"fn-consultar-cuotas-v1",method:"POST",path:"/pagos/consultas",public:true,timeout:10, policies:[lookupRead,rateWrite,lookupSecret,sessionSecret,recaptchaConfig]},
   {name:"fn-obtener-puesta-marcha-v1",method:"GET",path:"/pagos/contratos/{id}/puesta-en-marcha",public:false,timeout:29, policies:[contractRead,read,lookupSecret]},
   {name:"fn-confirmar-puesta-marcha-v1",method:"POST",path:"/pagos/contratos/{id}/puesta-en-marcha",public:false,timeout:29, policies:[contractRead,write,lookupSecret]},
   {name:"fn-configuracion-pagos-v1",method:"GET",path:"/pagos/configuracion",public:false,timeout:29, policies:secrets},
@@ -113,6 +127,13 @@ const endpoints: GoHttpEndpoint[] = [
   {name:"fn-notificacion-khipu-v1",method:"POST",path:"/pagos/khipu/notificaciones",public:true,timeout:29, policies:[write, ...secrets]},
   {name:"fn-retorno-pago-v1",method:"GET",path:"/pagos/retorno",public:true,timeout:29, policies:[]},
 ];
-module.exports = buildGoServiceServerless(ApiServices.Payment, endpoints, {
+const configuration = buildGoServiceServerless(ApiServices.Payment, endpoints, {
   env: { PAYMENTS_TABLE_NAME: tableName, PAYMENTS_BASE_URL: baseUrl, PAYMENTS_PORTAL_URL:'https://pagos.dev.girasindomito.cl', PAYMENTS_CHECKOUT_ENABLED:'true', PROGRAMS_TABLE_NAME:contractsName, RECEIPTS_BUCKET_NAME:'${cf:indomito-hub-infra-s3-dev.ReceiptsBucketName}' },
 });
+configuration.resources ??= { Resources: {} };
+configuration.resources.Resources = {
+  ...(configuration.resources.Resources ?? {}),
+  PaymentReconciliationDLQ: { Type:'AWS::SQS::Queue', Properties:{MessageRetentionPeriod:1209600,SqsManagedSseEnabled:true}},
+  PaymentReconciliationQueue: { Type:'AWS::SQS::Queue', Properties:{VisibilityTimeout:60,MessageRetentionPeriod:1209600,SqsManagedSseEnabled:true,RedrivePolicy:{deadLetterTargetArn:{'Fn::GetAtt':['PaymentReconciliationDLQ','Arn']},maxReceiveCount:5}}},
+};
+module.exports = configuration;

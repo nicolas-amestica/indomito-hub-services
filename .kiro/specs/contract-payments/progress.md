@@ -1,6 +1,6 @@
 # Avance del sistema de pagos y flujo de caja
 
-Actualizado: 2026-10-07. Tablero principal de seguimiento solicitado por el usuario.
+Actualizado: 2026-10-08. Tablero principal de seguimiento solicitado por el usuario.
 
 ## Cómo mantener este documento
 
@@ -54,7 +54,7 @@ Actualizado: 2026-10-07. Tablero principal de seguimiento solicitado por el usua
 | KHIPU-03 | Recepción durable durante cambios de nómina | Cerrada localmente 2026-10-04: inbox+job atómicos, stream batch 1, confirmación asíncrona y cierre idempotente. Conserva PENDING ante bloqueo/caída; falta validación AWS y UI operativa. [Operación](provider-notification-operations.md). |
 | GROUP-01 | Abono grupal efectivamente recibido | Cerrada localmente 2026-10-05: ingreso bancario real, referencia global única, reparto CLP determinista y limitado al abono pendiente, bloqueo/reanudación por lotes, UI recuperable y comprobante grupal privado por gira. |
 | GROUP-02 | Descuentos a varios pasajeros o al grupo | Cerrada localmente 2026-10-05: borrador e impacto sin alterar deuda, beneficiarios congelados, aprobación separada y aplicación completa bajo bloqueo. Rechaza todo si una cuenta cambió o mantiene un intento abierto. |
-| KHIPU-04 | Resolver intentos ambiguos y reversas | Cerrada localmente 2026-10-05: consulta autoritativa, liberación solo tras no-pago vencido, confirmación normal, marca manual en revisión y reversa exacta. Historial por cuenta y UI administrativa sin GSI. |
+| KHIPU-04 | Resolver intentos ambiguos y reversas | Cerrada localmente 2026-10-05 y endurecida 2026-10-08: consulta autoritativa, liberación solo ante rechazo terminal explícito —nunca por expiración aislada—, confirmación normal, marca manual en revisión y reversa exacta. Historial por cuenta y UI administrativa sin GSI. |
 | MONEY-01 | Reasignar fondos en revisión | Cerrada localmente 2026-10-05: aprobación administrativa aplica dinero ya recibido únicamente a cuotas completas, reclasifica el diario sin nuevo ingreso/comprobante y bloquea fondos comprometidos para devolución. |
 | CASH-01 | Persistencia y API de tesorería | Cerrada localmente 2026-10-05: proyecciones DynamoDB por gira/fecha y mes sin GSI, caja bancaria separada de deuda y fondos Khipu en tránsito, conciliación parcial/total con comisión real y referencia única, API/UI e idempotencia. |
 | CASH-02 | Proveedores y servicios | Cerrada localmente 2026-10-05: compromisos por proveedor/servicio, pagos, revisión de obligación, devolución acordada y recuperación bancaria se mantienen separados. API/UI, diario, referencias únicas y caja probados. |
@@ -75,6 +75,8 @@ Actualizado: 2026-10-07. Tablero principal de seguimiento solicitado por el usua
 | AWS-01 | Infraestructura y backend DEV | Cerrada 2026-10-05 tras los despliegues del usuario: stacks saludables; 11 Lambdas de contratos, 54 de pagos y worker Go activos; Stream, SQS, S3, SSM, CORS y permisos del menú comprobados en AWS. |
 | KHIPU-05 | Habilitar checkout de cuotas en DEV | Cerrada y desplegada 2026-10-05: bandera backend fail-closed, respuesta pública habilitada, credenciales SSM verificadas sin exponer valores y DemoBank confirmado mediante llamada no monetaria. |
 | KHIPU-06 | Flujo de un clic y retorno al portal | Cerrada localmente 2026-10-07: pestaña transitoria sin opener, navegación automática a URL Khipu validada, recuperación si popup bloqueado y retorno/cancelación al portal sin acreditar pagos. |
+| KHIPU-07 | Recuperación automática y UX de espera | Cerrada localmente 2026-10-08: cada checkout crea su trabajo durable en la misma transacción; Stream filtrado, SQS cifrada/DLQ y Lambda reintentan solo cuando hay pendientes. Portal consulta 90 segundos y luego backend continúa. Sin cron, Scan, GSI ni costo fijo de 43.800 invocaciones/mes. Go race/vet, build/15 checks Serverless, 55 pruebas Angular y build DEV correctos. |
+| SECURITY-03 | reCAPTCHA antes del checkout Khipu | Cerrada localmente 2026-10-08: evaluación score-based invisible, validación backend de token/acción/hostname/puntaje, configuración SSM SecureString y fallo cerrado antes de reservar o llamar a Khipu. Pendiente crear clave Google, configurar SSM y desplegar DEV. |
 | RECEIPT-07 | QR permanente y verificación pública | Cerrada localmente 2026-10-07: PDF v3 con QR/código, consulta directa por receiptId, respuesta mínima sin PII y backfill histórico actualizado a v3. Render representativo revisado. |
 | TAX-01 | Solicitudes de boleta manual y bandeja administrativa | Cerrada localmente 2026-10-07: solicitud atómica desde pago Khipu, colas por partición sin Scan/GSI, folio único, PDF privado SHA-256 y formulario sin monto editable. `MANUAL_RECORDED` no afirma aceptación SII. |
 | ACCESS-02 | Código de pago accesible en administración | Cerrada localmente 2026-10-07: aprobación nueva conserva código administrativo; contratos existentes se resuelven por clave conocida desde el contrato aprobado, sin listado público ni migración masiva. |
@@ -97,6 +99,7 @@ Actualizado: 2026-10-07. Tablero principal de seguimiento solicitado por el usua
 ## 3. Por desarrollar o completar
 
 - TAX-02: reenvío administrativo de la boleta cargada mediante outbox/trabajador SMTP.
+- KHIPU-07-AWS: desplegar, reingresar de forma controlada intentos DEV creados antes del outbox y validar el recorrido asíncrono real.
 - AWS-02 y la validación visual autenticada de QA-01 requieren datos/credenciales funcionales de prueba y el despliegue del usuario.
 
 ## Registro de actualizaciones
@@ -168,6 +171,9 @@ Actualizado: 2026-10-07. Tablero principal de seguimiento solicitado por el usua
 - **2026-10-07:** CATALOG-01, RECEIPT-08 y UX-02 desplegadas en DEV por solicitud del usuario. Se crearon la relación `CTZ` y los registros IAM, y `api-catalog-dev`, `api-payment-dev` y `payment-receipts-dev` terminaron `UPDATE_COMPLETE`. La Lambda del catálogo respondió 200 y devolvió los cinco servicios esperados; la ruta pública sin token respondió 401. El Hub v0.16.2 se compiló, publicó en S3 e invalidó en CloudFront (`Completed`); `/cotizaciones/nuevo` respondió 200. El versionador creó y publicó automáticamente el commit/tag v0.16.2; los cambios funcionales permanecen sin commit. La validación intermedia de Serverless se omitió por un defecto del wrapper que descarta credenciales SSO exportadas, no por error del servicio.
 
 ## Referencias técnicas
+
+- **2026-10-08:** KHIPU-07 cerrado localmente después de incorporar al cálculo la navegación diaria de Hub y Pagos. Se descartó la Lambda cron cada minuto: checkout y trabajo de conciliación se guardan atómicamente; DynamoDB Stream publica solo trabajos reales en SQS cifrada y el trabajador consulta Khipu con backoff 1/2/5/15 minutos. El portal sondea cinco segundos por hasta 90 segundos, pero el cierre de pestaña no detiene la recuperación. Una expiración aislada ya no libera la cuota; la ambigüedad prolongada pasa a revisión sin permitir duplicar el pago. Go race/vet, build de Lambdas, 15 validaciones Serverless, 55 pruebas Angular y build DEV correctos. Sin despliegues.
+- **2026-10-08:** corregido el primer despliegue fallido de KHIPU-07: Serverless agregó los permisos SQS automáticos al rol compartido, pero la Lambda usa un rol propio de mínimo privilegio. Su política ahora declara recepción, eliminación, atributos y cambio de visibilidad exclusivamente sobre `PaymentReconciliationQueue`; la configuración renderizada contiene la sentencia y el stack DEV terminó el rollback en `UPDATE_ROLLBACK_COMPLETE`. Falta repetir el despliegue; no se desplegó desde esta sesión.
 
 - [Requisitos](requirements.md), [diseño](design.md), [evidencia técnica](tasks.md).
 - [Puesta en marcha](setup-operations.md), [comprobantes](receipt-operations.md).

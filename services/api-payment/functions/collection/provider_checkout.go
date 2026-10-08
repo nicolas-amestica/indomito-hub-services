@@ -3,6 +3,7 @@ package collection
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"regexp"
 	"time"
@@ -12,6 +13,12 @@ import (
 	domain "ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
 	"ind-hub-api-gox-sls-pri-gh/services/api-payment/providers"
 )
+
+const reconciliationPendingPK = "RECONCILIATION#PENDING"
+
+func reconciliationJobSK(at time.Time, attemptID string) string {
+	return fmt.Sprintf("%020d#%s", at.UTC().Unix(), attemptID)
+}
 
 // CheckoutGateway permite probar el envío sin ejecutar cobros reales.
 type CheckoutGateway interface {
@@ -89,7 +96,12 @@ func (s Service) CreateDevelopmentCheckout(ctx context.Context, gateway Checkout
 	if err != nil {
 		return CheckoutResult{}, ErrDispatchUncertain
 	}
-	if _, err = s.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{write}}); err != nil {
+	firstCheck := now.UTC().Add(time.Minute)
+	job, jobErr := s.put(record{PK: reconciliationPendingPK, SK: reconciliationJobSK(firstCheck, attemptID), AttemptID: attemptID, AccountID: accountID, Status: "PENDING", NextAttemptAt: firstCheck.Unix()}, "attribute_not_exists(pk)", nil)
+	if jobErr != nil {
+		return CheckoutResult{}, ErrDispatchUncertain
+	}
+	if _, err = s.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{write, job}}); err != nil {
 		stored, readErr := s.read(ctx, row.PK, row.SK)
 		if readErr != nil || stored.AccountID != accountID || stored.Checkout == nil || *stored.Checkout != result {
 			return CheckoutResult{}, ErrDispatchUncertain

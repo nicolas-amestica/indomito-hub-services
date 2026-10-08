@@ -89,6 +89,10 @@
   - [x] Endpoint Lambda de notificación de cuotas conectado a confirmación; firma sobre cuerpo original, pruebas de replay/alteración/fecha/base64 y permisos DynamoDB acotados.
   - [ ] Desplegar/verificar webhook en AWS; gestionar revisión administrativa de discrepancias y reversas.
   - [x] Handlers Lambda de reserva/creación y consulta de intento, correo requerido e idempotencia por cuenta; resultado ambiguo no reenvía POST Khipu.
+  - [x] KHIPU-07 recuperación automática orientada a eventos: checkout y trabajo durable en una transacción, Stream filtrado, SQS cifrada con DLQ y reintentos 1/2/5/15 minutos; sin cron, Scan ni GSI.
+  - [x] Portal consulta el intento cada cinco segundos durante 90 segundos, comunica pendiente/verificación/revisión sin habilitar un segundo pago y deja la recuperación a backend al cerrar la página.
+  - [x] Expiración sola no resuelve no-pago; únicamente un detalle terminal explícito libera la cuota y una ambigüedad prolongada queda bloqueada para revisión del proveedor.
+  - [ ] Desplegar KHIPU-07 en DEV, reingresar de forma controlada intentos anteriores al despliegue y verificar Stream→SQS→Lambda→Khipu con evidencia CloudWatch/DynamoDB.
 - [x] Comprobantes S3, trabajador Go SMTP/TLS, descarga y reenvío seguro.
   - [x] PDF determinista privado, hash y escritura condicional sin sobrescritura; outbox transaccional, leases, reintentos limitados y cola de fallos declarada.
   - [x] Listado de 20 por cuenta y descarga firmada por 120 segundos reservados a administración; el portal no expone historial ni URL S3.
@@ -143,5 +147,11 @@
 - [x] Sustituir mega-menú del Hub por el patrón de Axity (`UX-02`).
   - [x] Drawer centrado responsive, búsqueda, filtros y navegación accesible desde módulos IAM.
   - [x] Cierre al navegar, foco inicial, controles PrimeNG y layout fluido para móvil/tablet/escritorio; QA visual autenticada queda en `QA-01`.
+
+- [x] Proteger creación de checkout público con reCAPTCHA (`SECURITY-03`).
+  - [x] Ejecutar evaluación invisible al pulsar pagar, conservando apertura de Khipu en un solo clic.
+  - [x] Validar server-side token de uso único, acción, hostname y puntaje antes de cualquier reserva o llamada Khipu.
+  - [x] Mantener configuración privada en SSM SecureString, exponer solo site key y fallar cerrado.
+  - [x] Probar portal, proveedor Go e infraestructura localmente; despliegue y prueba real quedan a cargo del usuario tras crear la clave Google.
 
 No marcar una etapa completa por existir modelos o pantallas: debe estar integrada y probada. No hay autorización para cargos reales ni cambios en PRD.

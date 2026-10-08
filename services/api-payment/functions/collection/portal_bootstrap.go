@@ -29,7 +29,11 @@ func PortalCheckoutHandler(ctx context.Context, req events.APIGatewayV2HTTPReque
 	if !secureCheckoutURL(base) || !secureCheckoutURL(portalBase) {
 		return portalFailure(503), nil
 	}
-	portal := PortalApp{Accounts: app.Accounts, Gateway: gateway, Now: time.Now, URLs: CheckoutURLs{Return: portalBase + "/retorno", Cancel: portalBase + "/cancelado", Notify: base + "/pagos/cuotas/khipu/notificaciones"}}
+	recaptcha, err := getRecaptcha(ctx)
+	if err != nil {
+		return portalFailure(503), nil
+	}
+	portal := PortalApp{Accounts: app.Accounts, Gateway: gateway, Recaptcha: recaptcha, Now: time.Now, URLs: CheckoutURLs{Return: portalBase + "/retorno", Cancel: portalBase + "/cancelado", Notify: base + "/pagos/cuotas/khipu/notificaciones"}}
 	return portal.HandleCheckout(ctx, req), nil
 }
 

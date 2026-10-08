@@ -18,6 +18,7 @@ El núcleo de cobros calcula transiciones sin I/O. La capa de aplicación confir
 | CODE#HMAC(code) | META | Resolución de viaje, versión y revocación |
 | TRIP#id | RUT#HMAC(rut) | Participación, sin índice global público |
 | ATTEMPT#id | META | Intento con importe y revisión congelados |
+| RECONCILIATION#PENDING | fecha#attemptId | Trabajo durable puntual para recuperar un checkout sin confirmación |
 | PROVIDER#name#reference | META | Dedupe y resolución de notificación |
 | COMMAND#id | META | Idempotencia durable y resultado |
 | RECEIPT#id | META | Referencia S3 privada y autorización |
@@ -64,9 +65,19 @@ Las claves usan `contracts/{contractId}/signed/{documentId}.pdf` en el bucket pr
 
 La redacción de devolución es una política comercial con salvaguarda de derechos irrenunciables, no una certificación legal. Revisar con asesoría jurídica antes de su uso contractual definitivo; referencia: https://www.sernac.cl/604/w3-article-88402.html.
 
+## Recuperación automática Khipu orientada a eventos
+
+Al persistir `ATTEMPT#id/CHECKOUT`, la misma `TransactWriteItems` crea el primer trabajo en `RECONCILIATION#PENDING`. DynamoDB Stream despacha únicamente inserciones de esa partición a una cola SQS cifrada con DLQ; no existe Lambda programada ni consulta periódica cuando no hay pagos. El trabajador consulta Khipu por el identificador ya persistido y aplica el mismo reconciliador autoritativo usado por administración.
+
+Un resultado no terminal reemplaza atómicamente el trabajo por el siguiente, con esperas de 1, 2, 5 y luego 15 minutos. Cada reemplazo dispara un único mensaje retrasado. Confirmación, rechazo terminal o reversa eliminan el trabajo; un estado ambiguo que supera 24 horas se conserva bloqueado como `PROVIDER_REVIEW_REQUIRED` para revisión humana. Ni la fecha de expiración ni el cierre del navegador acreditan pago o no-pago.
+
+El portal consulta el intento cada cinco segundos por un máximo de 90 segundos para reducir la incertidumbre visible y muestra la última verificación. Esa consulta es UX, no el mecanismo de recuperación. El diseño cuesta en proporción a checkouts pendientes —DynamoDB Stream, mensajes SQS y Lambdas puntuales— y no en proporción al tiempo, visitas diarias del Hub ni visitas al portal. No agrega GSI ni `Scan`.
+
 ## Experiencia de pago, comprobante y operación tributaria manual
 
 El clic en pagar abre inmediatamente una pestaña transitoria desde el gesto del usuario; la pestaña queda sin `opener`, espera la creación del checkout y navega únicamente a una URL Khipu validada. Si el navegador bloquea la pestaña se ofrece un control de recuperación, no un segundo paso habitual. El retorno y la cancelación vuelven al portal; jamás confirman dinero. Al recuperar foco, el portal consulta el intento y refresca la cuenta por la sesión acotada.
+
+Antes de invocar el endpoint de checkout, `app-ngx-pay` ejecuta reCAPTCHA score-based con la acción `khipu_checkout`. El token viaja en el cuerpo junto al correo y nunca se persiste. La Lambda consulta Google desde backend y exige token válido, acción coincidente, hostname permitido y puntaje mínimo configurable. Solo después continúa con la reserva idempotente y Khipu. Proyecto, site key, API key, hosts y umbral viven en un único JSON SSM SecureString; al cliente se expone únicamente la site key. Los errores de Google y el agotamiento de cuota bloquean nuevos checkouts sin crear deuda, intento ni llamada Khipu.
 
 Los comprobantes nuevos usan documento v3. Su QR contiene la ruta pública y el código estable `receiptId`; la verificación hace un `GetItem` directo y responde solo autenticidad, monto, fecha, concepto, estado y versión, sin RUT, nombre, correo ni URL S3. Los v1/v2 siguen legibles y el backfill explícito por cuenta genera v3 sin reenviar correos ni alterar eventos o saldos.
 

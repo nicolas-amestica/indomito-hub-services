@@ -75,6 +75,8 @@
     {"name":"fn-cambiar-acceso-gira-v1-revoke","entrypoint":"./cmd/fn-cambiar-acceso-gira-v1"},
     {"name":"fn-cerrar-nomina-v1","entrypoint":"./cmd/fn-cerrar-nomina-v1"},
     {"name":"fn-conciliar-intento-khipu-v1","entrypoint":"./cmd/fn-conciliar-intento-khipu-v1"},
+    {"name":"fn-conciliar-intentos-automaticamente-v1","entrypoint":"./cmd/fn-conciliar-intentos-automaticamente-v1"},
+    {"name":"fn-programar-conciliacion-khipu-v1","entrypoint":"./cmd/fn-programar-conciliacion-khipu-v1"},
     {"name":"fn-conciliar-liquidacion-v1","entrypoint":"./cmd/fn-conciliar-liquidacion-v1"},
     {"name":"fn-crear-anexo-v1","entrypoint":"./cmd/fn-crear-anexo-v1"},
     {"name":"fn-crear-descuento-grupal-v1","entrypoint":"./cmd/fn-crear-descuento-grupal-v1"},

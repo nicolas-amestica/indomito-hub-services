@@ -16,6 +16,18 @@ type ParameterReader interface {
 	GetParameter(context.Context, *ssm.GetParameterInput, ...func(*ssm.Options)) (*ssm.GetParameterOutput, error)
 }
 
+func readSecureParameter(ctx context.Context, reader ParameterReader, name string) (string, error) {
+	response, err := reader.GetParameter(ctx, &ssm.GetParameterInput{Name: aws.String(name), WithDecryption: aws.Bool(true)})
+	if err != nil || response == nil || response.Parameter == nil || response.Parameter.Type != types.ParameterTypeSecureString || response.Parameter.Value == nil {
+		return "", ErrVerification
+	}
+	value := strings.TrimSpace(*response.Parameter.Value)
+	if value == "" || strings.HasPrefix(value, "COMPLETAR_") || value == "placeholder-pending-configuration" {
+		return "", ErrVerification
+	}
+	return value, nil
+}
+
 // KhipuDevelopment contiene secretos solo en memoria del backend. Nunca serializar.
 type KhipuDevelopment struct {
 	Client        *Khipu `json:"-"`
@@ -33,12 +45,8 @@ func LoadKhipuDevelopment(ctx context.Context, reader ParameterReader, stage str
 	values := make([]string, 0, 3)
 	for _, suffix := range []string{"api-key", "webhook-secret", "receiver-id"} {
 		name := "/indomito/dev/payments/khipu/" + suffix
-		response, err := reader.GetParameter(ctx, &ssm.GetParameterInput{Name: aws.String(name), WithDecryption: aws.Bool(true)})
-		if err != nil || response == nil || response.Parameter == nil || response.Parameter.Type != types.ParameterTypeSecureString || response.Parameter.Value == nil {
-			return result, errConfig
-		}
-		value := strings.TrimSpace(*response.Parameter.Value)
-		if value == "" || strings.HasPrefix(value, "COMPLETAR_") || value == "placeholder-pending-configuration" {
+		value, err := readSecureParameter(ctx, reader, name)
+		if err != nil {
 			return result, errConfig
 		}
 		values = append(values, value)

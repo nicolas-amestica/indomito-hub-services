@@ -62,6 +62,10 @@ var ErrReferenceUsed = errors.New("referencia financiera ya registrada")
 var ErrNotFound = errors.New("cuenta no encontrada")
 
 type record struct {
+	AttemptID            string                         `dynamodbav:"attemptId,omitempty"`
+	ProviderStatus       string                         `dynamodbav:"providerStatus,omitempty"`
+	ProviderDetail       string                         `dynamodbav:"providerDetail,omitempty"`
+	CheckedAt            int64                          `dynamodbav:"checkedAt,omitempty"`
 	ProviderNotification *ProviderNotification          `dynamodbav:"providerNotification,omitempty"`
 	RelatedAccountID     string                         `dynamodbav:"relatedAccountId,omitempty"`
 	PendingAnnexID       string                         `dynamodbav:"pendingAnnexId,omitempty"`

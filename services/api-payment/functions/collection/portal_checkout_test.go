@@ -25,9 +25,18 @@ func portalFixture(t *testing.T) (PortalApp, *transactionDB, *checkoutGatewayFak
 	for _, r := range []record{{PK: "ACCOUNT#" + id, SK: "META", Version: a.Version, Account: &a}, {PK: "TRIP#" + id, SK: "META", Status: "ACTIVE"}, {PK: code, SK: "META", Status: "RESERVED_APPROVED", TripID: id}} {
 		saveLookupRow(t, db, r)
 	}
-	req := events.APIGatewayV2HTTPRequest{Body: `{"email":"receipt@example.com"}`, Headers: map[string]string{"Idempotency-Key": "01ARZ3NDEKTSV4RRFFQ69G5FAW"}, RequestContext: events.APIGatewayV2HTTPRequestContext{HTTP: events.APIGatewayV2HTTPRequestContextHTTPDescription{Method: "POST"}, Authorizer: &events.APIGatewayV2HTTPRequestContextAuthorizerDescription{Lambda: map[string]interface{}{"paymentAccess": "passenger", "paymentAccountId": id, "paymentTripId": id, "paymentSessionId": id, "paymentCodeKey": code}}}}
+	req := events.APIGatewayV2HTTPRequest{Body: `{"email":"receipt@example.com","recaptchaToken":"synthetic-recaptcha-token-for-test"}`, Headers: map[string]string{"Idempotency-Key": "01ARZ3NDEKTSV4RRFFQ69G5FAW"}, RequestContext: events.APIGatewayV2HTTPRequestContext{HTTP: events.APIGatewayV2HTTPRequestContextHTTPDescription{Method: "POST"}, Authorizer: &events.APIGatewayV2HTTPRequestContextAuthorizerDescription{Lambda: map[string]interface{}{"paymentAccess": "passenger", "paymentAccountId": id, "paymentTripId": id, "paymentSessionId": id, "paymentCodeKey": code}}}}
 	gateway := &checkoutGatewayFake{}
-	return PortalApp{Accounts: s, Gateway: gateway, URLs: testCheckoutURLs(), Now: time.Now}, db, gateway, req
+	return PortalApp{Accounts: s, Gateway: gateway, Recaptcha: captchaFake{}, URLs: testCheckoutURLs(), Now: time.Now}, db, gateway, req
+}
+
+type captchaFake struct{ reject bool }
+
+func (f captchaFake) Assess(context.Context, string, string, string, string) error {
+	if f.reject {
+		return providers.ErrVerification
+	}
+	return nil
 }
 
 func portalAttemptBody(t *testing.T, resp events.APIGatewayV2HTTPResponse) PortalAttempt {
@@ -109,7 +118,7 @@ func TestPortalReviewBlocksNewCheckoutAndExistingLink(t *testing.T) {
 }
 
 func TestPortalRejectsClientAmountsAndUnauthorizedAccess(t *testing.T) {
-	for _, scenario := range []string{"amount", "account", "email", "key", "unsigned", "revoked"} {
+	for _, scenario := range []string{"amount", "account", "email", "captcha", "key", "unsigned", "revoked"} {
 		t.Run(scenario, func(t *testing.T) {
 			a, db, gateway, req := portalFixture(t)
 			switch scenario {
@@ -119,6 +128,8 @@ func TestPortalRejectsClientAmountsAndUnauthorizedAccess(t *testing.T) {
 				req.Body = `{"email":"receipt@example.com","accountId":"other"}`
 			case "email":
 				req.Body = `{"email":"invalid"}`
+			case "captcha":
+				a.Recaptcha = captchaFake{reject: true}
 			case "key":
 				req.Headers = nil
 			case "unsigned":

@@ -110,7 +110,10 @@ func (s Service) ReconcileProviderAttempt(ctx context.Context, inspector Payment
 		state.Status = "REVERSED"
 		return state, nil
 	}
-	finalDetail := verified.StatusDetail == "pending" || verified.StatusDetail == "rejected-by-payer" || verified.StatusDetail == "marked-as-abuse"
+	// La expiración del checkout no demuestra que no existió movimiento bancario:
+	// Khipu puede conciliar una operación fuera de fecha. Sólo un detalle terminal
+	// explícito permite liberar la cuota sin intervención humana.
+	finalDetail := verified.StatusDetail == "rejected-by-payer" || verified.StatusDetail == "marked-as-abuse"
 	if verified.Status == "pending" && finalDetail && !verified.ExpiresDate.IsZero() && !verified.ExpiresDate.After(now) {
 		account, e := s.GetAccount(ctx, attempt.AccountID)
 		if e != nil {

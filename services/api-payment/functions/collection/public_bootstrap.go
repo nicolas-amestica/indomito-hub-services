@@ -58,7 +58,15 @@ func getPublicApp(ctx context.Context) (*PublicApp, error) {
 		return nil, errors.New("la clave de sesión debe ser independiente")
 	}
 	checkoutEnabled := strings.EqualFold(strings.TrimSpace(os.Getenv("PAYMENTS_CHECKOUT_ENABLED")), "true")
-	publicInstance = &PublicApp{Accounts: Service{DB: dynamodb.NewFromConfig(cfg), Table: os.Getenv("PAYMENTS_TABLE_NAME")}, LookupSecret: lookup, SessionSecret: signing, CheckoutEnabled: checkoutEnabled}
+	recaptchaSiteKey := ""
+	if checkoutEnabled {
+		recaptchaConfig, configErr := providers.LoadRecaptchaConfig(ctx, reader, os.Getenv("APP_STAGE"))
+		if configErr != nil {
+			return nil, configErr
+		}
+		recaptchaSiteKey = recaptchaConfig.SiteKey
+	}
+	publicInstance = &PublicApp{Accounts: Service{DB: dynamodb.NewFromConfig(cfg), Table: os.Getenv("PAYMENTS_TABLE_NAME")}, LookupSecret: lookup, SessionSecret: signing, CheckoutEnabled: checkoutEnabled, RecaptchaSiteKey: recaptchaSiteKey}
 	publicLoaded = time.Now()
 	return publicInstance, nil
 }

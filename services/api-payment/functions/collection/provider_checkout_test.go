@@ -51,6 +51,12 @@ func TestDevelopmentCheckoutPersistsAndReusesResult(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			db.mu.Lock()
+			_, scheduled := db.items[reconciliationPendingPK+"/"+reconciliationJobSK(now.Add(time.Minute), "attempt")]
+			db.mu.Unlock()
+			if !scheduled {
+				t.Fatal("checkout persisted without durable reconciliation job")
+			}
 			again, err := s.CreateDevelopmentCheckout(ctx, gateway, "account", "attempt", "session", testCheckoutURLs(), now.Add(time.Minute))
 			if err != nil || first != again || gateway.calls != 1 || gateway.input.Amount != 20000 || gateway.input.TransactionID != "attempt" || gateway.input.BankID != "demo" {
 				t.Fatalf("replay %+v %v calls=%d", again, err, gateway.calls)
