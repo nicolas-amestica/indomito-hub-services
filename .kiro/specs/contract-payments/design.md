@@ -84,6 +84,18 @@ En DEV, `app-ngx-hub` continúa publicando administración y `app-ngx-pay` publi
 
 El orquestador usa únicamente los aliases `app-ngx-hub` y `app-ngx-pay`, distribuye contexto Angular a ambos y mantiene rutas/scopes diferenciados. Los contratos HTTP, sesiones públicas acotadas, CORS y servicios Go permanecen sin cambios.
 
+## Catálogo de servicios y navegación administrativa
+
+El catálogo conserva las filas existentes bajo `CAT#SRV#<catalogId>` y agrega una relación directa `CAT#SRV#SCOPE#<scope>/META -> catalogPk`. Listar hace un `GetItem` de la relación y un `Query` de la partición, por lo que soporta el ULID físico actual sin Scan, GSI ni valor hardcodeado en Angular. La migración DEV crea únicamente la relación para `CTZ`; las altas posteriores reutilizan esa colección. El formulario solicita solo activos; Administración puede incluir inactivos y modificar `glosa`, `price`, `currency`, `chargeType`, `active` y `default` con condición de existencia.
+
+El frontend mantiene el catálogo en un store feature-scoped. El autocompletado PrimeNG filtra desde memoria después de dos caracteres y conserva entrada libre. Una selección proyecta los cuatro campos editables de la fila. La precarga reemplaza la fila vacía únicamente si la lista sigue pristine; el reset explícito vuelve a construir los defaults. Una respuesta tardía nunca pisa texto ya escrito. IAM agrega el GET al módulo `PROGRAMS` para quienes crean cotizaciones; `SERVICE_CATALOG` bajo `ADM` conserva creación, edición y lectura de inactivos sólo para administración.
+
+El menú adopta el patrón estructural de Axity —drawer centrado, cabecera, buscador, filtros por categoría y filas compactas— adaptado a los módulos IAM de Indómito Hub. Se conserva PrimeNG para drawer, botones e inputs, Tailwind para layout y los guards existentes como frontera efectiva; ocultar una opción nunca sustituye autorización.
+
+## Composición común de comprobantes verificables
+
+El trabajador Go conserva un solo renderer para cuotas, abonos individuales, fondos en revisión y abonos grupales. La versión documental vigente activa un helper común que construye la URL, genera el QR y dibuja QR/código; cada tipo solo aporta identidad y concepto. Los nuevos abonos grupales pasan a v3. Los v1/v2 históricos siguen descargables y pueden migrarse mediante backfill explícito, sin regeneración automática ni correos duplicados.
+
 ## Seguridad y operaciones pendientes
 
 Authorizer compartido valida JWT público con audience/tipo y alcance de una participación, distinto del administrativo. Entrada pública RUT+código limita intentos antes de revelar existencia; nunca incluir secretos en URL/logs. Khipu mantiene DEMO BANK en DEV y validación autoritativa de receptor, moneda, referencia y monto. Confirmación discrepante se registra como fondos por resolver.

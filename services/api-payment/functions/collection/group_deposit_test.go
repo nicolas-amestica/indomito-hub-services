@@ -74,7 +74,7 @@ func TestApplyGroupDepositPublishesExactAllocationOnce(t *testing.T) {
 		t.Fatal("global bank reference not claimed")
 	}
 	receipt, receiptErr := service.read(context.Background(), "RECEIPT#"+input.ID, "META")
-	if receiptErr != nil || receipt.Status != "PENDING_DOCUMENT" || receipt.ReceiptEmail != input.ReceiptEmail || receipt.Event.Type != "GROUP_DEPOSIT_RECEIVED" {
+	if receiptErr != nil || receipt.Status != "PENDING_DOCUMENT" || receipt.ReceiptEmail != input.ReceiptEmail || receipt.Event.Type != "GROUP_DEPOSIT_RECEIVED" || receipt.DocumentVersion != currentReceiptDocumentVersion {
 		t.Fatalf("group receipt missing: %+v %v", receipt, receiptErr)
 	}
 	commits := db.commits

@@ -6,13 +6,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/signintech/gopdf"
-	qrcode "github.com/skip2/go-qrcode"
 )
 
 //go:embed assets/CourierNew.ttf
@@ -44,7 +42,7 @@ func buildReceiptModel(row receiptRow) (receiptModel, error) {
 	}
 	verificationURL := ""
 	if version == 3 {
-		verificationURL = strings.TrimRight(strings.TrimSpace(os.Getenv("RECEIPT_VERIFICATION_URL")), "/")
+		verificationURL = receiptVerificationURL()
 		if verificationURL == "" {
 			return receiptModel{}, errors.New("INVALID_RECEIPT_VERIFICATION_URL")
 		}
@@ -104,20 +102,9 @@ func renderReceipt(model receiptModel) (renderedDocument, error) {
 	writePDFText(pdf, "regular", 9, 28, 28, 28, 48, 558, noteLine2)
 	if model.Version == 3 {
 		writePDFText(pdf, "regular", 8, 97, 97, 97, 48, 596, "Las devoluciones se registran por separado y no eliminan el ingreso original.")
-		writePDFText(pdf, "regular", 8, 97, 97, 97, 48, 610, "Verifica la autenticidad y el estado actual mediante el código QR.")
-		qr, qrErr := qrcode.Encode(model.VerificationURL+"#"+model.ID, qrcode.Medium, 256)
-		if qrErr != nil {
-			return renderedDocument{}, fmt.Errorf("generar QR: %w", qrErr)
+		if err := drawReceiptVerification(pdf, model.VerificationURL, model.ID); err != nil {
+			return renderedDocument{}, err
 		}
-		holder, holderErr := gopdf.ImageHolderByBytes(qr)
-		if holderErr != nil {
-			return renderedDocument{}, fmt.Errorf("cargar QR: %w", holderErr)
-		}
-		if imageErr := pdf.ImageByHolder(holder, 256, 632, &gopdf.Rect{W: 82, H: 82}); imageErr != nil {
-			return renderedDocument{}, fmt.Errorf("dibujar QR: %w", imageErr)
-		}
-		writePDFText(pdf, "regular", 7, 97, 97, 97, 226, 720, "Código de verificación")
-		writePDFText(pdf, "bold", 8, 28, 28, 28, 224, 733, model.ID)
 	} else {
 		writeWrapped(pdf, "regular", 9, 97, 97, 97, 48, 658, 499, "Conserva el número de comprobante para consultas. Las devoluciones se registran por separado y no eliminan el ingreso original.")
 	}

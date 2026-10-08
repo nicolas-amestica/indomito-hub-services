@@ -433,7 +433,7 @@ func (s Service) publishGroupDeposit(ctx context.Context, tripID, commandID stri
 			return err
 		}
 		receiptID := commandID
-		receiptWrite, buildErr := s.put(record{PK: "RECEIPT#" + receiptID, SK: "META", ReceiptID: receiptID, ReceiptEmail: root.ReceiptEmail, Event: root.Event, Status: "PENDING_DOCUMENT", DocumentVersion: 2}, "attribute_not_exists(pk)", nil)
+		receiptWrite, buildErr := s.put(record{PK: "RECEIPT#" + receiptID, SK: "META", ReceiptID: receiptID, ReceiptEmail: root.ReceiptEmail, Event: root.Event, Status: "PENDING_DOCUMENT", DocumentVersion: currentReceiptDocumentVersion}, "attribute_not_exists(pk)", nil)
 		if buildErr != nil {
 			return buildErr
 		}

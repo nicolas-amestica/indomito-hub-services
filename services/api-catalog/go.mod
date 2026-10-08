@@ -8,6 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.21.4
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.68.0
 	github.com/labstack/echo/v4 v4.15.4
+	github.com/oklog/ulid/v2 v2.1.2
 	go.uber.org/zap v1.28.0
 	ind-hub-api-gox-sls-pri-gh v0.0.0
 	ind-hub-api-gox-sls-pri-gh/libs v0.0.0

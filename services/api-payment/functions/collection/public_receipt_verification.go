@@ -48,7 +48,11 @@ func (a PublicApp) HandleReceiptVerification(ctx context.Context, req events.API
 	}
 	status := "REGISTERED"
 	concept := "Pago recibido"
-	if row.Event.Type == "PAYMENT_REQUIRES_REVIEW" {
+	if row.Event.Type == "GROUP_DEPOSIT_RECEIVED" {
+		concept = "Abono grupal recibido y asignado"
+	} else if row.Event.Type == "DEPOSIT_RECEIVED" {
+		concept = "Abono recibido"
+	} else if row.Event.Type == "PAYMENT_REQUIRES_REVIEW" {
 		status, concept = "UNDER_REVIEW", "Dinero recibido pendiente de revisión"
 	}
 	if row.Event.AttemptID != "" {

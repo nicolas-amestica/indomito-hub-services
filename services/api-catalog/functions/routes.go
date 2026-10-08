@@ -52,8 +52,11 @@ var (
 	// respaldo desde el ultimo snapshot cuando la fuente externa no responde.
 	ExchangeRatesRoute = Route{Method: http.MethodGet, Path: "/tasas-cambio"}
 
-	GetTaxSettingsRoute    = Route{Method: http.MethodGet, Path: "/configuracion/tributaria"}
-	UpdateTaxSettingsRoute = Route{Method: http.MethodPut, Path: "/configuracion/tributaria"}
+	GetTaxSettingsRoute       = Route{Method: http.MethodGet, Path: "/configuracion/tributaria"}
+	UpdateTaxSettingsRoute    = Route{Method: http.MethodPut, Path: "/configuracion/tributaria"}
+	ServiceCatalogListRoute   = Route{Method: http.MethodGet, Path: "/catalogo:servicios"}
+	ServiceCatalogCreateRoute = Route{Method: http.MethodPost, Path: "/catalogo:servicios"}
+	ServiceCatalogUpdateRoute = Route{Method: http.MethodPut, Path: "/catalogo:servicios/{id}"}
 )
 
 // localShutdownTimeout es el margen que se le da al servidor local para cerrar

@@ -150,9 +150,11 @@ func TestSMTPFailureUsesSafeFailureState(t *testing.T) {
 }
 
 func TestGroupDepositUsesGroupPath(t *testing.T) {
+	t.Setenv("RECEIPT_VERIFICATION_URL", "https://pagos.dev.girasindomito.cl/verificar-comprobante")
 	row := validReceiptRow()
 	row.Event.Type = "GROUP_DEPOSIT_RECEIVED"
 	row.Event.AccountID = ""
+	row.DocumentVersion = 3
 	model, err := buildReceiptModel(row)
 	if err != nil {
 		t.Fatal(err)
@@ -161,7 +163,7 @@ func TestGroupDepositUsesGroupPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "receipts/groups/" + testReceiptID + "/" + testReceiptID + "/v1.pdf"
+	want := "receipts/groups/" + testReceiptID + "/" + testReceiptID + "/v3.pdf"
 	if document.Key != want {
 		t.Fatalf("key=%s want=%s", document.Key, want)
 	}

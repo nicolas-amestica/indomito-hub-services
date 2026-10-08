@@ -16,6 +16,18 @@
       "entrypoint": "./cmd/fn-obtener-catalogos-v1"
     },
     {
+      "name": "fn-obtener-catalogo-servicios-v1",
+      "entrypoint": "./cmd/fn-obtener-catalogo-servicios-v1"
+    },
+    {
+      "name": "fn-crear-servicio-catalogo-v1",
+      "entrypoint": "./cmd/fn-crear-servicio-catalogo-v1"
+    },
+    {
+      "name": "fn-actualizar-servicio-catalogo-v1",
+      "entrypoint": "./cmd/fn-actualizar-servicio-catalogo-v1"
+    },
+    {
       "name": "fn-actualizar-configuracion-tributaria-v1",
       "entrypoint": "./cmd/fn-actualizar-configuracion-tributaria-v1"
     },

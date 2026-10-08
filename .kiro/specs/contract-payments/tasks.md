@@ -131,4 +131,17 @@
   - [x] Renombrar el alias del orquestador a `app-ngx-hub`, registrar `app-ngx-pay`, actualizar fuentes canónicas y sincronizar consumidores.
   - [x] Validar pruebas y build DEV de ambos frontends, además de typecheck, pruebas y sync del orquestador. Sin despliegues.
 
+- [x] Catálogo de servicios para cotización y Administración (`CATALOG-01`).
+  - [x] Resolver scope `CTZ` por relación directa y listar con GetItem+Query paginado, sin Scan/GSI.
+  - [x] Implementar lectura, creación y edición validadas en `api-catalog`, manifiesto de build y script idempotente de relación DEV.
+  - [x] Incorporar autocompletado libre desde dos caracteres, parche de campos y precarga/reset de defaults.
+  - [x] Crear módulo administrativo `SERVICE_CATALOG`, rutas, formulario y script de registro IAM para `ADMIN`.
+- [x] Comprobante grupal verificable y composición común (`RECEIPT-08`).
+  - [x] Emitir nuevos abonos grupales como documento v3 con QR/código.
+  - [x] Extraer helper común de URL/QR/bloque visual y probar cuota+grupo sin duplicar renderer.
+  - [x] Mantener compatibilidad histórica v1/v2 y consulta directa `RECEIPT#id/META`.
+- [x] Sustituir mega-menú del Hub por el patrón de Axity (`UX-02`).
+  - [x] Drawer centrado responsive, búsqueda, filtros y navegación accesible desde módulos IAM.
+  - [x] Cierre al navegar, foco inicial, controles PrimeNG y layout fluido para móvil/tablet/escritorio; QA visual autenticada queda en `QA-01`.
+
 No marcar una etapa completa por existir modelos o pantallas: debe estar integrada y probada. No hay autorización para cargos reales ni cambios en PRD.
