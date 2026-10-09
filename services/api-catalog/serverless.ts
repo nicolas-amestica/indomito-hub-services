@@ -62,6 +62,12 @@ const BCCH_API_TOKEN = `\${ssm:/indomito/${STAGE}/rates/bcch-api-token, ''}`;
  * reintentos, que es lo que dejaria al endpoint sin poder entregar el respaldo.
  */
 const endpoints: GoHttpEndpoint[] = [
+  {name:"fn-obtener-acceso-maestro-v1",method:"GET",
+    path:"/configuracion/acceso-maestro",public:false,memorySize:128,timeout:6,policies:[dynamodbReadPolicy(CONFIGURATIONS_TABLE_ARN)]},
+  {name:"fn-rotar-acceso-maestro-v1",method:"PUT",
+    path:"/configuracion/acceso-maestro",public:false,memorySize:128,timeout:6,policies:[dynamodbCrudPolicy(CONFIGURATIONS_TABLE_ARN)]},
+  {name:"fn-revocar-acceso-maestro-v1",method:"DELETE",
+    path:"/configuracion/acceso-maestro",public:false,memorySize:128,timeout:6,policies:[dynamodbCrudPolicy(CONFIGURATIONS_TABLE_ARN)]},
   {
     name: "fn-obtener-configuracion-tributaria-v1",
     method: "GET",

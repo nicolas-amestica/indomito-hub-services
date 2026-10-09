@@ -54,6 +54,9 @@ var (
 
 	GetTaxSettingsRoute       = Route{Method: http.MethodGet, Path: "/configuracion/tributaria"}
 	UpdateTaxSettingsRoute    = Route{Method: http.MethodPut, Path: "/configuracion/tributaria"}
+	GetMasterAccessRoute     = Route{Method: http.MethodGet, Path: "/configuracion/acceso-maestro"}
+	RotateMasterAccessRoute  = Route{Method: http.MethodPut, Path: "/configuracion/acceso-maestro"}
+	RevokeMasterAccessRoute  = Route{Method: http.MethodDelete, Path: "/configuracion/acceso-maestro"}
 	ServiceCatalogListRoute   = Route{Method: http.MethodGet, Path: "/catalogo:servicios"}
 	ServiceCatalogCreateRoute = Route{Method: http.MethodPost, Path: "/catalogo:servicios"}
 	ServiceCatalogUpdateRoute = Route{Method: http.MethodPut, Path: "/catalogo:servicios/{id}"}

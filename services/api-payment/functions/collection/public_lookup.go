@@ -2,6 +2,8 @@ package collection
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"net/netip"
 	"strconv"
@@ -11,6 +13,8 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
 	"ind-hub-api-gox-sls-pri-gh/libs/paymentaccess"
 	"ind-hub-api-gox-sls-pri-gh/libs/shared/apperr"
@@ -22,6 +26,7 @@ type PublicApp struct {
 	Accounts      Service
 	LookupSecret  string
 	SessionSecret string
+	ConfigurationsTable string
 	// CheckoutEnabled se habilita únicamente desde configuración segura del backend.
 	// El valor cero mantiene el portal en modo consulta ante despliegues incompletos.
 	CheckoutEnabled  bool
@@ -31,7 +36,10 @@ type PublicApp struct {
 type publicLookupRequest struct {
 	RUT      string `json:"rut"`
 	TripCode string `json:"tripCode"`
+	AccountID string `json:"accountId,omitempty"`
 }
+
+type MasterAccountOption struct { AccountID string `json:"accountId"`; TripID string `json:"tripId"`; Name string `json:"name"` }
 
 // PublicInstallment excluye identidad, motivos internos de descuentos, banco y referencias de terceros.
 type PublicInstallment struct {
@@ -54,6 +62,25 @@ type PublicAccount struct {
 	CheckoutEnabled  bool                `json:"checkoutEnabled"`
 	RecaptchaSiteKey string              `json:"recaptchaSiteKey,omitempty"`
 	Installments     []PublicInstallment `json:"installments"`
+	Accounts        []MasterAccountOption `json:"accounts,omitempty"`
+}
+
+type masterAccessConfig struct { Digest string `dynamodbav:"digest"`; Active bool `dynamodbav:"active"` }
+
+func (a PublicApp) masterOptions(ctx context.Context, code, rut string) ([]MasterAccountOption, error) {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if len(code) < 16 || len(code) > 64 || a.ConfigurationsTable == "" { return nil, ErrNotFound }
+	out, err := a.Accounts.DB.GetItem(ctx,&dynamodb.GetItemInput{TableName:aws.String(a.ConfigurationsTable),Key:key("CONFIGURATION","PAYMENT_MASTER_ACCESS"),ConsistentRead:aws.Bool(true)})
+	if err != nil || len(out.Item)==0 { return nil, ErrNotFound }
+	var config masterAccessConfig
+	if attributevalue.UnmarshalMap(out.Item,&config)!=nil || !config.Active { return nil, ErrNotFound }
+	digest:=sha256.Sum256([]byte(code)); if config.Digest != hex.EncodeToString(digest[:]) { return nil, ErrNotFound }
+	rutKey,err:=paymentaccess.RUTKey(a.LookupSecret,rut);if err!=nil{return nil,ErrNotFound}
+	db,ok:=a.Accounts.DB.(queryDatabase);if !ok{return nil,errors.New("consulta no disponible")}
+	result,err:=db.Query(ctx,&dynamodb.QueryInput{TableName:&a.Accounts.Table,KeyConditionExpression:aws.String("pk = :pk AND begins_with(sk, :prefix)"),ExpressionAttributeValues:map[string]types.AttributeValue{":pk":&types.AttributeValueMemberS{Value:"ADMIN_"+rutKey},":prefix":&types.AttributeValueMemberS{Value:"ACCOUNT#"}},ConsistentRead:aws.Bool(true),Limit:aws.Int32(25)})
+	if err!=nil{return nil,err}
+	options:=make([]MasterAccountOption,0,len(result.Items));for _,raw:=range result.Items{var row record;if attributevalue.UnmarshalMap(raw,&row)==nil&&row.AccountID!=""&&row.TripID!=""{options=append(options,MasterAccountOption{AccountID:row.AccountID,TripID:row.TripID,Name:row.PassengerName})}}
+	if len(options)==0{return nil,ErrNotFound};return options,nil
 }
 
 func publicAccountView(account collection.Account, checkoutEnabled bool, recaptchaSiteKey ...string) PublicAccount {
@@ -177,7 +204,7 @@ func (a PublicApp) HandleLookup(ctx context.Context, req events.APIGatewayV2HTTP
 		return lookupFailure(req, apperr.CodeForbidden)
 	}
 	var body publicLookupRequest
-	if len(req.Body) > 2048 || decodeAdmin(req, &body) != nil || len(body.RUT) > 20 || len(body.TripCode) > 12 {
+	if len(req.Body) > 2048 || decodeAdmin(req, &body) != nil || len(body.RUT) > 20 || len(body.TripCode) > 64 {
 		return lookupFailure(req, apperr.CodeResourceNotFound)
 	}
 	// Normalizar separadores también para los límites: cambiar el formato no reinicia el contador.
@@ -185,7 +212,15 @@ func (a PublicApp) HandleLookup(ctx context.Context, req events.APIGatewayV2HTTP
 	if err = a.consumeAttempt(ctx, "lookup-pair:v1", identity, 5, time.Now().UTC()); err != nil {
 		return lookupFailure(req, apperr.CodeForbidden)
 	}
-	account, err := a.Resolve(ctx, body.TripCode, body.RUT)
+	var account collection.Account
+	masterOptions, masterErr := a.masterOptions(ctx, body.TripCode, body.RUT)
+	if masterErr == nil {
+		if body.AccountID == "" && len(masterOptions) > 1 { return lambdautil.SuccessResponseWithHeaders(200, PublicAccount{Accounts:masterOptions,Installments:[]PublicInstallment{}}, map[string]string{"cache-control":"no-store","referrer-policy":"no-referrer"}) }
+		selected:=body.AccountID;if selected==""{selected=masterOptions[0].AccountID};allowed:=false;for _,option:=range masterOptions{if option.AccountID==selected{allowed=true;break}};if !allowed{return lookupFailure(req,apperr.CodeResourceNotFound)}
+		account,err=a.Accounts.GetAccount(ctx,selected)
+	} else {
+		account, err = a.Resolve(ctx, body.TripCode, body.RUT)
+	}
 	if err != nil {
 		if !errors.Is(err, ErrNotFound) {
 			return lookupFailure(req, apperr.CodeUpstreamServiceError)
@@ -196,7 +231,9 @@ func (a PublicApp) HandleLookup(ctx context.Context, req events.APIGatewayV2HTTP
 	if a.SessionSecret != "" {
 		codeKey, keyErr := paymentaccess.CodeKey(a.LookupSecret, body.TripCode)
 		if keyErr != nil {
-			return lookupFailure(req, apperr.CodeUpstreamServiceError)
+			approval, approvalErr := a.Accounts.read(ctx, "TRIP#"+account.TripID, "APPROVAL")
+			if approvalErr != nil || !passengerCodeKey.MatchString(approval.CodeKey) { return lookupFailure(req, apperr.CodeUpstreamServiceError) }
+			codeKey = approval.CodeKey
 		}
 		session, sessionErr := issuePassengerSession(a.SessionSecret, account.ID, account.TripID, codeKey, time.Now().UTC())
 		if sessionErr != nil {

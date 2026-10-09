@@ -11,6 +11,9 @@
     "CONFIGURATIONS_TABLE_NAME"
   ],
   "functions": [
+    {"name":"fn-obtener-acceso-maestro-v1","entrypoint":"./cmd/fn-obtener-acceso-maestro-v1"},
+    {"name":"fn-rotar-acceso-maestro-v1","entrypoint":"./cmd/fn-rotar-acceso-maestro-v1"},
+    {"name":"fn-revocar-acceso-maestro-v1","entrypoint":"./cmd/fn-revocar-acceso-maestro-v1"},
     {
       "name": "fn-obtener-catalogos-v1",
       "entrypoint": "./cmd/fn-obtener-catalogos-v1"

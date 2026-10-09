@@ -138,6 +138,9 @@ func (s Service) applyAnnexProposal(ctx context.Context, tripID, annexID string,
 				return buildErr
 			}
 			writes = append(writes, lookupWrite)
+			adminLookupWrite, buildErr := s.put(record{PK:"ADMIN_"+proposal.LookupKey,SK:"ACCOUNT#"+change.Account.ID,AccountID:change.Account.ID,TripID:tripID,PassengerName:roster.Name,Fingerprint:proposal.Fingerprint},"attribute_not_exists(pk)",nil)
+			if buildErr != nil { return buildErr }
+			writes = append(writes, adminLookupWrite)
 		}
 		_, err = s.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: writes})
 		if err == nil {
