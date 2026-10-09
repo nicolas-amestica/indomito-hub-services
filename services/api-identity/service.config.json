@@ -8,12 +8,21 @@
     "APP_STAGE",
     "APP_REGION",
     "USERS_TABLE_NAME",
-    "JWT_SIGNING_SECRET_PARAM"
+    "JWT_SIGNING_SECRET_PARAM",
+    "PASSWORD_RESET_EMAIL_PARAM"
   ],
   "functions": [
     {
       "name": "fn-login-v1",
       "entrypoint": "./cmd/fn-login-v1"
+    },
+    {
+      "name": "fn-solicitar-recuperacion-clave-v1",
+      "entrypoint": "./cmd/fn-solicitar-recuperacion-clave-v1"
+    },
+    {
+      "name": "fn-restablecer-clave-v1",
+      "entrypoint": "./cmd/fn-restablecer-clave-v1"
     },
     {
       "name": "fn-obtener-permisos-v1",

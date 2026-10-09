@@ -10,10 +10,15 @@ const DDB_STACK = `indomito-hub-infra-ddb-${STAGE}`;
 const TABLE_ARN = `\${cf:${DDB_STACK}.UsuariosTableArn}`;
 const TABLE_NAME = `\${cf:${DDB_STACK}.UsuariosTableName}`;
 const PARAM = `/indomito/${STAGE}/auth/jwt-secret`;
+const PASSWORD_RESET_EMAIL_PARAM = `/indomito/${STAGE}/auth/password-reset-email`;
 const PARAM_ARN = {
   "Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter${PARAM}`,
 };
+const PASSWORD_RESET_EMAIL_PARAM_ARN = {
+  "Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter${PASSWORD_RESET_EMAIL_PARAM}`,
+};
 const rw = [dynamodbCrudPolicy(TABLE_ARN), ssmReadPolicy(PARAM_ARN)];
+const passwordResetPolicies = [dynamodbCrudPolicy(TABLE_ARN), ssmReadPolicy(PASSWORD_RESET_EMAIL_PARAM_ARN)];
 const endpoints: GoHttpEndpoint[] = [
   {
     name: "fn-login-v1",
@@ -22,6 +27,22 @@ const endpoints: GoHttpEndpoint[] = [
     public: true,
     timeout: 10,
     policies: rw,
+  },
+  {
+    name: "fn-solicitar-recuperacion-clave-v1",
+    method: "POST",
+    path: "/auth/recuperar-clave",
+    public: true,
+    timeout: 25,
+    policies: passwordResetPolicies,
+  },
+  {
+    name: "fn-restablecer-clave-v1",
+    method: "POST",
+    path: "/auth/restablecer-clave",
+    public: true,
+    timeout: 10,
+    policies: passwordResetPolicies,
   },
   {
     name: "fn-obtener-permisos-v1",
@@ -87,5 +108,5 @@ const endpoints: GoHttpEndpoint[] = [
   },
 ];
 module.exports = buildGoServiceServerless(ApiServices.Identity, endpoints, {
-  env: { USERS_TABLE_NAME: TABLE_NAME, JWT_SIGNING_SECRET_PARAM: PARAM },
+  env: { USERS_TABLE_NAME: TABLE_NAME, JWT_SIGNING_SECRET_PARAM: PARAM, PASSWORD_RESET_EMAIL_PARAM },
 });

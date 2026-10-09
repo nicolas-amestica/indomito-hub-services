@@ -13,8 +13,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/aws/aws-sdk-go-v2/service/ssm"
-	"golang.org/x/crypto/bcrypt"
 	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
 	"ind-hub-api-gox-sls-pri-gh/services/api-identity/domain"
 	"net/http"
@@ -53,6 +51,10 @@ func Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.API
 	switch {
 	case method == "POST" && path == "/auth/login":
 		return login(ctx, app, req)
+	case method == "POST" && path == "/auth/recuperar-clave":
+		return requestPasswordReset(ctx, app, req)
+	case method == "POST" && path == "/auth/restablecer-clave":
+		return resetPassword(ctx, app, req)
 	case method == "GET" && path == "/auth/permisos":
 		return permissions(ctx, app, req)
 	case method == "GET" && path == "/iam/usuarios":
@@ -133,19 +135,50 @@ func login(ctx context.Context, a *App, req events.APIGatewayV2HTTPRequest) (eve
 		return fail(401, "INVALID_CREDENTIALS", "Usuario o clave incorrectos")
 	}
 	var u domain.User
-	if get(ctx, a, "USER#"+alias.UserID, "IDENTITY", &u) != nil || !u.Active || bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(in.Password)) != nil {
+	if get(ctx, a, "USER#"+alias.UserID, "IDENTITY", &u) != nil || !u.Active || !verifyPassword(u.PasswordHash, in.Password) {
 		return fail(401, "INVALID_CREDENTIALS", "Usuario o clave incorrectos")
 	}
-	ps, e := profilePermissions(ctx, a, u.ProfileCode)
-	if e != nil {
+	if passwordHashNeedsUpgrade(u.PasswordHash) {
+		if upgraded, err := protectPassword(in.Password); err == nil {
+			_, _ = a.DDB.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+				TableName:                 &a.Table,
+				Key:                       map[string]types.AttributeValue{"pk": &types.AttributeValueMemberS{Value: "USER#" + u.ID}, "sk": &types.AttributeValueMemberS{Value: "IDENTITY"}},
+				UpdateExpression:          aws.String("SET passwordHash = :newHash"),
+				ConditionExpression:       aws.String("passwordHash = :oldHash"),
+				ExpressionAttributeValues: map[string]types.AttributeValue{":newHash": &types.AttributeValueMemberS{Value: upgraded}, ":oldHash": &types.AttributeValueMemberS{Value: u.PasswordHash}},
+			})
+		}
+	}
+	type permissionsResult struct {
+		permissions []permissionView
+		err         error
+	}
+	permissionsCh := make(chan permissionsResult, 1)
+	secretCh := make(chan struct {
+		value string
+		err   error
+	}, 1)
+	go func() {
+		permissions, err := profilePermissions(ctx, a, u.ProfileCode)
+		permissionsCh <- permissionsResult{permissions: permissions, err: err}
+	}()
+	go func() {
+		value, err := a.jwtSecret(ctx)
+		secretCh <- struct {
+			value string
+			err   error
+		}{value: value, err: err}
+	}()
+	permissions := <-permissionsCh
+	secret := <-secretCh
+	if permissions.err != nil {
 		return fail(500, "INTERNAL_ERROR", "No fue posible cargar los permisos")
 	}
-	secret, e := a.SSM.GetParameter(ctx, &ssm.GetParameterInput{Name: &a.SecretParam, WithDecryption: aws.Bool(true)})
-	if e != nil || secret.Parameter == nil || secret.Parameter.Value == nil {
+	if secret.err != nil {
 		return fail(500, "INTERNAL_ERROR", "No fue posible iniciar la sesión")
 	}
-	effective := effectivePermissions(ps)
-	token := signToken(u, effective, *secret.Parameter.Value)
+	effective := effectivePermissions(permissions.permissions)
+	token := signToken(u, effective, secret.value)
 	return response(200, map[string]any{"token": token, "expiresIn": 28800, "user": u, "permissions": effective})
 }
 func signToken(u domain.User, ps []permissionView, secret string) string {
@@ -255,11 +288,11 @@ func permissions(ctx context.Context, a *App, req events.APIGatewayV2HTTPRequest
 		return fail(500, "INTERNAL_ERROR", "No fue posible cargar permisos")
 	}
 	effective := effectivePermissions(p)
-	secret, e := a.SSM.GetParameter(ctx, &ssm.GetParameterInput{Name: &a.SecretParam, WithDecryption: aws.Bool(true)})
-	if e != nil || secret.Parameter == nil || secret.Parameter.Value == nil {
+	secret, e := a.jwtSecret(ctx)
+	if e != nil {
 		return fail(500, "INTERNAL_ERROR", "No fue posible renovar la sesión")
 	}
-	return response(200, map[string]any{"token": signToken(u, effective, *secret.Parameter.Value), "expiresIn": 28800, "user": u, "permissions": effective})
+	return response(200, map[string]any{"token": signToken(u, effective, secret), "expiresIn": 28800, "user": u, "permissions": effective})
 }
 func listPartition(ctx context.Context, a *App, pk string, kind any) (events.APIGatewayV2HTTPResponse, error) {
 	items, e := query(ctx, a, pk)
@@ -301,11 +334,11 @@ func saveUser(ctx context.Context, a *App, req events.APIGatewayV2HTTPRequest) (
 		if len(in.Password) < 10 {
 			return fail(400, "VALIDATION_ERROR", "La clave debe tener al menos 10 caracteres")
 		}
-		b, e := bcrypt.GenerateFromPassword([]byte(in.Password), 12)
+		b, e := protectPassword(in.Password)
 		if e != nil {
 			return fail(500, "INTERNAL_ERROR", "No fue posible proteger la clave")
 		}
-		hash = string(b)
+		hash = b
 	}
 	if hash == "" {
 		return fail(400, "VALIDATION_ERROR", "La clave es obligatoria")

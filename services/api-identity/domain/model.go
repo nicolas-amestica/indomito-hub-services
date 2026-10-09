@@ -3,16 +3,19 @@ package domain
 import "strings"
 
 type User struct {
-	PK           string `dynamodbav:"pk" json:"-"`
-	SK           string `dynamodbav:"sk" json:"-"`
-	ID           string `dynamodbav:"id" json:"id"`
-	Name         string `dynamodbav:"name" json:"name"`
-	Email        string `dynamodbav:"email" json:"email"`
-	RUT          string `dynamodbav:"rut" json:"rut"`
-	PasswordHash string `dynamodbav:"passwordHash" json:"-"`
-	ProfileCode  string `dynamodbav:"profileCode" json:"profileCode"`
-	Active       bool   `dynamodbav:"active" json:"active"`
-	CreatedAt    string `dynamodbav:"createdAt" json:"createdAt"`
+	PK                     string `dynamodbav:"pk" json:"-"`
+	SK                     string `dynamodbav:"sk" json:"-"`
+	ID                     string `dynamodbav:"id" json:"id"`
+	Name                   string `dynamodbav:"name" json:"name"`
+	Email                  string `dynamodbav:"email" json:"email"`
+	RUT                    string `dynamodbav:"rut" json:"rut"`
+	PasswordHash           string `dynamodbav:"passwordHash" json:"-"`
+	ProfileCode            string `dynamodbav:"profileCode" json:"profileCode"`
+	Active                 bool   `dynamodbav:"active" json:"active"`
+	CreatedAt              string `dynamodbav:"createdAt" json:"createdAt"`
+	PasswordResetHash      string `dynamodbav:"passwordResetHash,omitempty" json:"-"`
+	PasswordResetExpiresAt int64  `dynamodbav:"passwordResetExpiresAt,omitempty" json:"-"`
+	PasswordResetAttempts  int    `dynamodbav:"passwordResetAttempts,omitempty" json:"-"`
 }
 type Module struct {
 	PK         string   `dynamodbav:"pk" json:"-"`
