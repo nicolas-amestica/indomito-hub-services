@@ -38,7 +38,7 @@ func getPublicApp(ctx context.Context) (*PublicApp, error) {
 	if publicInstance != nil && time.Since(publicLoaded) < 5*time.Minute {
 		return publicInstance, nil
 	}
-	if os.Getenv("APP_STAGE") != "dev" || os.Getenv("PAYMENTS_TABLE_NAME") == "" {
+	if os.Getenv("APP_STAGE") != "dev" || os.Getenv("PAYMENTS_TABLE_NAME") == "" || os.Getenv("CONFIGURATIONS_TABLE_NAME") == "" {
 		return nil, errors.New("configuración pública DEV incompleta")
 	}
 	cfg, err := bootstrap.LoadAWSConfig(ctx, bootstrap.LoadConfig())
@@ -66,7 +66,7 @@ func getPublicApp(ctx context.Context) (*PublicApp, error) {
 		}
 		recaptchaSiteKey = recaptchaConfig.SiteKey
 	}
-	publicInstance = &PublicApp{Accounts: Service{DB: dynamodb.NewFromConfig(cfg), Table: os.Getenv("PAYMENTS_TABLE_NAME")}, LookupSecret: lookup, SessionSecret: signing, CheckoutEnabled: checkoutEnabled, RecaptchaSiteKey: recaptchaSiteKey}
+	publicInstance = &PublicApp{Accounts: Service{DB: dynamodb.NewFromConfig(cfg), Table: os.Getenv("PAYMENTS_TABLE_NAME")}, LookupSecret: lookup, SessionSecret: signing, ConfigurationsTable: os.Getenv("CONFIGURATIONS_TABLE_NAME"), CheckoutEnabled: checkoutEnabled, RecaptchaSiteKey: recaptchaSiteKey}
 	publicLoaded = time.Now()
 	return publicInstance, nil
 }

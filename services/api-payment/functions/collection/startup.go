@@ -145,6 +145,9 @@ func (s Service) prepareAccount(ctx context.Context, account collection.Account,
 				return buildErr
 			}
 			writes = append(writes, link)
+			adminLink, buildErr := s.put(record{PK:"ADMIN_"+lookup,SK:"ACCOUNT#"+account.ID,AccountID:account.ID,TripID:account.TripID,PassengerName:roster.Name,Fingerprint:hash},"attribute_not_exists(pk)",nil)
+			if buildErr != nil { return buildErr }
+			writes = append(writes, adminLink)
 		}
 		_, err = s.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: writes})
 		if err == nil {
