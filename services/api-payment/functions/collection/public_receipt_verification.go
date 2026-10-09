@@ -67,7 +67,7 @@ func (a PublicApp) HandleReceiptVerification(ctx context.Context, req events.API
 }
 
 func ReceiptVerificationHandler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
-	app, err := getPublicApp(ctx)
+	app, err := getReceiptVerificationApp(ctx)
 	if err != nil {
 		return portalResponse(503, PublicReceiptVerification{Authentic: false}), nil
 	}

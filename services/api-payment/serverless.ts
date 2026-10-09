@@ -38,7 +38,7 @@ const taxDocumentRead:IamStatement={Effect:'Allow',Action:['dynamodb:GetItem','d
 const taxDocumentWrite:IamStatement={Effect:'Allow',Action:['dynamodb:PutItem','dynamodb:DeleteItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['TAX_REQUEST#*','TAX_QUEUE#PENDING','TAX_QUEUE#RECORDED','TAX_FOLIO#*','COMMAND#*']}}};
 const taxDocumentObjects:IamStatement={Effect:'Allow',Action:['s3:PutObject','s3:GetObject'],Resource:'${cf:indomito-hub-infra-s3-dev.ReceiptsBucketArn}/tax-documents/manual/*'};
 const endpoints: GoHttpEndpoint[] = [
-	{name:'fn-verificar-comprobante-publico-v1',method:'POST',path:'/pagos/comprobantes/verificaciones',public:true,timeout:10,policies:[{Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['RECEIPT#*','ATTEMPT#*','RATE#*']}}},rateWrite,lookupSecret,sessionSecret]},
+	{name:'fn-verificar-comprobante-publico-v1',method:'POST',path:'/pagos/comprobantes/verificaciones',public:true,timeout:10,policies:[{Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['RECEIPT#*','ATTEMPT#*','RATE#*']}}},rateWrite,lookupSecret]},
 	{name:'fn-listar-solicitudes-tributarias-v1',method:'GET',path:'/pagos/documentos-tributarios/pendientes',public:false,timeout:10,policies:[taxDocumentRead]},
 	{name:'fn-registrar-boleta-manual-v1',method:'POST',path:'/pagos/documentos-tributarios/{requestId}/emision-manual',public:false,timeout:29,policies:[taxDocumentRead,taxDocumentWrite,taxDocumentObjects]},
 	{name:'fn-descargar-boleta-manual-v1',method:'GET',path:'/pagos/documentos-tributarios/{requestId}/descarga',public:false,timeout:10,policies:[taxDocumentRead,taxDocumentObjects]},
