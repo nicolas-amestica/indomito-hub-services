@@ -40,7 +40,7 @@ type View struct {
 	Code string `json:"code,omitempty"`
 }
 
-func key() map[string]types.AttributeValue { return map[string]types.AttributeValue{"pk":&types.AttributeValueMemberS{Value:"CONFIGURATION"},"sk":&types.AttributeValueMemberS{Value:"PAYMENT_MASTER_ACCESS"}} }
+func key() map[string]types.AttributeValue { return map[string]types.AttributeValue{"pk":&types.AttributeValueMemberS{Value:"CONFIGURATION"},"sk":&types.AttributeValueMemberS{Value:"PAYMENT_CODE"}} }
 
 func Register(e *echo.Echo, app *functions.App, _ *zap.Logger) {
 	functions.GetMasterAccessRoute.Register(e, lambdautil.EchoAdapter(func(ctx context.Context, req events.APIGatewayV2HTTPRequest)(events.APIGatewayV2HTTPResponse,error){return get(ctx,app,req)}))
@@ -82,7 +82,7 @@ func rotate(ctx context.Context, app *functions.App, req events.APIGatewayV2HTTP
 	current,err:=load(ctx,app); if err!=nil{return lambdautil.ErrorResponse(req,err)}
 	raw:=make([]byte,20); if _,err=rand.Read(raw);err!=nil{return lambdautil.ErrorResponse(req,err)}
 	code:=make([]byte,len(raw)); for i,b:=range raw{code[i]=alphabet[int(b)%len(alphabet)]}
-	digest:=sha256.Sum256(code); current=item{PK:"CONFIGURATION",SK:"PAYMENT_MASTER_ACCESS",Digest:hex.EncodeToString(digest[:]),Active:true,Version:current.Version+1,UpdatedAt:time.Now().UTC().Format(time.RFC3339)}
+	digest:=sha256.Sum256(code); current=item{PK:"CONFIGURATION",SK:"PAYMENT_CODE",Digest:hex.EncodeToString(digest[:]),Active:true,Version:current.Version+1,UpdatedAt:time.Now().UTC().Format(time.RFC3339)}
 	encoded,err:=attributevalue.MarshalMap(current);if err!=nil{return lambdautil.ErrorResponse(req,err)}
 	_,err=app.DDB.PutItem(ctx,&dynamodb.PutItemInput{TableName:aws.String(app.Config.ConfigurationsTableName),Item:encoded});if err!=nil{return lambdautil.ErrorResponse(req,err)}
 	return lambdautil.SuccessResponseWithHeaders(http.StatusOK,View{Active:true,Version:current.Version,UpdatedAt:current.UpdatedAt,Code:string(code)},map[string]string{"cache-control":"no-store"})
@@ -95,7 +95,7 @@ func Revoke(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.API
 func revoke(ctx context.Context, app *functions.App, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse,error) {
 	if !isAdmin(req){return lambdautil.ErrorResponse(req,apperr.Forbidden("Solo administración puede revocar este acceso"))}
 	current,err:=load(ctx,app);if err!=nil{return lambdautil.ErrorResponse(req,err)}
-	current.PK,current.SK,current.Digest,current.Active,current.Version,current.UpdatedAt="CONFIGURATION","PAYMENT_MASTER_ACCESS","",false,current.Version+1,time.Now().UTC().Format(time.RFC3339)
+	current.PK,current.SK,current.Digest,current.Active,current.Version,current.UpdatedAt="CONFIGURATION","PAYMENT_CODE","",false,current.Version+1,time.Now().UTC().Format(time.RFC3339)
 	encoded,err:=attributevalue.MarshalMap(current);if err!=nil{return lambdautil.ErrorResponse(req,err)}
 	_,err=app.DDB.PutItem(ctx,&dynamodb.PutItemInput{TableName:aws.String(app.Config.ConfigurationsTableName),Item:encoded});if err!=nil{return lambdautil.ErrorResponse(req,err)}
 	return lambdautil.SuccessResponseWithHeaders(http.StatusOK,View{Active:false,Version:current.Version,UpdatedAt:current.UpdatedAt},map[string]string{"cache-control":"no-store"})
