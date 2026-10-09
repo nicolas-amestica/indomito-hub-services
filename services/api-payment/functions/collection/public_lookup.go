@@ -70,7 +70,7 @@ type masterAccessConfig struct { Digest string `dynamodbav:"digest"`; Active boo
 func (a PublicApp) masterOptions(ctx context.Context, code, rut string) ([]MasterAccountOption, error) {
 	code = strings.ToUpper(strings.TrimSpace(code))
 	if len(code) < 16 || len(code) > 64 || a.ConfigurationsTable == "" { return nil, ErrNotFound }
-	out, err := a.Accounts.DB.GetItem(ctx,&dynamodb.GetItemInput{TableName:aws.String(a.ConfigurationsTable),Key:key("CONFIGURATION","PAYMENT_CODE"),ConsistentRead:aws.Bool(true)})
+	out, err := a.Accounts.DB.GetItem(ctx,&dynamodb.GetItemInput{TableName:aws.String(a.ConfigurationsTable),Key:key("CONFIGURATION","PAYMENT_MASTER_ACCESS"),ConsistentRead:aws.Bool(true)})
 	if err != nil || len(out.Item)==0 { return nil, ErrNotFound }
 	var config masterAccessConfig
 	if attributevalue.UnmarshalMap(out.Item,&config)!=nil || !config.Active { return nil, ErrNotFound }
