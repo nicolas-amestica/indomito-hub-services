@@ -36,8 +36,12 @@ func TestApplyAnnexPublishesAllEffectsWithoutMovingPayments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plan.Status != "ACTIVE" || plan.PendingAnnexID != "" || root.Status != "APPLIED" || root.Applied != root.Expected || oldAccount.Active || oldAccount.DepositReceived != 0 || !newAccount.Active || newAccount.DepositReceived != 0 || newAccount.WithdrawalRefundApproved != 0 || link.AccountID != newID || db.maxActions > 7 {
-		t.Fatalf("invalid publication plan=%+v root=%+v old=%+v new=%+v link=%+v", plan, root, oldAccount, newAccount, link)
+	adminLink, err := s.read(context.Background(), "ADMIN_"+input.LookupKeys[newID], "ACCOUNT#"+newID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Status != "ACTIVE" || plan.PendingAnnexID != "" || root.Status != "APPLIED" || root.Applied != root.Expected || oldAccount.Active || oldAccount.DepositReceived != 0 || !newAccount.Active || newAccount.DepositReceived != 0 || newAccount.WithdrawalRefundApproved != 0 || link.AccountID != newID || adminLink.AccountID != newID || adminLink.TripID != input.TripID || db.maxActions > 8 {
+		t.Fatalf("invalid publication plan=%+v root=%+v old=%+v new=%+v link=%+v adminLink=%+v maxActions=%d", plan, root, oldAccount, newAccount, link, adminLink, db.maxActions)
 	}
 	commits := db.commits
 	if err := s.ApplyAnnex(context.Background(), input.TripID, input.ID); err != nil || db.commits != commits {
