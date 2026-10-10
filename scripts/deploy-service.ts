@@ -136,6 +136,9 @@ const isRemove = hasFlag('remove');
 
 const servicePath = resolve(service);
 const profile = AWS_PROFILES[stage];
+const hasAmbientAwsCredentials = Boolean(
+  process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY,
+);
 
 if (!profile) {
   log('red', '✗', `Stage "${stage}" no tiene perfil AWS configurado. Stages válidos: ${Object.keys(AWS_PROFILES).join(', ')}`);
@@ -143,7 +146,7 @@ if (!profile) {
 }
 
 console.log('');
-log('cyan', isRemove ? '🗑️' : '🚀', `${isRemove ? 'Remove' : 'Deploy'}: ${service} → stage=${stage}, region=${region}, profile=${profile}`);
+log('cyan', isRemove ? '🗑️' : '🚀', `${isRemove ? 'Remove' : 'Deploy'}: ${service} → stage=${stage}, region=${region}, auth=${hasAmbientAwsCredentials ? 'ambient' : profile}`);
 console.log('');
 
 // 1. Verificar runtime y AWS CLI. Serverless 4.43 termina silenciosamente en
@@ -152,15 +155,17 @@ checkNodeRuntime();
 checkAwsCli();
 log('green', '✓', 'AWS CLI disponible');
 
-// 2. Verificar sesión SSO activa
-if (!isSsoSessionActive(profile)) {
-  loginSso(profile);
+// 2. En CI se usan credenciales temporales OIDC; localmente se conserva SSO.
+let awsCredentials: Record<string, string> = {};
+if (hasAmbientAwsCredentials) {
+  log('green', '✓', 'Credenciales temporales del entorno detectadas');
+} else {
+  if (!isSsoSessionActive(profile)) loginSso(profile);
+  log('green', '✓', `Sesión SSO activa (${profile})`);
+  awsCredentials = exportCredentials(profile);
 }
 
-log('green', '✓', `Sesión SSO activa (${profile})`);
-
-// 3. Exportar credenciales para que Serverless las use
-const awsCredentials = exportCredentials(profile);
+// 3. Evitar que un perfil local invalide las credenciales OIDC del entorno.
 const {
   AWS_PROFILE: _awsProfile,
   AWS_DEFAULT_PROFILE: _awsDefaultProfile,

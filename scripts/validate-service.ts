@@ -69,8 +69,11 @@ const stage = getArg('stage', 'dev');
 const region = getArg('region', 'us-east-1');
 const defaultProfiles: Record<string, string> = { dev: 'pa-dev', prd: 'pa-prd' };
 const awsProfile = process.env.AWS_PROFILE || defaultProfiles[stage];
+const hasAmbientAwsCredentials = Boolean(
+  process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY,
+);
 
-if (!awsProfile) {
+if (!hasAmbientAwsCredentials && !awsProfile) {
   throw new Error(`No hay perfil AWS configurado para stage=${stage}`);
 }
 
@@ -80,6 +83,11 @@ const {
   AWS_SESSION_TOKEN: _awsSessionToken,
   AWS_DEFAULT_PROFILE: _awsDefaultProfile,
   ...processEnvWithoutAmbientAwsCredentials
+} = process.env;
+const {
+  AWS_PROFILE: _ambientProfile,
+  AWS_DEFAULT_PROFILE: _ambientDefaultProfile,
+  ...processEnvWithoutAwsProfile
 } = process.env;
 
 const serviceConfig = JSON.parse(
@@ -99,9 +107,11 @@ try {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'inherit'],
     env: {
-      ...processEnvWithoutAmbientAwsCredentials,
+      ...(hasAmbientAwsCredentials
+        ? processEnvWithoutAwsProfile
+        : processEnvWithoutAmbientAwsCredentials),
       STAGE: stage,
-      AWS_PROFILE: awsProfile,
+      ...(!hasAmbientAwsCredentials && { AWS_PROFILE: awsProfile }),
       NODE_OPTIONS: '--no-deprecation',
     },
   });

@@ -1,0 +1,66 @@
+name: Deploy DEV
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test-build-deploy:
+    name: Test, build and deploy services
+    if: ${{ vars.DEV_AWS_ROLE_ARN != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      AWS_REGION: us-east-1
+      EXPECTED_AWS_ACCOUNT: '382670112717'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.work
+          cache-dependency-path: '**/go.sum'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Go tests
+        run: |
+          while IFS= read -r module; do
+            (cd "$(dirname "$module")" && go test ./...)
+          done < <(find services -mindepth 2 -maxdepth 2 -name go.mod | sort)
+
+      - name: Generate OpenAPI contracts
+        run: npm run docs:generate
+
+      - name: Configure temporary AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.DEV_AWS_ROLE_ARN }}
+          role-session-name: ind-services-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS account
+        run: |
+          ACTUAL_ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
+          test "$ACTUAL_ACCOUNT" = "$EXPECTED_AWS_ACCOUNT"
+
+      - name: Deploy services
+        run: bash scripts/deploy-all-dev.sh

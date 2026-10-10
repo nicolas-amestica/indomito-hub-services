@@ -1,0 +1,66 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Acceso OIDC de GitHub Actions para desplegar Indomito Hub Services en DEV
+
+Parameters:
+  ExistingOidcProviderArn:
+    Type: String
+    Default: ''
+
+Conditions:
+  CreateOidcProvider: !Equals [!Ref ExistingOidcProviderArn, '']
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: CreateOidcProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ind-dev-services-github-deploy-role
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If
+                - CreateOidcProvider
+                - !Ref GitHubOidcProvider
+                - !Ref ExistingOidcProviderArn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub:
+                  - repo:nicolas-amestica/indomito-hub-services:*
+                  - repo:nicolas-amestica@5573027/indomito-hub-services@1328457985:*
+      Policies:
+        - PolicyName: deploy-services-dev
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - apigateway:*
+                  - cloudformation:*
+                  - dynamodb:DescribeTable
+                  - dynamodb:DescribeStream
+                  - events:*
+                  - iam:*
+                  - lambda:*
+                  - logs:*
+                  - s3:*
+                  - sqs:*
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - xray:*
+                Resource: '*'
+
+Outputs:
+  GitHubActionsRoleArn:
+    Value: !GetAtt GitHubDeployRole.Arn
