@@ -48,9 +48,6 @@ jobs:
             (cd "$(dirname "$module")" && go test ./...)
           done < <(find services -mindepth 2 -maxdepth 2 -name go.mod | sort)
 
-      - name: Generate OpenAPI contracts
-        run: npm run docs:generate
-
       - name: Verify Serverless authentication
         run: |
           if [[ -z "$SERVERLESS_ACCESS_KEY" ]]; then
