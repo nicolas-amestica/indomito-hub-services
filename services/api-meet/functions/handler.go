@@ -100,6 +100,7 @@ func Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest)(events.APIG
   meetingURI,meetErr:=client.CreateMeetSpace(ctx)
   if meetErr!=nil{return fail(502,"google_meet_error"),nil}
   private["meetLink"]=meetingURI
+  if input.Description=="" { input.Description="Videollamada: "+meetingURI } else { input.Description += "\\n\\nVideollamada: "+meetingURI }
  }
  if input.HostSK!=nil{private["hostSk"]=*input.HostSK};if input.HostName!=nil{private["hostName"]=*input.HostName};if input.HostColor!=nil{private["hostColor"]=*input.HostColor}
  body:=map[string]any{"summary":input.Title,"description":input.Description,"start":map[string]string{"dateTime":start.Format(time.RFC3339),"timeZone":"America/Santiago"},"end":map[string]string{"dateTime":end.Format(time.RFC3339),"timeZone":"America/Santiago"},"attendees":attendees,"extendedProperties":map[string]any{"private":private}}
