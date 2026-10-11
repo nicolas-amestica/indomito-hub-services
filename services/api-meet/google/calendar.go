@@ -53,7 +53,18 @@ func(c Client) Request(ctx context.Context,method,eventID string,query url.Value
  if body!=nil {payload,e:=json.Marshal(body);if e!=nil{return nil,e};reader=strings.NewReader(string(payload))}
  req,err:=http.NewRequestWithContext(ctx,method,endpoint,reader);if err!=nil{return nil,err}
  req.Header.Set("Authorization","Bearer "+token);if body!=nil{req.Header.Set("Content-Type","application/json")}
- resp,err:=c.http().Do(req);if err!=nil{return nil,err};defer resp.Body.Close()
+ resp,err:=c.http().Do(req)
+ // GET is safe to retry after transient Google failures. Never automatically
+ // retry POST/PATCH, which may already have mutated remote state.
+ for attempt:=0;method==http.MethodGet&&attempt<2;attempt++{
+  if err==nil&&resp.StatusCode!=http.StatusTooManyRequests&&resp.StatusCode<500{break}
+  if resp!=nil&&resp.Body!=nil{_,_=io.Copy(io.Discard,io.LimitReader(resp.Body,1024));_=resp.Body.Close()}
+  delay:=time.Duration(200*(1<<attempt))*time.Millisecond
+  select{case <-ctx.Done():return nil,ctx.Err();case <-time.After(delay):}
+  resp,err=c.http().Do(req)
+ }
+ if err!=nil{return nil,err}
+ defer resp.Body.Close()
  response,err:=io.ReadAll(io.LimitReader(resp.Body,4<<20));if err!=nil{return nil,err}
  if resp.StatusCode<200||resp.StatusCode>=300{return nil,&APIError{Service:"calendar",StatusCode:resp.StatusCode}}
  return response,nil
