@@ -104,10 +104,11 @@ func Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest)(events.APIG
  attendees:=make([]map[string]string,0,len(input.Guests))
  for _,g:=range input.Guests{g=strings.TrimSpace(g);address,parseErr:=mail.ParseAddress(g);if parseErr!=nil||address.Address!=g{return fail(400,"invalid_guest_email"),nil};attendees=append(attendees,map[string]string{"email":g})}
  private:=map[string]string{}
+ var existing calendarEvent
+ var pending bool
  if method=="PUT" {
   original,fetchErr:=client.Request(ctx,"GET",id,nil,nil)
   if fetchErr!=nil{return fail(502,"google_calendar_error"),nil}
-  var existing calendarEvent
   if json.Unmarshal(original,&existing)!=nil{return fail(502,"invalid_calendar_response"),nil}
   for k,v:=range existing.ExtendedProperties.Private{private[k]=v}
  }
@@ -115,26 +116,71 @@ func Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest)(events.APIG
   if len(input.IdempotencyKey)>128{return fail(400,"invalid_idempotency_key"),nil}
   id=deterministicEventID(client.CalendarID,input.IdempotencyKey)
   previous,previousErr:=client.Request(ctx,"GET",id,nil,nil)
-  if previousErr==nil{var existing calendarEvent;if json.Unmarshal(previous,&existing)!=nil{return fail(502,"invalid_calendar_response"),nil};return reply(200,map[string]any{"data":toView(existing)}),nil}
-  if !calendarStatus(previousErr,404){return fail(502,"google_calendar_error"),nil}
+  if previousErr==nil {
+   if json.Unmarshal(previous,&existing)!=nil{return fail(502,"invalid_calendar_response"),nil}
+   if toView(existing)["googleMeetLink"]!=""{return reply(200,map[string]any{"data":toView(existing)}),nil}
+   pending=true
+   for k,v:=range existing.ExtendedProperties.Private{private[k]=v}
+  } else if !calendarStatus(previousErr,404){return fail(502,"google_calendar_error"),nil}
  }
- if method=="POST" {
-  meetingURI,meetErr:=client.CreateMeetSpace(ctx)
-  if meetErr!=nil{return fail(502,"google_meet_error"),nil}
-  private["meetLink"]=meetingURI
-  if input.Description=="" { input.Description="Videollamada: "+meetingURI } else { input.Description += "\n\nVideollamada: "+meetingURI }
+ if input.HostSK!=nil{private["hostSk"]=*input.HostSK}
+ if input.HostName!=nil{private["hostName"]=*input.HostName}
+ if input.HostColor!=nil{private["hostColor"]=*input.HostColor}
+ if input.Agent!=nil{private["agent"]=strconv.FormatBool(*input.Agent)}
+ if input.PhoneNumber!=nil{private["phoneNumber"]=*input.PhoneNumber}
+ description:=input.Description
+ if link:=private["meetLink"];link!=""&&!strings.Contains(description,link){
+  if strings.TrimSpace(description)!=""{description+="\n\n"}
+  description+="Videollamada: "+link
  }
- if input.HostSK!=nil{private["hostSk"]=*input.HostSK};if input.HostName!=nil{private["hostName"]=*input.HostName};if input.HostColor!=nil{private["hostColor"]=*input.HostColor};if input.Agent!=nil{private["agent"]=strconv.FormatBool(*input.Agent)};if input.PhoneNumber!=nil{private["phoneNumber"]=*input.PhoneNumber}
- if link:=private["meetLink"];link!=""&&!strings.Contains(input.Description,link){if strings.TrimSpace(input.Description)!=""{input.Description+="\n\n"};input.Description+="Videollamada: "+link}
- body:=map[string]any{"summary":input.Title,"description":input.Description,"start":map[string]string{"dateTime":start.Format(time.RFC3339),"timeZone":"America/Santiago"},"end":map[string]string{"dateTime":end.Format(time.RFC3339),"timeZone":"America/Santiago"},"attendees":attendees,"extendedProperties":map[string]any{"private":private}}
- if method=="POST"&&id!=""{body["id"]=id}
- verb:="POST";if method=="PUT"{verb="PATCH"}
- raw,e:=client.Request(ctx,verb,func()string{if method=="POST"{return ""};return id}(),url.Values{"sendUpdates":{"all"}},body)
- if e!=nil {
-  if method=="POST"&&id!=""&&calendarStatus(e,409){existingRaw,readErr:=client.Request(ctx,"GET",id,nil,nil);if readErr==nil{var existing calendarEvent;if json.Unmarshal(existingRaw,&existing)==nil{return reply(200,map[string]any{"data":toView(existing)}),nil}}}
-  return fail(502,"google_calendar_error"),nil
+ body:=map[string]any{
+  "summary":input.Title,"description":description,
+  "start":map[string]string{"dateTime":start.Format(time.RFC3339),"timeZone":"America/Santiago"},
+  "end":map[string]string{"dateTime":end.Format(time.RFC3339),"timeZone":"America/Santiago"},
+  "attendees":attendees,
+  "extendedProperties":map[string]any{"private":private},
  }
- var saved calendarEvent;if json.Unmarshal(raw,&saved)!=nil{return fail(502,"invalid_calendar_response"),nil}
- status:=200;if method=="POST"{status=201}
- return reply(status,map[string]any{"data":toView(saved)}),nil
+ if method=="PUT" {
+  raw,updateErr:=client.Request(ctx,"PATCH",id,url.Values{"sendUpdates":{"all"}},body)
+  if updateErr!=nil{return fail(502,"google_calendar_error"),nil}
+  var saved calendarEvent
+  if json.Unmarshal(raw,&saved)!=nil{return fail(502,"invalid_calendar_response"),nil}
+  return reply(200,map[string]any{"data":toView(saved)}),nil
+ }
+ // Create the Calendar event before allocating a Meet space. Avoid an orphan
+ // Meet space when Calendar event creation itself is rejected.
+ if !pending {
+  if id!=""{body["id"]=id}
+  raw,createErr:=client.Request(ctx,"POST","",url.Values{"sendUpdates":{"none"}},body)
+  if createErr!=nil {
+   if id==""||!calendarStatus(createErr,409){return fail(502,"google_calendar_error"),nil}
+   original,readErr:=client.Request(ctx,"GET",id,nil,nil)
+   if readErr!=nil||json.Unmarshal(original,&existing)!=nil{return fail(502,"google_calendar_error"),nil}
+   if toView(existing)["googleMeetLink"]!=""{return reply(200,map[string]any{"data":toView(existing)}),nil}
+  } else {
+   if json.Unmarshal(raw,&existing)!=nil{return fail(502,"invalid_calendar_response"),nil}
+   id=existing.ID
+  }
+  if id==""{return fail(502,"invalid_calendar_response"),nil}
+ }
+ uri,meetErr:=client.CreateMeetSpace(ctx)
+ if meetErr!=nil {
+  // Without a stable key there is no safe retry path. Remove the unsent
+  // placeholder event; keyed requests retain it for recovery on retry.
+  if input.IdempotencyKey==""{_,_=client.Request(ctx,"DELETE",id,url.Values{"sendUpdates":{"none"}},nil)}
+  return fail(502,"google_meet_error"),nil
+ }
+ private["meetLink"]=uri
+ if !strings.Contains(description,uri) {
+  if strings.TrimSpace(description)!=""{description+="\n\n"}
+  description+="Videollamada: "+uri
+ }
+ body["description"]=description
+ body["extendedProperties"]=map[string]any{"private":private}
+ delete(body,"id")
+ raw,updateErr:=client.Request(ctx,"PATCH",id,url.Values{"sendUpdates":{"all"}},body)
+ if updateErr!=nil{return fail(502,"calendar_meet_link_update_error"),nil}
+ var saved calendarEvent
+ if json.Unmarshal(raw,&saved)!=nil{return fail(502,"invalid_calendar_response"),nil}
+ return reply(201,map[string]any{"data":toView(saved)}),nil
 }
