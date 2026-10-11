@@ -13,6 +13,9 @@ import (
  "time"
 )
 
+type APIError struct { Service string; StatusCode int }
+func (e *APIError) Error() string { return fmt.Sprintf("%s API request failed: HTTP %d",e.Service,e.StatusCode) }
+
 type OAuthCredentials struct { ClientID string `json:"client_id"`; ClientSecret string `json:"client_secret"`; RefreshToken string `json:"refresh_token"` }
 type TokenResponse struct { AccessToken string `json:"access_token"`; ExpiresIn int `json:"expires_in"` }
 
@@ -52,7 +55,7 @@ func(c Client) Request(ctx context.Context,method,eventID string,query url.Value
  req.Header.Set("Authorization","Bearer "+token);if body!=nil{req.Header.Set("Content-Type","application/json")}
  resp,err:=c.http().Do(req);if err!=nil{return nil,err};defer resp.Body.Close()
  response,err:=io.ReadAll(io.LimitReader(resp.Body,4<<20));if err!=nil{return nil,err}
- if resp.StatusCode<200||resp.StatusCode>=300{return nil,fmt.Errorf("Google Calendar API error: status %d",resp.StatusCode)}
+ if resp.StatusCode<200||resp.StatusCode>=300{return nil,&APIError{Service:"calendar",StatusCode:resp.StatusCode}}
  return response,nil
 }
 func ConfigFromEnvironment(parameters ParameterReader) Client {
