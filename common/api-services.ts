@@ -21,4 +21,5 @@ export const ApiServices = {
   Contract: "api-contract",
   Identity: "api-identity",
   Payment: "api-payment",
+  Meet: "api-meet",
 } as const;
