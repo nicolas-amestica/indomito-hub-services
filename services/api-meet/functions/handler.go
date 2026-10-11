@@ -38,6 +38,7 @@ type calendarEvent struct {
  End struct{DateTime string `json:"dateTime"`;Date string `json:"date"`} `json:"end"`
  Attendees []struct{Email string `json:"email"`} `json:"attendees"`
  HangoutLink string `json:"hangoutLink"`
+ ConferenceData struct{ConferenceID string `json:"conferenceId"`;EntryPoints []struct{EntryPointType string `json:"entryPointType"`;URI string `json:"uri"`} `json:"entryPoints"`} `json:"conferenceData"`
  Created string `json:"created"`
  ExtendedProperties struct{Private map[string]string `json:"private"`} `json:"extendedProperties"`
 }
@@ -53,7 +54,10 @@ func toView(e calendarEvent)map[string]any{
  guests:=make([]string,0,len(e.Attendees));for _,a:=range e.Attendees {guests=append(guests,a.Email)}
  link:=e.HangoutLink
  if link=="" {link=e.ExtendedProperties.Private["meetLink"]}
- return map[string]any{"id":e.ID,"title":e.Summary,"date":date,"startTime":start,"endTime":end,"description":e.Description,"guests":guests,"googleMeetLink":link,"createdAt":e.Created,"hostSk":e.ExtendedProperties.Private["hostSk"],"hostName":e.ExtendedProperties.Private["hostName"],"hostColor":e.ExtendedProperties.Private["hostColor"],"phoneNumber":e.ExtendedProperties.Private["phoneNumber"],"agent":e.ExtendedProperties.Private["agent"]=="true"}
+ if link==""{for _,entry:=range e.ConferenceData.EntryPoints{if entry.EntryPointType=="video"{link=entry.URI;break}}}
+ meetingCode:=e.ConferenceData.ConferenceID
+ if meetingCode==""&&link!="" {if parsed,parseErr:=url.Parse(link);parseErr==nil&&parsed.Host=="meet.google.com"{meetingCode=strings.Trim(parsed.Path,"/")}}
+ return map[string]any{"id":e.ID,"title":e.Summary,"date":date,"startTime":start,"endTime":end,"description":e.Description,"guests":guests,"googleMeetLink":link,"meetingCode":meetingCode,"createdAt":e.Created,"hostSk":e.ExtendedProperties.Private["hostSk"],"hostName":e.ExtendedProperties.Private["hostName"],"hostColor":e.ExtendedProperties.Private["hostColor"],"phoneNumber":e.ExtendedProperties.Private["phoneNumber"],"agent":e.ExtendedProperties.Private["agent"]=="true"}
 }
 func deterministicEventID(calendarID,key string)string{
  hash:=sha256.Sum256([]byte(calendarID+"|"+key))
