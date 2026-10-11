@@ -43,7 +43,7 @@ jobs:
       - name: Build four Lambda artifacts (linux/arm64)
         run: npx tsx scripts/build-service.ts --service services/api-meet
       - name: TypeScript typecheck
-        run: npx tsc --noEmit
+        run: npx tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck services/api-meet/serverless.ts
       - name: Validate Lambda archives and entrypoints
         run: |
           python3 - <<'PY'
