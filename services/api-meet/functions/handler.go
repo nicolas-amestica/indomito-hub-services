@@ -28,8 +28,8 @@ type calendarEvent struct {
  ID string `json:"id"`
  Summary string `json:"summary"`
  Description string `json:"description"`
- Start struct{DateTime string `json:"dateTime"`} `json:"start"`
- End struct{DateTime string `json:"dateTime"`} `json:"end"`
+ Start struct{DateTime string `json:"dateTime"`;Date string `json:"date"`} `json:"start"`
+ End struct{DateTime string `json:"dateTime"`;Date string `json:"date"`} `json:"end"`
  Attendees []struct{Email string `json:"email"`} `json:"attendees"`
  HangoutLink string `json:"hangoutLink"`
  Created string `json:"created"`
@@ -42,7 +42,7 @@ func reply(status int, payload any) events.APIGatewayV2HTTPResponse {
 func fail(status int,code string)events.APIGatewayV2HTTPResponse{return reply(status,map[string]string{"error":code})}
 func toView(e calendarEvent)map[string]any{
  date,start,end:="","",""
- if t,err:=time.Parse(time.RFC3339,e.Start.DateTime);err==nil {local:=t.In(santiago());date=local.Format("2006-01-02");start=local.Format("15:04")}
+ if t,err:=time.Parse(time.RFC3339,e.Start.DateTime);err==nil {local:=t.In(santiago());date=local.Format("2006-01-02");start=local.Format("15:04")} else if e.Start.Date!=""{date=e.Start.Date}
  if t,err:=time.Parse(time.RFC3339,e.End.DateTime);err==nil {end=t.In(santiago()).Format("15:04")}
  guests:=make([]string,0,len(e.Attendees));for _,a:=range e.Attendees {guests=append(guests,a.Email)}
  link:=e.HangoutLink
