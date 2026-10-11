@@ -14,7 +14,7 @@ import (
 
 type mockSecrets struct{}
 func (mockSecrets) GetSecure(_ context.Context, name string) (string,error) {
-	return \`{"client_id":"client","client_secret":"secret","refresh_token":"refresh"}\`,nil
+	return `{"client_id":"client","client_secret":"secret","refresh_token":"refresh"}`,nil
 }
 
 type mockTransport func(*http.Request)(*http.Response,error)
