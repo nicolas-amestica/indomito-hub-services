@@ -4,7 +4,6 @@ import (
  "context"
  "errors"
  "fmt"
- "os"
 
  "github.com/aws/aws-sdk-go-v2/aws"
  "github.com/aws/aws-sdk-go-v2/config"
@@ -32,6 +31,5 @@ func CalendarFromEnvironment(ctx context.Context)(Client,error){
  reader,err:=NewSSMReader(ctx);if err!=nil{return Client{},err}
  client:=ConfigFromEnvironment(reader)
  if client.CalendarID==""||client.OAuthParameter=="" {return Client{},fmt.Errorf("missing GOOGLE_CALENDAR_ID or GOOGLE_CALENDAR_OAUTH_SSM_PATH")}
- _ = os.Getenv("APP_STAGE")
  return client,nil
 }
