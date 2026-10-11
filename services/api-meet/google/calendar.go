@@ -13,6 +13,10 @@ import (
  "time"
 )
 
+// ConfigurationError identifica credenciales no disponibles sin exponer su contenido.
+type ConfigurationError struct{}
+func (*ConfigurationError) Error() string { return "Google Calendar OAuth configuration unavailable" }
+
 type APIError struct { Service string; StatusCode int }
 func (e *APIError) Error() string { return fmt.Sprintf("%s API request failed: HTTP %d",e.Service,e.StatusCode) }
 
@@ -24,11 +28,11 @@ type ParameterReader interface { GetSecure(ctx context.Context, name string) (st
 type Client struct { HTTP *http.Client; Parameters ParameterReader; CalendarID string; OAuthParameter string; HostOAuthParameter string }
 
 func (c Client) accessToken(ctx context.Context) (string,error) {
- if c.Parameters == nil || c.OAuthParameter == "" { return "", errors.New("Google Calendar OAuth SSM configuration missing") }
- secret,err:=c.Parameters.GetSecure(ctx,c.OAuthParameter);if err!=nil{return "",fmt.Errorf("read OAuth parameter: %w",err)}
+ if c.Parameters == nil || c.OAuthParameter == "" { return "", &ConfigurationError{} }
+ secret,err:=c.Parameters.GetSecure(ctx,c.OAuthParameter);if err!=nil{return "",&ConfigurationError{}}
  var credentials OAuthCredentials
- if err=json.Unmarshal([]byte(secret),&credentials);err!=nil{return "",errors.New("invalid OAuth JSON")}
- if credentials.ClientID==""||credentials.ClientSecret==""||credentials.RefreshToken=="" {return "",errors.New("incomplete OAuth credentials")}
+ if err=json.Unmarshal([]byte(secret),&credentials);err!=nil{return "",&ConfigurationError{}}
+ if credentials.ClientID==""||credentials.ClientSecret==""||credentials.RefreshToken=="" {return "",&ConfigurationError{}}
  form:=url.Values{"grant_type":{"refresh_token"},"client_id":{credentials.ClientID},"client_secret":{credentials.ClientSecret},"refresh_token":{credentials.RefreshToken}}
  req,err:=http.NewRequestWithContext(ctx,http.MethodPost,"https://oauth2.googleapis.com/token",strings.NewReader(form.Encode()));if err!=nil{return "",err}
  req.Header.Set("Content-Type","application/x-www-form-urlencoded")

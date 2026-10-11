@@ -3,6 +3,7 @@ package functions
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -112,4 +113,21 @@ func TestMeetingLifecycleWithGoogleMock(t *testing.T){
 	removed,err:=roundtrip("DELETE",response.Data.ID,nil)
 	if err!=nil||removed.StatusCode!=200{t.Fatalf("delete: %+v %v",removed,err)}
 	if len(stored)!=0{t.Fatalf("calendar event was not removed: %d",len(stored))}
+}
+
+// Comprueba que la recarga distingue la falta de OAuth de un fallo de Google.
+type unavailableSecrets struct{}
+
+func (unavailableSecrets) GetSecure(context.Context, string) (string, error) {
+	return "", errors.New("ParameterNotFound: secret must not reach response")
+}
+func TestCalendarReloadWithoutOAuth(t *testing.T) {
+	client := meet.Client{Parameters: unavailableSecrets{}, OAuthParameter: "/oauth", CalendarID: "test"}
+	response, err := handleWithClient(context.Background(), events.APIGatewayV2HTTPRequest{
+		QueryStringParameters: map[string]string{"year": "2026", "month": "10"},
+		RequestContext:        events.APIGatewayV2HTTPRequestContext{HTTP: events.APIGatewayV2HTTPRequestContextHTTPDescription{Method: "GET"}},
+	}, client)
+	if err != nil || response.StatusCode != 503 || !strings.Contains(response.Body, `"code":"CALENDAR_OAUTH_NOT_CONFIGURED"`) || strings.Contains(response.Body, "secret must not reach response") {
+		t.Fatalf("unexpected response: %+v, %v", response, err)
+	}
 }

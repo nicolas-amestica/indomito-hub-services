@@ -47,6 +47,13 @@ func reply(status int, payload any) events.APIGatewayV2HTTPResponse {
  return events.APIGatewayV2HTTPResponse{StatusCode:status,Headers:map[string]string{"content-type":"application/json"},Body:string(b)}
 }
 func fail(status int,code string)events.APIGatewayV2HTTPResponse{return reply(status,map[string]string{"error":code})}
+func calendarFailure(err error) events.APIGatewayV2HTTPResponse {
+ var configurationError *meet.ConfigurationError
+ if errors.As(err, &configurationError) {
+  return reply(503,map[string]string{"error":"calendar_oauth_not_configured", "code":"CALENDAR_OAUTH_NOT_CONFIGURED"})
+ }
+ return fail(502,"google_calendar_error")
+}
 func toView(e calendarEvent)map[string]any{
  date,start,end:="","",""
  if t,err:=time.Parse(time.RFC3339,e.Start.DateTime);err==nil {local:=t.In(santiago());date=local.Format("2006-01-02");start=local.Format("15:04")} else if e.Start.Date!=""{date=e.Start.Date}
@@ -81,7 +88,7 @@ func handleWithClient(ctx context.Context,req events.APIGatewayV2HTTPRequest,cli
   query:=url.Values{"timeMin":{from.Format(time.RFC3339)},"timeMax":{until.Format(time.RFC3339)},"singleEvents":{"true"},"maxResults":{"250"}}
   result:=make([]map[string]any,0)
   for pages:=0;pages<20;pages++ {
-   raw,e:=client.Request(ctx,"GET","",query,nil);if e!=nil{return fail(502,"google_calendar_error"),nil}
+   raw,e:=client.Request(ctx,"GET","",query,nil);if e!=nil{return calendarFailure(e),nil}
    var page struct{Items []calendarEvent `json:"items"`;NextPageToken string `json:"nextPageToken"`}
    if json.Unmarshal(raw,&page)!=nil{return fail(502,"invalid_calendar_response"),nil}
    for _,item:=range page.Items{v:=toView(item);if d,ok:=v["date"].(string);ok&&strings.HasPrefix(d,from.Format("2006-01")){result=append(result,v)}}
