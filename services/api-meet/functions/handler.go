@@ -2,6 +2,9 @@ package functions
 
 import (
  "context"
+ "crypto/sha256"
+ "errors"
+ "fmt"
  "encoding/json"
  "net/url"
  "net/mail"
@@ -25,6 +28,7 @@ type request struct {
  HostColor *string `json:"hostColor"`
  Agent *bool `json:"agent"`
  PhoneNumber *string `json:"phoneNumber"`
+ IdempotencyKey string `json:"idempotencyKey"`
 }
 type calendarEvent struct {
  ID string `json:"id"`
@@ -50,6 +54,14 @@ func toView(e calendarEvent)map[string]any{
  link:=e.HangoutLink
  if link=="" {link=e.ExtendedProperties.Private["meetLink"]}
  return map[string]any{"id":e.ID,"title":e.Summary,"date":date,"startTime":start,"endTime":end,"description":e.Description,"guests":guests,"googleMeetLink":link,"createdAt":e.Created,"hostSk":e.ExtendedProperties.Private["hostSk"],"hostName":e.ExtendedProperties.Private["hostName"],"hostColor":e.ExtendedProperties.Private["hostColor"],"phoneNumber":e.ExtendedProperties.Private["phoneNumber"],"agent":e.ExtendedProperties.Private["agent"]=="true"}
+}
+func deterministicEventID(calendarID,key string)string{
+ hash:=sha256.Sum256([]byte(calendarID+"|"+key))
+ return fmt.Sprintf("m%x",hash)
+}
+func calendarStatus(err error,status int)bool{
+ var apiErr *meet.APIError
+ return errors.As(err,&apiErr)&&apiErr.StatusCode==status
 }
 func santiago()*time.Location{l,e:=time.LoadLocation("America/Santiago");if e!=nil{return time.UTC};return l}
 func Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest)(events.APIGatewayV2HTTPResponse,error){
@@ -99,6 +111,13 @@ func Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest)(events.APIG
   if json.Unmarshal(original,&existing)!=nil{return fail(502,"invalid_calendar_response"),nil}
   for k,v:=range existing.ExtendedProperties.Private{private[k]=v}
  }
+ if method=="POST" && input.IdempotencyKey!="" {
+  if len(input.IdempotencyKey)>128{return fail(400,"invalid_idempotency_key"),nil}
+  id=deterministicEventID(client.CalendarID,input.IdempotencyKey)
+  previous,previousErr:=client.Request(ctx,"GET",id,nil,nil)
+  if previousErr==nil{var existing calendarEvent;if json.Unmarshal(previous,&existing)!=nil{return fail(502,"invalid_calendar_response"),nil};return reply(200,map[string]any{"data":toView(existing)}),nil}
+  if !calendarStatus(previousErr,404){return fail(502,"google_calendar_error"),nil}
+ }
  if method=="POST" {
   meetingURI,meetErr:=client.CreateMeetSpace(ctx)
   if meetErr!=nil{return fail(502,"google_meet_error"),nil}
@@ -108,8 +127,13 @@ func Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest)(events.APIG
  if input.HostSK!=nil{private["hostSk"]=*input.HostSK};if input.HostName!=nil{private["hostName"]=*input.HostName};if input.HostColor!=nil{private["hostColor"]=*input.HostColor};if input.Agent!=nil{private["agent"]=strconv.FormatBool(*input.Agent)};if input.PhoneNumber!=nil{private["phoneNumber"]=*input.PhoneNumber}
  if link:=private["meetLink"];link!=""&&!strings.Contains(input.Description,link){if strings.TrimSpace(input.Description)!=""{input.Description+="\n\n"};input.Description+="Videollamada: "+link}
  body:=map[string]any{"summary":input.Title,"description":input.Description,"start":map[string]string{"dateTime":start.Format(time.RFC3339),"timeZone":"America/Santiago"},"end":map[string]string{"dateTime":end.Format(time.RFC3339),"timeZone":"America/Santiago"},"attendees":attendees,"extendedProperties":map[string]any{"private":private}}
+ if method=="POST"&&id!=""{body["id"]=id}
  verb:="POST";if method=="PUT"{verb="PATCH"}
- raw,e:=client.Request(ctx,verb,id,url.Values{"sendUpdates":{"all"}},body);if e!=nil{return fail(502,"google_calendar_error"),nil}
+ raw,e:=client.Request(ctx,verb,func()string{if method=="POST"{return ""};return id}(),url.Values{"sendUpdates":{"all"}},body)
+ if e!=nil {
+  if method=="POST"&&id!=""&&calendarStatus(e,409){existingRaw,readErr:=client.Request(ctx,"GET",id,nil,nil);if readErr==nil{var existing calendarEvent;if json.Unmarshal(existingRaw,&existing)==nil{return reply(200,map[string]any{"data":toView(existing)}),nil}}}
+  return fail(502,"google_calendar_error"),nil
+ }
  var saved calendarEvent;if json.Unmarshal(raw,&saved)!=nil{return fail(502,"invalid_calendar_response"),nil}
  status:=200;if method=="POST"{status=201}
  return reply(status,map[string]any{"data":toView(saved)}),nil
