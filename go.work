@@ -15,6 +15,7 @@ use (
 	./services/api-contract
 	./services/api-identity
 	./services/api-program
+	./services/api-meet
 	./services/api-payment
 	./services/payment-receipts
 )
