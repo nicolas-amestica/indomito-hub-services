@@ -1,0 +1,65 @@
+name: Meet Quality
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/meet-quality.yml'
+      - 'go.work*'
+      - 'services/api-meet/**'
+      - 'common/**'
+      - 'aws/policies/**'
+  push:
+    branches:
+      - feature/google-meet-api
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: |
+            go.work.sum
+            services/api-meet/go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Generate Go module sums
+        run: cd services/api-meet && go mod tidy
+      - name: Validate module dependencies
+        run: cd services/api-meet && go mod verify
+      - name: Go unit tests
+        run: cd services/api-meet && go test -race -count=1 ./...
+      - name: Go vet
+        run: cd services/api-meet && go vet ./...
+      - name: Build four Lambda artifacts (linux/arm64)
+        run: npx tsx scripts/build-service.ts --service services/api-meet
+      - name: TypeScript typecheck
+        run: npx tsc --noEmit
+      - name: Validate Lambda archives and entrypoints
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, zipfile
+          root = pathlib.Path('services/api-meet')
+          cfg = json.loads((root / 'service.config.json').read_text())
+          assert (root / 'cmd/local-api/main.go').is_file()
+          for fn in cfg['functions']:
+              archive = root / '.serverless-artifacts' / (fn['name'] + '.zip')
+              assert archive.exists(), archive
+              with zipfile.ZipFile(archive) as f:
+                  assert 'bootstrap' in f.namelist(), archive
+          PY
+      - name: Publish generated go.sum for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-meet-go-sum
+          path: services/api-meet/go.sum
+          if-no-files-found: error
