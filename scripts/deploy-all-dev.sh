@@ -7,6 +7,7 @@ SERVICES=(
   api-identity
   api-program
   api-payment
+  api-meet
   payment-receipts
 )
 
