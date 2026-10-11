@@ -82,9 +82,14 @@ func Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest)(events.APIG
  attendees:=make([]map[string]string,0,len(input.Guests))
  for _,g:=range input.Guests{if strings.Contains(g,"@"){attendees=append(attendees,map[string]string{"email":g})}}
  private:=map[string]string{}
+ if method=="POST" {
+  meetingURI,meetErr:=client.CreateMeetSpace(ctx)
+  if meetErr!=nil{return fail(502,"google_meet_error"),nil}
+  private["meetLink"]=meetingURI
+ }
  if input.HostSK!=nil{private["hostSk"]=*input.HostSK};if input.HostName!=nil{private["hostName"]=*input.HostName};if input.HostColor!=nil{private["hostColor"]=*input.HostColor}
  body:=map[string]any{"summary":input.Title,"description":input.Description,"start":map[string]string{"dateTime":start.Format(time.RFC3339),"timeZone":"America/Santiago"},"end":map[string]string{"dateTime":end.Format(time.RFC3339),"timeZone":"America/Santiago"},"attendees":attendees,"extendedProperties":map[string]any{"private":private}}
- verb:="POST";if method=="PUT"{verb="PUT"}
+ verb:="POST";if method=="PUT"{verb="PATCH"}
  raw,e:=client.Request(ctx,verb,id,url.Values{"sendUpdates":{"all"}},body);if e!=nil{return fail(502,"google_calendar_error"),nil}
  var saved calendarEvent;if json.Unmarshal(raw,&saved)!=nil{return fail(502,"invalid_calendar_response"),nil}
  status:=200;if method=="POST"{status=201}
