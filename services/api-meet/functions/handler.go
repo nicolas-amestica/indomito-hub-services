@@ -66,6 +66,9 @@ func calendarStatus(err error,status int)bool{
 func santiago()*time.Location{l,e:=time.LoadLocation("America/Santiago");if e!=nil{return time.UTC};return l}
 func Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest)(events.APIGatewayV2HTTPResponse,error){
  client,err:=meet.CalendarFromEnvironment(ctx);if err!=nil{return fail(503,"calendar_not_configured"),nil}
+ return handleWithClient(ctx,req,client)
+}
+func handleWithClient(ctx context.Context,req events.APIGatewayV2HTTPRequest,client meet.Client)(events.APIGatewayV2HTTPResponse,error){
  method:=req.RequestContext.HTTP.Method
  if method=="GET" {
   year,e1:=strconv.Atoi(req.QueryStringParameters["year"]);month,e2:=strconv.Atoi(req.QueryStringParameters["month"])
