@@ -17,6 +17,7 @@ type request struct {
  Title string `json:"title"`
  Date string `json:"date"`
  StartTime string `json:"startTime"`
+ EndTime string `json:"endTime"`
  Description string `json:"description"`
  Guests []string `json:"guests"`
  HostSK *string `json:"hostSk"`
@@ -63,7 +64,7 @@ func Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest)(events.APIG
    var page struct{Items []calendarEvent `json:"items"`;NextPageToken string `json:"nextPageToken"`}
    if json.Unmarshal(raw,&page)!=nil{return fail(502,"invalid_calendar_response"),nil}
    for _,item:=range page.Items{v:=toView(item);if d,ok:=v["date"].(string);ok&&strings.HasPrefix(d,from.Format("2006-01")){result=append(result,v)}}
-   if page.NextPageToken==""{break};query.Set("pageToken",page.NextPageToken)
+   if page.NextPageToken==""{break};if len(result)>5000{return fail(502,"calendar_result_too_large"),nil};query.Set("pageToken",page.NextPageToken)
   }
   return reply(200,map[string]any{"data":result}),nil
  }
@@ -79,9 +80,23 @@ func Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest)(events.APIG
  if json.Unmarshal([]byte(req.Body),&input)!=nil||strings.TrimSpace(input.Title)==""{return fail(400,"invalid_body"),nil}
  start,e:=time.ParseInLocation("2006-01-02 15:04",input.Date+" "+input.StartTime,santiago());if e!=nil{return fail(400,"invalid_date_time"),nil}
  end:=start.Add(time.Hour)
+ if input.EndTime!="" {
+  parsed,parseErr:=time.ParseInLocation("2006-01-02 15:04",input.Date+" "+input.EndTime,santiago())
+  if parseErr!=nil{return fail(400,"invalid_end_time"),nil}
+  if !parsed.After(start){parsed=parsed.AddDate(0,0,1)}
+  if parsed.Sub(start)>24*time.Hour{return fail(400,"invalid_duration"),nil}
+  end=parsed
+ }
  attendees:=make([]map[string]string,0,len(input.Guests))
  for _,g:=range input.Guests{if strings.Contains(g,"@"){attendees=append(attendees,map[string]string{"email":g})}}
  private:=map[string]string{}
+ if method=="PUT" {
+  original,fetchErr:=client.Request(ctx,"GET",id,nil,nil)
+  if fetchErr!=nil{return fail(502,"google_calendar_error"),nil}
+  var existing calendarEvent
+  if json.Unmarshal(original,&existing)!=nil{return fail(502,"invalid_calendar_response"),nil}
+  for k,v:=range existing.ExtendedProperties.Private{private[k]=v}
+ }
  if method=="POST" {
   meetingURI,meetErr:=client.CreateMeetSpace(ctx)
   if meetErr!=nil{return fail(502,"google_meet_error"),nil}
