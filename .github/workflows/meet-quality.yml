@@ -32,13 +32,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - name: Generate Go module sums
-        run: cd services/api-meet && go mod tidy
-      - name: Export generated Go checksums
-        run: |
-          echo "BEGIN_MEET_GO_SUM"
-          cat services/api-meet/go.sum
-          echo "END_MEET_GO_SUM"
+      - name: Verify Go module is tidy and checksums are committed
+        run: cd services/api-meet && go mod tidy -diff
       - name: Validate module dependencies
         run: cd services/api-meet && go mod verify
       - name: Go unit tests
