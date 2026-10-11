@@ -94,3 +94,28 @@ func TestCalendarRejectsUpstreamFailure(t *testing.T) {
 		t.Fatal("Google Calendar HTTP 429 must not be reported as success")
 	}
 }
+
+func TestCalendarRetriesTransientGetOnly(t *testing.T) {
+	calls := 0
+	client := Client{
+		Parameters: fixedCredentials{},
+		OAuthParameter: "/calendar",
+		CalendarID: "calendar@example.com",
+		HTTP: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.URL.Host == "oauth2.googleapis.com" {
+				return mockResponse(200, `{"access_token":"fake-token"}`), nil
+			}
+			calls++
+			if calls == 1 {
+				return mockResponse(503, `{"error":"unavailable"}`), nil
+			}
+			return mockResponse(200, `{"items":[]}`), nil
+		})},
+	}
+	if _, err := client.Request(context.Background(), "GET", "", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 {
+		t.Fatalf("expected two GET attempts, got %d", calls)
+	}
+}
