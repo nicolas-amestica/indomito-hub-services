@@ -15,6 +15,7 @@ module.exports = buildGoServiceServerless(ApiServices.Meet,endpoints,{
   env:{
     GOOGLE_CALENDAR_ID:`\${ssm:/indomito/${STAGE}/google/calendar-id}`,
     GOOGLE_CALENDAR_OAUTH_SSM_PATH:`/indomito/${STAGE}/google/calendar-oauth`,
+    GOOGLE_MEET_HOST_OAUTH_SSM_PATH:`/indomito/${STAGE}/google/meet-host-oauth`,
   },
   policies:[ssmReadPolicy(parameterArn)],
 });
