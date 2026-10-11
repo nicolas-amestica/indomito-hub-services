@@ -4,6 +4,7 @@ import (
  "context"
  "encoding/json"
  "net/url"
+ "net/mail"
  "strconv"
  "strings"
  "time"
@@ -22,6 +23,8 @@ type request struct {
  HostSK *string `json:"hostSk"`
  HostName *string `json:"hostName"`
  HostColor *string `json:"hostColor"`
+ Agent *bool `json:"agent"`
+ PhoneNumber *string `json:"phoneNumber"`
 }
 type calendarEvent struct {
  ID string `json:"id"`
@@ -46,7 +49,7 @@ func toView(e calendarEvent)map[string]any{
  guests:=make([]string,0,len(e.Attendees));for _,a:=range e.Attendees {guests=append(guests,a.Email)}
  link:=e.HangoutLink
  if link=="" {link=e.ExtendedProperties.Private["meetLink"]}
- return map[string]any{"id":e.ID,"title":e.Summary,"date":date,"startTime":start,"endTime":end,"description":e.Description,"guests":guests,"googleMeetLink":link,"createdAt":e.Created,"hostSk":e.ExtendedProperties.Private["hostSk"],"hostName":e.ExtendedProperties.Private["hostName"],"hostColor":e.ExtendedProperties.Private["hostColor"]}
+ return map[string]any{"id":e.ID,"title":e.Summary,"date":date,"startTime":start,"endTime":end,"description":e.Description,"guests":guests,"googleMeetLink":link,"createdAt":e.Created,"hostSk":e.ExtendedProperties.Private["hostSk"],"hostName":e.ExtendedProperties.Private["hostName"],"hostColor":e.ExtendedProperties.Private["hostColor"],"phoneNumber":e.ExtendedProperties.Private["phoneNumber"],"agent":e.ExtendedProperties.Private["agent"]=="true"}
 }
 func santiago()*time.Location{l,e:=time.LoadLocation("America/Santiago");if e!=nil{return time.UTC};return l}
 func Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest)(events.APIGatewayV2HTTPResponse,error){
@@ -58,14 +61,14 @@ func Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest)(events.APIG
   from:=time.Date(year,time.Month(month),1,0,0,0,0,santiago());until:=from.AddDate(0,1,0)
   query:=url.Values{"timeMin":{from.Format(time.RFC3339)},"timeMax":{until.Format(time.RFC3339)},"singleEvents":{"true"},"maxResults":{"250"}}
   result:=make([]map[string]any,0)
-  for {
+  for pages:=0;pages<20;pages++ {
    raw,e:=client.Request(ctx,"GET","",query,nil);if e!=nil{return fail(502,"google_calendar_error"),nil}
    var page struct{Items []calendarEvent `json:"items"`;NextPageToken string `json:"nextPageToken"`}
    if json.Unmarshal(raw,&page)!=nil{return fail(502,"invalid_calendar_response"),nil}
    for _,item:=range page.Items{v:=toView(item);if d,ok:=v["date"].(string);ok&&strings.HasPrefix(d,from.Format("2006-01")){result=append(result,v)}}
-   if page.NextPageToken==""{break};if len(result)>5000{return fail(502,"calendar_result_too_large"),nil};query.Set("pageToken",page.NextPageToken)
+   if page.NextPageToken==""{return reply(200,map[string]any{"data":result}),nil};if len(result)>5000{return fail(502,"calendar_result_too_large"),nil};query.Set("pageToken",page.NextPageToken)
   }
-  return reply(200,map[string]any{"data":result}),nil
+  return fail(502,"calendar_pagination_limit"),nil
  }
  id:=req.PathParameters["eventId"]
  if method=="DELETE" {
@@ -87,7 +90,7 @@ func Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest)(events.APIG
   end=parsed
  }
  attendees:=make([]map[string]string,0,len(input.Guests))
- for _,g:=range input.Guests{if strings.Contains(g,"@"){attendees=append(attendees,map[string]string{"email":g})}}
+ for _,g:=range input.Guests{g=strings.TrimSpace(g);address,parseErr:=mail.ParseAddress(g);if parseErr!=nil||address.Address!=g{return fail(400,"invalid_guest_email"),nil};attendees=append(attendees,map[string]string{"email":g})}
  private:=map[string]string{}
  if method=="PUT" {
   original,fetchErr:=client.Request(ctx,"GET",id,nil,nil)
@@ -100,9 +103,10 @@ func Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest)(events.APIG
   meetingURI,meetErr:=client.CreateMeetSpace(ctx)
   if meetErr!=nil{return fail(502,"google_meet_error"),nil}
   private["meetLink"]=meetingURI
-  if input.Description=="" { input.Description="Videollamada: "+meetingURI } else { input.Description += "\\n\\nVideollamada: "+meetingURI }
+  if input.Description=="" { input.Description="Videollamada: "+meetingURI } else { input.Description += "\n\nVideollamada: "+meetingURI }
  }
- if input.HostSK!=nil{private["hostSk"]=*input.HostSK};if input.HostName!=nil{private["hostName"]=*input.HostName};if input.HostColor!=nil{private["hostColor"]=*input.HostColor}
+ if input.HostSK!=nil{private["hostSk"]=*input.HostSK};if input.HostName!=nil{private["hostName"]=*input.HostName};if input.HostColor!=nil{private["hostColor"]=*input.HostColor};if input.Agent!=nil{private["agent"]=strconv.FormatBool(*input.Agent)};if input.PhoneNumber!=nil{private["phoneNumber"]=*input.PhoneNumber}
+ if link:=private["meetLink"];link!=""&&!strings.Contains(input.Description,link){if strings.TrimSpace(input.Description)!=""{input.Description+="\n\n"};input.Description+="Videollamada: "+link}
  body:=map[string]any{"summary":input.Title,"description":input.Description,"start":map[string]string{"dateTime":start.Format(time.RFC3339),"timeZone":"America/Santiago"},"end":map[string]string{"dateTime":end.Format(time.RFC3339),"timeZone":"America/Santiago"},"attendees":attendees,"extendedProperties":map[string]any{"private":private}}
  verb:="POST";if method=="PUT"{verb="PATCH"}
  raw,e:=client.Request(ctx,verb,id,url.Values{"sendUpdates":{"all"}},body);if e!=nil{return fail(502,"google_calendar_error"),nil}
