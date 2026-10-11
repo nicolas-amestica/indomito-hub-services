@@ -3,7 +3,6 @@ package functions
 import (
  "context"
  "encoding/json"
- "net/http"
  "net/url"
  "strconv"
  "strings"
