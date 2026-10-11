@@ -18,7 +18,7 @@ type TokenResponse struct { AccessToken string `json:"access_token"`; ExpiresIn 
 
 // ParameterReader is implemented by the AWS SSM adapter. Never log decrypted values.
 type ParameterReader interface { GetSecure(ctx context.Context, name string) (string, error) }
-type Client struct { HTTP *http.Client; Parameters ParameterReader; CalendarID string; OAuthParameter string }
+type Client struct { HTTP *http.Client; Parameters ParameterReader; CalendarID string; OAuthParameter string; HostOAuthParameter string }
 
 func (c Client) accessToken(ctx context.Context) (string,error) {
  if c.Parameters == nil || c.OAuthParameter == "" { return "", errors.New("Google Calendar OAuth SSM configuration missing") }
@@ -56,5 +56,13 @@ func(c Client) Request(ctx context.Context,method,eventID string,query url.Value
  return response,nil
 }
 func ConfigFromEnvironment(parameters ParameterReader) Client {
- return Client{Parameters:parameters,CalendarID:os.Getenv("GOOGLE_CALENDAR_ID"),OAuthParameter:os.Getenv("GOOGLE_CALENDAR_OAUTH_SSM_PATH")}
+ return Client{Parameters:parameters,CalendarID:os.Getenv("GOOGLE_CALENDAR_ID"),OAuthParameter:os.Getenv("GOOGLE_CALENDAR_OAUTH_SSM_PATH"),HostOAuthParameter:os.Getenv("GOOGLE_MEET_HOST_OAUTH_SSM_PATH")}
+}
+
+
+// HostOAuthPath returns the optional independent Meet host identity. When absent,
+// Calendar and Meet share the same OAuth credentials, avoiding duplicate secrets.
+func (c Client) HostOAuthPath() string {
+ if c.HostOAuthParameter != "" { return c.HostOAuthParameter }
+ return c.OAuthParameter
 }
