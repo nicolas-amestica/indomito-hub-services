@@ -1,0 +1,31 @@
+{
+  "name": "api-meet",
+  "localPort": 8088,
+  "localEntrypoint": "./cmd/local-api",
+  "defaultArtifactDir": ".serverless-artifacts",
+  "requiredEnvironment": [
+    "APP_NAME",
+    "APP_STAGE",
+    "APP_REGION",
+    "GOOGLE_CALENDAR_ID",
+    "GOOGLE_CALENDAR_OAUTH_SSM_PATH"
+  ],
+  "functions": [
+    {
+      "name": "fn-listar-reuniones-v1",
+      "entrypoint": "./cmd/fn-listar-reuniones-v1"
+    },
+    {
+      "name": "fn-crear-reunion-v1",
+      "entrypoint": "./cmd/fn-crear-reunion-v1"
+    },
+    {
+      "name": "fn-actualizar-reunion-v1",
+      "entrypoint": "./cmd/fn-actualizar-reunion-v1"
+    },
+    {
+      "name": "fn-eliminar-reunion-v1",
+      "entrypoint": "./cmd/fn-eliminar-reunion-v1"
+    }
+  ]
+}
