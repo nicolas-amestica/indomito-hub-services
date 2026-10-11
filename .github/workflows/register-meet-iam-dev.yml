@@ -1,0 +1,47 @@
+name: Register Meet IAM DEV
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/register-meet-iam-dev.yml'
+      - 'scripts/configure-meet-iam-dev.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  register:
+    if: ${{ vars.DEV_AWS_ROLE_ARN != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      AWS_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
+      EXPECTED_AWS_ACCOUNT: '382670112717'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.DEV_AWS_ROLE_ARN }}
+          role-session-name: meet-iam-${{ github.run_id }}
+          aws-region: us-east-1
+      - name: Verify target account
+        run: |
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$EXPECTED_AWS_ACCOUNT"
+      - name: Register Meet module and ADMIN permissions
+        run: bash scripts/configure-meet-iam-dev.sh
+      - name: Verify persisted module and permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          TABLE="$(aws cloudformation describe-stacks --stack-name indomito-hub-infra-ddb-dev --query "Stacks[0].Outputs[?OutputKey=='UsuariosTableName'].OutputValue | [0]" --output text)"
+          test -n "$TABLE" && test "$TABLE" != None
+          aws dynamodb get-item --table-name "$TABLE" --consistent-read \
+            --key '{"pk":{"S":"APP#INDOMITO_HUB"},"sk":{"S":"APP#INDOMITO_HUB#LV1#ADM#LV2#MEET_AGENDA"}}' \
+            --query 'Item.[code.S,active.BOOL,path.S]' --output text | grep -F 'MEET_AGENDA'
+          aws dynamodb get-item --table-name "$TABLE" --consistent-read \
+            --key '{"pk":{"S":"APP#PROFILE#PERMISSIONS"},"sk":{"S":"PFL#ADMIN#APP#INDOMITO_HUB#LV1#ADM#LV2#MEET_AGENDA"}}' \
+            --query 'Item.[moduleCode.S,allowances.L[*].S]' --output json | grep -F 'MEET_AGENDA'
