@@ -54,9 +54,14 @@ var (
 
 	GetTaxSettingsRoute       = Route{Method: http.MethodGet, Path: "/configuracion/tributaria"}
 	UpdateTaxSettingsRoute    = Route{Method: http.MethodPut, Path: "/configuracion/tributaria"}
-	GetMasterAccessRoute     = Route{Method: http.MethodGet, Path: "/configuracion/acceso-maestro"}
-	RotateMasterAccessRoute  = Route{Method: http.MethodPut, Path: "/configuracion/acceso-maestro"}
-	RevokeMasterAccessRoute  = Route{Method: http.MethodDelete, Path: "/configuracion/acceso-maestro"}
+	GetMasterAccessRoute      = Route{Method: http.MethodGet, Path: "/configuracion/acceso-maestro"}
+	RotateMasterAccessRoute   = Route{Method: http.MethodPut, Path: "/configuracion/acceso-maestro"}
+	RevokeMasterAccessRoute   = Route{Method: http.MethodDelete, Path: "/configuracion/acceso-maestro"}
+	MeetingHostOptionsRoute   = Route{Method: http.MethodGet, Path: "/configuracion/anfitriones:opciones"}
+	MeetingHostListRoute      = Route{Method: http.MethodGet, Path: "/configuracion/anfitriones"}
+	MeetingHostCreateRoute    = Route{Method: http.MethodPost, Path: "/configuracion/anfitriones"}
+	MeetingHostUpdateRoute    = Route{Method: http.MethodPut, Path: "/configuracion/anfitriones/{id}"}
+	MeetingHostDeleteRoute    = Route{Method: http.MethodDelete, Path: "/configuracion/anfitriones/{id}"}
 	ServiceCatalogListRoute   = Route{Method: http.MethodGet, Path: "/catalogo:servicios"}
 	ServiceCatalogCreateRoute = Route{Method: http.MethodPost, Path: "/catalogo:servicios"}
 	ServiceCatalogUpdateRoute = Route{Method: http.MethodPut, Path: "/catalogo:servicios/{id}"}
