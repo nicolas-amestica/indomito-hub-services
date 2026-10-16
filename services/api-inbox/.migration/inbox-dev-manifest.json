@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "createdAt": "2026-10-15T18:17:06Z",
+  "source": "root-pa:us-west-2:conversations-dev-pri-usw2",
+  "target": "pa-dev:us-east-1:ind-dev-conversaciones-ddb-dev-pri-use1",
+  "neutralHash": "8050f9598b16bd1b5c21d85e5bcdae9ee7755f3f7bbc1598353154a178cc6cf2",
+  "conversationCount": 0,
+  "messageCount": 0,
+  "items": [
+    {
+      "pk": "CONV_COUNT",
+      "sk": "META",
+      "hash": "eb780f68038bfda8fa40db52c5051518f1af4d8ca6281af65ade90b4bc78349b",
+      "data": {
+        "activeCount": 0,
+        "pk": "CONV_COUNT",
+        "sk": "META"
+      }
+    },
+    {
+      "pk": "SEQ#LIST",
+      "sk": "META",
+      "hash": "dc2c6a1666ce25d5d0c35830f87debe5ced8de92cc4c3f600aeb25a72facc1ae",
+      "data": {
+        "pk": "SEQ#LIST",
+        "sequence": 0,
+        "sk": "META"
+      }
+    }
+  ]
+}

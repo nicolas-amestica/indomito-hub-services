@@ -1,0 +1,57 @@
+{
+  "name": "api-inbox",
+  "localPort": 8089,
+  "localEntrypoint": "./cmd/local-api",
+  "defaultArtifactDir": ".serverless-artifacts",
+  "requiredEnvironment": [
+    "APP_NAME",
+    "APP_STAGE",
+    "APP_REGION",
+    "CONVERSATIONS_TABLE_NAME",
+    "INBOX_CURSOR_SECRET_PARAM",
+    "INBOX_RUNTIME_CONFIG_PARAM",
+    "INBOX_WHATSAPP_CONFIG_PARAM",
+    "INBOX_GEMINI_CONFIG_PARAM",
+    "INBOX_AGENT_CONFIG_PARAM",
+    "INBOX_ASSET_CONFIG_PARAM",
+    "INBOX_MEETING_CONFIG_PARAM",
+    "INBOX_TEMPORARY_BUCKET_NAME",
+    "INBOX_WEBSOCKET_URL"
+  ],
+  "functions": [
+    {
+      "name": "fn-obtener-conversaciones-v1",
+      "entrypoint": "./cmd/fn-obtener-conversaciones-v1"
+    },
+    {
+      "name": "fn-obtener-conversacion-v1",
+      "entrypoint": "./cmd/fn-obtener-conversacion-v1"
+    },
+    {
+      "name": "fn-enviar-respuesta-v1",
+      "entrypoint": "./cmd/fn-enviar-respuesta-v1"
+    },
+    { "name": "fn-preparar-adjuntos-v1", "entrypoint": "./cmd/fn-preparar-adjuntos-v1" },
+    { "name": "fn-enviar-adjunto-v1", "entrypoint": "./cmd/fn-enviar-adjunto-v1" },
+    { "name": "fn-actualizar-contacto-v1", "entrypoint": "./cmd/fn-actualizar-contacto-v1" },
+    { "name": "fn-marcar-no-leida-v1", "entrypoint": "./cmd/fn-marcar-no-leida-v1" },
+    { "name": "fn-eliminar-conversacion-v1", "entrypoint": "./cmd/fn-eliminar-conversacion-v1" },
+    { "name": "fn-iniciar-marcar-leidas-v1", "entrypoint": "./cmd/fn-iniciar-marcar-leidas-v1" },
+    { "name": "fn-iniciar-recalcular-no-leidas-v1", "entrypoint": "./cmd/fn-iniciar-recalcular-no-leidas-v1" },
+    { "name": "fn-crear-suscripcion-v1", "entrypoint": "./cmd/fn-crear-suscripcion-v1" },
+    { "name": "fn-obtener-envio-v1", "entrypoint": "./cmd/fn-obtener-envio-v1" },
+    { "name": "fn-reintentar-envio-v1", "entrypoint": "./cmd/fn-reintentar-envio-v1" },
+    { "name": "fn-resolver-envio-v1", "entrypoint": "./cmd/fn-resolver-envio-v1" },
+    { "name": "fn-obtener-operacion-activa-v1", "entrypoint": "./cmd/fn-obtener-operacion-activa-v1" },
+    { "name": "fn-obtener-operacion-v1", "entrypoint": "./cmd/fn-obtener-operacion-v1" },
+    { "name": "fn-verificar-webhook-whatsapp-v1", "entrypoint": "./cmd/fn-verificar-webhook-whatsapp-v1" },
+    { "name": "fn-recibir-webhook-whatsapp-v1", "entrypoint": "./cmd/fn-recibir-webhook-whatsapp-v1" },
+    { "name": "fn-despachar-trabajo-inbox-v1", "entrypoint": "./cmd/fn-despachar-trabajo-inbox-v1" },
+    { "name": "fn-procesar-mensaje-entrante-v1", "entrypoint": "./cmd/fn-procesar-mensaje-entrante-v1" },
+    { "name": "fn-procesar-agente-inbox-v1", "entrypoint": "./cmd/fn-procesar-agente-inbox-v1" },
+    { "name": "fn-conectar-websocket-v1", "entrypoint": "./cmd/fn-conectar-websocket-v1" },
+    { "name": "fn-desconectar-websocket-v1", "entrypoint": "./cmd/fn-desconectar-websocket-v1" },
+    { "name": "fn-publicar-evento-inbox-v1", "entrypoint": "./cmd/fn-publicar-evento-inbox-v1" },
+    { "name": "fn-procesar-operacion-masiva-v1", "entrypoint": "./cmd/fn-procesar-operacion-masiva-v1" }
+  ]
+}

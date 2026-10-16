@@ -19,6 +19,50 @@ const AuthorizerUserIDKey = "userId"
 // contexto viene de un token con claims estándar, donde el sujeto es `sub`.
 const authorizerSubjectKey = "sub"
 
+const (
+	authorizerEmailKey       = "email"
+	authorizerRUTKey         = "rut"
+	authorizerProfileCodeKey = "profileCode"
+)
+
+// AuthorizerIdentity contiene la identidad validada que publicó el Lambda
+// Authorizer. Los campos opcionales son cadenas vacías cuando no existen.
+type AuthorizerIdentity struct {
+	UserID      string
+	Email       string
+	RUT         string
+	ProfileCode string
+}
+
+// IdentityFromContext valida y normaliza el contexto completo del authorizer.
+// Una clave presente con tipo, longitud o contenido inválido invalida toda la
+// identidad; nunca se intenta rescatarla desde una fuente controlada por el cliente.
+func IdentityFromContext(req events.APIGatewayV2HTTPRequest) (AuthorizerIdentity, error) {
+	authorizer := req.RequestContext.Authorizer
+	if authorizer == nil || len(authorizer.Lambda) == 0 {
+		return AuthorizerIdentity{}, unauthorizedIdentity()
+	}
+
+	userID, err := requiredIdentityValue(authorizer.Lambda, AuthorizerUserIDKey, authorizerSubjectKey, 128)
+	if err != nil {
+		return AuthorizerIdentity{}, err
+	}
+	email, err := optionalIdentityValue(authorizer.Lambda, authorizerEmailKey, 254, strings.ToLower)
+	if err != nil {
+		return AuthorizerIdentity{}, err
+	}
+	rut, err := optionalIdentityValue(authorizer.Lambda, authorizerRUTKey, 32, func(value string) string { return value })
+	if err != nil {
+		return AuthorizerIdentity{}, err
+	}
+	profileCode, err := optionalIdentityValue(authorizer.Lambda, authorizerProfileCodeKey, 64, strings.ToUpper)
+	if err != nil {
+		return AuthorizerIdentity{}, err
+	}
+
+	return AuthorizerIdentity{UserID: userID, Email: email, RUT: rut, ProfileCode: profileCode}, nil
+}
+
 // UserIDFromContext extrae el identificador del usuario del contexto del
 // authorizer. Devuelve error si el contexto no lo trae: un endpoint protegido
 // que no puede identificar a quien llama no debe continuar.
@@ -32,26 +76,45 @@ const authorizerSubjectKey = "sub"
 // el usuario fijo [DevUserID]. El handler tiene un solo camino: lee del
 // contexto y no sabe quién lo llenó.
 func UserIDFromContext(req events.APIGatewayV2HTTPRequest) (string, error) {
-	authorizer := req.RequestContext.Authorizer
-	if authorizer == nil || len(authorizer.Lambda) == 0 {
-		return "", apperr.Unauthorized("No se pudo identificar al usuario de la solicitud")
-	}
+	identity, err := IdentityFromContext(req)
+	return identity.UserID, err
+}
 
-	for _, key := range []string{AuthorizerUserIDKey, authorizerSubjectKey} {
-		value, present := authorizer.Lambda[key]
-		if !present {
-			continue
-		}
-		// El contexto de un Lambda Authorizer entrega valores de texto: un
-		// tipo distinto es un contexto mal armado, no una identidad válida.
-		text, isString := value.(string)
-		if !isString {
-			continue
-		}
-		if userID := strings.TrimSpace(text); userID != "" {
-			return userID, nil
-		}
+func requiredIdentityValue(values map[string]any, primary string, fallback string, maximum int) (string, error) {
+	if _, present := values[primary]; present {
+		return identityString(values[primary], maximum)
 	}
+	value, present := values[fallback]
+	if !present {
+		return "", unauthorizedIdentity()
+	}
+	return identityString(value, maximum)
+}
 
-	return "", apperr.Unauthorized("No se pudo identificar al usuario de la solicitud")
+func optionalIdentityValue(values map[string]any, key string, maximum int, normalize func(string) string) (string, error) {
+	value, present := values[key]
+	if !present {
+		return "", nil
+	}
+	text, err := identityString(value, maximum)
+	if err != nil {
+		return "", err
+	}
+	return normalize(text), nil
+}
+
+func identityString(value any, maximum int) (string, error) {
+	text, valid := value.(string)
+	if !valid {
+		return "", unauthorizedIdentity()
+	}
+	text = strings.TrimSpace(text)
+	if text == "" || len(text) > maximum {
+		return "", unauthorizedIdentity()
+	}
+	return text, nil
+}
+
+func unauthorizedIdentity() error {
+	return apperr.Unauthorized("No se pudo identificar al usuario de la solicitud")
 }

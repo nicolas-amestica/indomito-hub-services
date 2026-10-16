@@ -45,24 +45,64 @@ const (
 	// CodeUpstreamTimeout marca una dependencia externa que no responde (502).
 	CodeUpstreamTimeout = "UPSTREAM_TIMEOUT"
 	// CodeInternalError marca un error inesperado (500).
-	CodeInternalError = "INTERNAL_ERROR"
+	CodeInternalError                   = "INTERNAL_ERROR"
+	CodeValidationInputInvalid          = "VALIDATION_INPUT_INVALID"
+	CodeValidationPhoneInvalid          = "VALIDATION_PHONE_INVALID"
+	CodeValidationCursorInvalid         = "VALIDATION_CURSOR_INVALID"
+	CodeInboxCursorExpired              = "INBOX_CURSOR_EXPIRED"
+	CodeValidationIdempotencyKeyInvalid = "VALIDATION_IDEMPOTENCY_KEY_INVALID"
+	CodeAuthUnauthorized                = "AUTH_UNAUTHORIZED"
+	CodeAuthForbidden                   = "AUTH_FORBIDDEN"
+	CodeInboxUploadNotFound             = "INBOX_UPLOAD_NOT_FOUND"
+	CodeInboxUploadExpired              = "INBOX_UPLOAD_EXPIRED"
+	CodeInboxUploadAlreadyUsed          = "INBOX_UPLOAD_ALREADY_USED"
+	CodeInboxUploadContentInvalid       = "INBOX_UPLOAD_CONTENT_INVALID"
+	CodeInboxServiceWindowClosed        = "INBOX_SERVICE_WINDOW_CLOSED"
+	CodeInboxIdempotencyConflict        = "INBOX_IDEMPOTENCY_CONFLICT"
+	CodeInboxSendNotRetryable           = "INBOX_SEND_NOT_RETRYABLE"
+	CodeInboxSendRetryExhausted         = "INBOX_SEND_RETRY_EXHAUSTED"
+	CodeInboxSendNotResolvable          = "INBOX_SEND_NOT_RESOLVABLE"
+	CodeInboxSnapshotLimitReached       = "INBOX_SNAPSHOT_LIMIT_REACHED"
+	CodeInboxBulkConflict               = "INBOX_BULK_CONFLICT"
+	CodeInboxProviderRejected           = "INBOX_PROVIDER_REJECTED"
+	CodeInboxCapacityUnavailable        = "INBOX_CAPACITY_UNAVAILABLE"
 )
 
 // httpStatusByCode mapea cada codigo del catalogo a su estado HTTP fijo,
 // segun la tabla "Codigos de respuestas personalizadas" de api-design.md.
 var httpStatusByCode = map[string]int{
-	CodeValidationError:       400,
-	CodeRequiredFieldMissing:  400,
-	CodeInvalidQueryParameter: 400,
-	CodeInvalidRequestFormat:  400,
-	CodeUnauthorized:          401,
-	CodeTokenExpired:          401,
-	CodeForbidden:             403,
-	CodeResourceNotFound:      404,
-	CodeConflict:              409,
-	CodeUpstreamServiceError:  502,
-	CodeUpstreamTimeout:       502,
-	CodeInternalError:         500,
+	CodeValidationError:                 400,
+	CodeRequiredFieldMissing:            400,
+	CodeInvalidQueryParameter:           400,
+	CodeInvalidRequestFormat:            400,
+	CodeUnauthorized:                    401,
+	CodeTokenExpired:                    401,
+	CodeForbidden:                       403,
+	CodeResourceNotFound:                404,
+	CodeConflict:                        409,
+	CodeUpstreamServiceError:            502,
+	CodeUpstreamTimeout:                 502,
+	CodeInternalError:                   500,
+	CodeValidationInputInvalid:          400,
+	CodeValidationPhoneInvalid:          400,
+	CodeValidationCursorInvalid:         400,
+	CodeInboxCursorExpired:              400,
+	CodeValidationIdempotencyKeyInvalid: 400,
+	CodeAuthUnauthorized:                401,
+	CodeAuthForbidden:                   403,
+	CodeInboxUploadNotFound:             404,
+	CodeInboxUploadExpired:              409,
+	CodeInboxUploadAlreadyUsed:          409,
+	CodeInboxUploadContentInvalid:       422,
+	CodeInboxServiceWindowClosed:        422,
+	CodeInboxIdempotencyConflict:        409,
+	CodeInboxSendNotRetryable:           409,
+	CodeInboxSendRetryExhausted:         409,
+	CodeInboxSendNotResolvable:          409,
+	CodeInboxSnapshotLimitReached:       429,
+	CodeInboxBulkConflict:               409,
+	CodeInboxProviderRejected:           502,
+	CodeInboxCapacityUnavailable:        503,
 }
 
 // AppError es un error de dominio con su codigo del catalogo, su estado HTTP

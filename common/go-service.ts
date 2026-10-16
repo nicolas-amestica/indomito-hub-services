@@ -33,7 +33,7 @@ const SHARED_HTTP_API_AUTHORIZER_ID = `\${cf:indomito-hub-infra-api-gateway-${ST
  *   2. `authorizerEnabled: true` en infra + desplegar `api-gateway`
  *   3. Poner esta constante en `true`
  */
-const SHARED_AUTHORIZER_ENABLED = STAGE === 'dev';
+const SHARED_AUTHORIZER_ENABLED = STAGE === 'dev' || STAGE === 'prd';
 
 /**
  * Evento personalizado para una función Lambda (EventBridge, DynamoDB Stream, etc.).

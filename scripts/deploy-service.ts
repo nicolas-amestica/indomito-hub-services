@@ -83,19 +83,20 @@ function loginSso(profile: string): void {
 
 function exportCredentials(profile: string): Record<string, string> {
   try {
-    const output = execSync(
-      `aws configure export-credentials --profile ${profile} --format env`,
+    const output = execFileSync(
+      'aws', ['configure', 'export-credentials', '--profile', profile, '--format', 'process'],
       { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
     );
-
-    const env: Record<string, string> = {};
-
-    for (const line of output.split('\n')) {
-      const match = line.match(/^export\s+(\w+)=(.*)$/);
-      if (match) {
-        env[match[1]] = match[2];
-      }
-    }
+    const credentials = JSON.parse(output) as {
+      AccessKeyId?: string;
+      SecretAccessKey?: string;
+      SessionToken?: string;
+    };
+    const env: Record<string, string> = {
+      AWS_ACCESS_KEY_ID: credentials.AccessKeyId ?? '',
+      AWS_SECRET_ACCESS_KEY: credentials.SecretAccessKey ?? '',
+      AWS_SESSION_TOKEN: credentials.SessionToken ?? '',
+    };
 
     if (!env.AWS_ACCESS_KEY_ID || !env.AWS_SECRET_ACCESS_KEY) {
       throw new Error('Credenciales incompletas');

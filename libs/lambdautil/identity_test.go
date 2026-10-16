@@ -1,6 +1,7 @@
 package lambdautil
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -123,5 +124,68 @@ func TestUserIDFromContext_IgnoresBodyIdentity(t *testing.T) {
 
 	if _, err := UserIDFromContext(req); err == nil {
 		t.Fatal("UserIDFromContext acepto una identidad enviada por el cliente")
+	}
+}
+
+func TestIdentityFromContext_NormalizesCompleteIdentity(t *testing.T) {
+	req := requestWithAuthorizerContext(map[string]any{
+		AuthorizerUserIDKey:      " user-1 ",
+		authorizerEmailKey:       " PERSONA@EXAMPLE.COM ",
+		authorizerRUTKey:         " 17.137.440-5 ",
+		authorizerProfileCodeKey: " admin ",
+	})
+
+	identity, err := IdentityFromContext(req)
+	if err != nil {
+		t.Fatalf("IdentityFromContext devolvio error: %v", err)
+	}
+	if identity.UserID != "user-1" || identity.Email != "persona@example.com" ||
+		identity.RUT != "17.137.440-5" || identity.ProfileCode != "ADMIN" {
+		t.Fatalf("identidad inesperada: %#v", identity)
+	}
+}
+
+func TestIdentityFromContext_DoesNotFallbackFromInvalidUserID(t *testing.T) {
+	tests := []struct {
+		name  string
+		value any
+	}{
+		{name: "tipo invalido", value: 123},
+		{name: "vacio", value: "   "},
+		{name: "demasiado largo", value: strings.Repeat("a", 129)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := requestWithAuthorizerContext(map[string]any{
+				AuthorizerUserIDKey:  tt.value,
+				authorizerSubjectKey: "sub-valido",
+			})
+			if _, err := IdentityFromContext(req); err == nil {
+				t.Fatal("IdentityFromContext uso sub despues de recibir userId invalido")
+			}
+		})
+	}
+}
+
+func TestIdentityFromContext_RejectsMalformedOptionalFields(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		value any
+	}{
+		{name: "email no string", key: authorizerEmailKey, value: true},
+		{name: "rut vacio", key: authorizerRUTKey, value: " "},
+		{name: "perfil largo", key: authorizerProfileCodeKey, value: strings.Repeat("x", 65)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := requestWithAuthorizerContext(map[string]any{
+				AuthorizerUserIDKey: "user-1",
+				tt.key:              tt.value,
+			})
+			if _, err := IdentityFromContext(req); err == nil {
+				t.Fatal("IdentityFromContext acepto un campo opcional invalido")
+			}
+		})
 	}
 }

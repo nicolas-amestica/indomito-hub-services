@@ -1,0 +1,294 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Indomito Hub Inbox API",
+    "version": "1.0.0"
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "ConversationSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "phone", "alias", "channel", "status", "reason", "reasonLabel", "unreadCount", "lastMessagePreview", "lastMessageAt", "createdAt", "updatedAt", "generation"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "phone": { "type": "string", "pattern": "^[0-9]{8,15}$" },
+          "alias": { "type": "string", "maxLength": 100 },
+          "channel": { "type": "string", "const": "whatsapp" },
+          "status": { "type": "string", "enum": ["bot", "derived"] },
+          "reason": { "type": ["string", "null"] },
+          "reasonLabel": { "type": ["string", "null"] },
+          "unreadCount": { "type": "integer", "minimum": 0 },
+          "lastMessagePreview": { "type": ["string", "null"], "maxLength": 200 },
+          "lastMessageAt": { "type": ["string", "null"], "format": "date-time" },
+          "createdAt": { "type": ["string", "null"], "format": "date-time" },
+          "updatedAt": { "type": ["string", "null"], "format": "date-time" },
+          "generation": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "PageInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["page", "pageSize", "totalItems", "totalPages"],
+        "properties": {
+          "page": { "type": "integer", "minimum": 1 },
+          "pageSize": { "type": "integer", "const": 200 },
+          "totalItems": { "type": "integer", "minimum": 0 },
+          "totalPages": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "ListWatermark": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["stream", "sequence"],
+        "properties": {
+          "stream": { "type": "string", "const": "list" },
+          "sequence": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "DetailWatermark": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["stream", "sequence"],
+        "properties": {
+          "stream": { "type": "string", "pattern": "^detail:[0-9]{8,15}$" },
+          "sequence": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "MessageAttachment": {
+        "type": "object", "additionalProperties": false,
+        "required": ["fileName", "mimeType", "size", "downloadUrl"],
+        "properties": {
+          "fileName": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "mimeType": { "type": "string", "enum": ["application/pdf", "image/jpeg", "image/png", "image/gif", "image/webp", "audio/ogg", "audio/webm"] },
+          "size": { "type": "integer", "minimum": 1, "maximum": 16777216 },
+          "downloadUrl": { "type": ["string", "null"] }
+        }
+      },
+      "Message": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "msgSk", "phone", "type", "content", "createdAt", "whatsappMessageId", "deliveryStatus", "deliveryError", "attachments"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" }, "msgSk": { "type": "string", "pattern": "^MSG#[0-9A-HJKMNP-TV-Z]{26}$" },
+          "phone": { "type": "string", "pattern": "^[0-9]{8,15}$" }, "type": { "type": "string", "enum": ["customer", "ai_agent", "team"] },
+          "content": { "type": ["string", "null"], "maxLength": 4096 }, "createdAt": { "type": "string", "format": "date-time" },
+          "whatsappMessageId": { "type": ["string", "null"], "maxLength": 256 }, "deliveryStatus": { "type": ["string", "null"], "enum": ["sent", "delivered", "read", "failed", null] },
+          "deliveryError": { "type": ["string", "null"], "maxLength": 200 }, "attachments": { "type": "array", "maxItems": 20, "items": { "$ref": "#/components/schemas/MessageAttachment" } }
+        }
+      },
+      "SendAttachmentSummary": {
+        "type": ["object", "null"], "additionalProperties": false,
+        "required": ["fileName", "mimeType", "size"],
+        "properties": { "fileName": { "type": "string", "minLength": 1, "maxLength": 200 }, "mimeType": { "type": "string" }, "size": { "type": "integer", "minimum": 1, "maximum": 7340032 } }
+      },
+      "SendState": {
+        "type": "object", "additionalProperties": false,
+        "required": ["clientMessageId", "phone", "state", "createdAt", "updatedAt", "retryCount", "preview", "attachment"],
+        "properties": {
+          "clientMessageId": { "type": "string", "format": "uuid" }, "phone": { "type": "string", "pattern": "^[0-9]{8,15}$" },
+          "state": { "type": "string", "enum": ["reserved", "provider_pending", "recovering", "uncertain", "failed_retryable", "committed", "failed"] },
+          "createdAt": { "type": "string", "format": "date-time" }, "updatedAt": { "type": "string", "format": "date-time" }, "retryCount": { "type": "integer", "minimum": 0, "maximum": 1 },
+          "preview": { "type": ["string", "null"], "maxLength": 200 }, "attachment": { "$ref": "#/components/schemas/SendAttachmentSummary" },
+          "whatsappMessageId": { "type": "string", "minLength": 1, "maxLength": 256 }, "resolutionRequired": { "type": "boolean" }, "reason": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "retryAvailable": { "type": "boolean" }, "error": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "result": { "type": "object", "additionalProperties": false, "required": ["whatsappMessageId", "msgSk", "createdAt"], "properties": { "whatsappMessageId": { "type": "string" }, "msgSk": { "type": "string" }, "createdAt": { "type": "string", "format": "date-time" } } }
+        }
+      },
+      "SendReplyRequest": { "type": "object", "additionalProperties": false, "required": ["content", "clientMessageId"], "properties": { "content": { "type": "string", "minLength": 1, "maxLength": 4096 }, "clientMessageId": { "type": "string", "format": "uuid" } } },
+      "RetrySendRequest": { "type": "object", "additionalProperties": false, "properties": {} },
+      "ResolveSendRequest": { "type": "object", "additionalProperties": false, "required": ["resolution", "reason"], "properties": { "resolution": { "type": "string", "enum": ["delivered", "not_delivered"] }, "whatsappMessageId": { "type": "string", "minLength": 1, "maxLength": 256 }, "reason": { "type": "string", "minLength": 1, "maxLength": 500 } } },
+      "UpdateContactRequest": { "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string", "minLength": 1, "maxLength": 100 } } },
+      "UpdateContactResponse": { "type": "object", "additionalProperties": false, "required": ["data"], "properties": { "data": { "type": "object", "additionalProperties": false, "required": ["phone", "name"], "properties": { "phone": { "type": "string", "pattern": "^[0-9]{8,15}$" }, "name": { "type": "string", "minLength": 1, "maxLength": 100 } } } } },
+      "AttachmentPreparationItem": { "type": "object", "additionalProperties": false, "required": ["clientMessageId", "fileName", "mimeType", "size", "checksumSha256"], "properties": { "clientMessageId": { "type": "string", "format": "uuid" }, "fileName": { "type": "string", "minLength": 1, "maxLength": 200 }, "mimeType": { "type": "string", "enum": ["application/pdf", "image/jpeg", "image/png", "image/gif", "image/webp", "audio/ogg", "audio/webm"] }, "size": { "type": "integer", "minimum": 1, "maximum": 7340032 }, "checksumSha256": { "type": "string", "pattern": "^[A-Za-z0-9+/]{43}=$" } } },
+      "PrepareAttachmentsRequest": { "type": "object", "additionalProperties": false, "required": ["batchId", "files"], "properties": { "batchId": { "type": "string", "format": "uuid" }, "files": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "$ref": "#/components/schemas/AttachmentPreparationItem" } } } },
+      "PreparedAttachmentUpload": { "type": "object", "additionalProperties": false, "required": ["clientMessageId", "uploadId", "key", "uploadUrl", "method", "requiredHeaders"], "properties": { "clientMessageId": { "type": "string", "format": "uuid" }, "uploadId": { "type": "string", "format": "uuid" }, "key": { "type": "string" }, "uploadUrl": { "type": "string", "format": "uri" }, "method": { "type": "string", "const": "PUT" }, "requiredHeaders": { "type": "object", "additionalProperties": { "type": "string" }, "required": ["Content-Type", "x-amz-checksum-sha256", "x-amz-meta-upload-id"], "properties": { "Content-Type": { "type": "string" }, "x-amz-checksum-sha256": { "type": "string" }, "x-amz-meta-upload-id": { "type": "string" } } } } },
+      "PrepareAttachmentsResponse": { "type": "object", "additionalProperties": false, "required": ["data"], "properties": { "data": { "type": "object", "additionalProperties": false, "required": ["batchId", "expiresAt", "uploads"], "properties": { "batchId": { "type": "string", "format": "uuid" }, "expiresAt": { "type": "string", "format": "date-time" }, "uploads": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "$ref": "#/components/schemas/PreparedAttachmentUpload" } } } } } },
+      "SendAttachmentRequest": { "type": "object", "additionalProperties": false, "required": ["uploadId", "key", "caption", "clientMessageId"], "properties": { "uploadId": { "type": "string", "format": "uuid" }, "key": { "type": "string", "minLength": 1, "maxLength": 1024 }, "caption": { "type": "string", "maxLength": 1024 }, "clientMessageId": { "type": "string", "format": "uuid" } } },
+      "MarkUnreadRequest": { "type": "object", "additionalProperties": false, "required": ["unread"], "properties": { "unread": { "type": "boolean", "const": true } } },
+      "DeleteConversationResponse": { "type": "object", "additionalProperties": false, "required": ["data"], "properties": { "data": { "type": "object", "additionalProperties": false, "required": ["deleted"], "properties": { "deleted": { "type": "boolean", "const": true } } } } },
+      "SendStateResponse": { "type": "object", "additionalProperties": false, "required": ["data"], "properties": { "data": { "$ref": "#/components/schemas/SendState" } } },
+      "ConversationListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "pageInfo", "nextCursor", "unreadTotal", "watermark"],
+        "properties": {
+          "data": { "type": "array", "maxItems": 200, "items": { "$ref": "#/components/schemas/ConversationSummary" } },
+          "pageInfo": { "$ref": "#/components/schemas/PageInfo" },
+          "nextCursor": { "type": ["string", "null"], "minLength": 1, "maxLength": 2048 },
+          "unreadTotal": { "type": "integer", "minimum": 0 },
+          "watermark": { "$ref": "#/components/schemas/ListWatermark" }
+        },
+        "examples": [{
+          "data": [],
+          "pageInfo": { "page": 1, "pageSize": 200, "totalItems": 0, "totalPages": 0 },
+          "nextCursor": null,
+          "unreadTotal": 0,
+          "watermark": { "stream": "list", "sequence": 0 }
+        }]
+      },
+      "ValidationDetails": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field", "reason"],
+        "properties": {
+          "field": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      },
+      "ConversationDetailResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["mode", "conversation", "messages", "hasMore", "nextCursor", "nonTerminalSends", "watermark"],
+            "properties": {
+              "mode": { "type": "string", "enum": ["full", "before", "delta"] },
+              "conversation": { "oneOf": [{ "$ref": "#/components/schemas/ConversationSummary" }, { "type": "null" }] },
+              "messages": { "type": "array", "items": { "$ref": "#/components/schemas/Message" } },
+              "hasMore": { "type": "boolean" },
+              "nextCursor": { "type": ["string", "null"], "maxLength": 2048 },
+              "nonTerminalSends": { "type": "array", "items": { "$ref": "#/components/schemas/SendState" } },
+              "watermark": { "$ref": "#/components/schemas/DetailWatermark" },
+              "requestedBefore": { "type": "string" },
+              "requestedSince": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      },
+      "BulkOperation": {
+        "type": "object", "additionalProperties": false,
+        "required": ["operationId", "kind", "state", "phase", "initiatorUserId", "checkpoint", "snapshotComplete", "targetCount", "processed", "applied", "unchanged", "failed", "createdAt", "updatedAt", "completedAt", "failureCode"],
+        "properties": {
+          "operationId": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+          "kind": { "type": "string", "enum": ["mark_all_read", "recalculate_unread"] },
+          "state": { "type": "string", "enum": ["materializing", "applying", "committed", "failed"] },
+          "phase": { "type": ["string", "null"] }, "initiatorUserId": { "type": "string", "minLength": 1 },
+          "checkpoint": { "type": ["string", "null"] }, "snapshotComplete": { "type": "boolean" },
+          "targetCount": { "type": "integer", "minimum": 0 }, "processed": { "type": "integer", "minimum": 0 },
+          "applied": { "type": "integer", "minimum": 0 }, "unchanged": { "type": "integer", "minimum": 0 }, "failed": { "type": "integer", "minimum": 0 },
+          "createdAt": { "type": "string", "format": "date-time" }, "updatedAt": { "type": "string", "format": "date-time" },
+          "completedAt": { "type": ["string", "null"], "format": "date-time" }, "failureCode": { "type": ["string", "null"] }
+        }
+      },
+      "Subscription": { "type": "object", "additionalProperties": false, "required": ["url", "ticket", "expiresAt"], "properties": { "url": { "type": "string", "pattern": "^wss://" }, "ticket": { "type": "string", "minLength": 43, "maxLength": 43 }, "expiresAt": { "type": "string", "format": "date-time" } } },
+      "ErrorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message", "details", "traceId"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["VALIDATION_INPUT_INVALID", "VALIDATION_PHONE_INVALID", "VALIDATION_CURSOR_INVALID", "VALIDATION_IDEMPOTENCY_KEY_INVALID", "INBOX_CURSOR_EXPIRED", "AUTH_UNAUTHORIZED", "RESOURCE_NOT_FOUND", "INBOX_SERVICE_WINDOW_CLOSED", "INBOX_IDEMPOTENCY_CONFLICT", "INBOX_BULK_CONFLICT", "INBOX_SEND_NOT_RETRYABLE", "INBOX_SEND_RETRY_EXHAUSTED", "INBOX_SEND_NOT_RESOLVABLE", "INBOX_PROVIDER_REJECTED", "INBOX_SNAPSHOT_LIMIT_REACHED", "INBOX_CAPACITY_UNAVAILABLE", "INTERNAL_ERROR"]
+          },
+          "message": { "type": "string", "minLength": 1 },
+          "details": { "oneOf": [{ "type": "null" }, { "$ref": "#/components/schemas/ValidationDetails" }] },
+          "traceId": { "type": "string", "format": "uuid" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/conversaciones": {
+      "get": {
+        "operationId": "listConversations",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Correlation-Id", "in": "header", "required": false, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "page", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "default": 1 } },
+          { "name": "pageSize", "in": "query", "required": false, "schema": { "type": "integer", "const": 200, "default": 200 } },
+          { "name": "q", "in": "query", "required": false, "schema": { "type": "string", "minLength": 1, "maxLength": 100 } },
+          { "name": "cursor", "in": "query", "required": false, "schema": { "type": "string", "minLength": 1, "maxLength": 2048 } }
+        ],
+        "responses": {
+          "200": { "description": "Lista congelada de conversaciones", "headers": { "Cache-Control": { "schema": { "type": "string", "const": "no-store" } } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConversationListResponse" } } } },
+          "400": { "description": "Entrada o cursor invalido", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "401": { "description": "Identidad no autenticada", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "429": { "description": "Limite de snapshots alcanzado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "500": { "description": "Fallo interno", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "503": { "description": "Capacidad de materializacion no disponible", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/conversaciones/{telefono}": {
+      "get": {
+        "operationId": "getConversation",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "telefono", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{8,15}$" } },
+          { "name": "pageSize", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 50 } },
+          { "name": "before", "in": "query", "required": false, "schema": { "type": "string", "minLength": 1, "maxLength": 2048 } },
+          { "name": "since", "in": "query", "required": false, "schema": { "type": "string", "format": "date-time" } }
+        ],
+        "responses": {
+          "200": { "description": "Detalle de conversacion", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConversationDetailResponse" } } } },
+          "400": { "description": "Entrada o cursor invalido", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "401": { "description": "Identidad no autenticada", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "500": { "description": "Fallo interno", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      },
+      "delete": {
+        "operationId": "deleteConversation", "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "name": "telefono", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{8,15}$" } }],
+        "responses": { "200": { "description": "Eliminacion logica idempotente", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DeleteConversationResponse" } } } }, "400": { "description": "Telefono o body invalido", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "401": { "description": "No autenticado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "500": { "description": "Fallo antes del commit logico", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } }
+      }
+    },
+    "/conversaciones/{telefono}/respuestas": {
+      "post": {
+        "operationId": "sendConversationReply", "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "name": "telefono", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{8,15}$" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SendReplyRequest" } } } },
+        "responses": { "200": { "description": "Envio confirmado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SendStateResponse" } } } }, "202": { "description": "Envio no terminal", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SendStateResponse" } } } }, "400": { "description": "Entrada invalida", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "401": { "description": "No autenticado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "409": { "description": "Conflicto de idempotencia", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "422": { "description": "Ventana cerrada", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "502": { "description": "Rechazo del proveedor", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } }
+      }
+    },
+    "/envios-inbox/{clientMessageId}": {
+      "get": { "operationId": "getInboxSend", "security": [{ "BearerAuth": [] }], "parameters": [{ "name": "clientMessageId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }], "responses": { "200": { "description": "Estado durable del envio", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SendStateResponse" } } } }, "400": { "description": "ID invalido", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "404": { "description": "Envio inexistente o de otro usuario", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } } }
+    },
+    "/conversaciones/{telefono}/contacto": {
+      "patch": { "operationId": "updateConversationContact", "security": [{ "BearerAuth": [] }], "parameters": [{ "name": "telefono", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{8,15}$" } }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateContactRequest" } } } }, "responses": { "200": { "description": "Alias actualizado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateContactResponse" } } } }, "400": { "description": "Entrada invalida", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "404": { "description": "Conversacion no encontrada", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } } }
+    },
+    "/conversaciones/{telefono}/adjuntos/preparar": {
+      "post": { "operationId": "prepareConversationAttachments", "security": [{ "BearerAuth": [] }], "parameters": [{ "name": "telefono", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{8,15}$" } }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PrepareAttachmentsRequest" } } } }, "responses": { "200": { "description": "Lote reservado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PrepareAttachmentsResponse" } } } }, "400": { "description": "Lote invalido", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "409": { "description": "Conflicto de idempotencia", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } } }
+    },
+    "/conversaciones/{telefono}/adjuntos": {
+      "post": { "operationId": "sendConversationAttachment", "security": [{ "BearerAuth": [] }], "parameters": [{ "name": "telefono", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{8,15}$" } }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SendAttachmentRequest" } } } }, "responses": { "200": { "description": "Adjunto confirmado por WhatsApp", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SendStateResponse" } } } }, "202": { "description": "Estado no terminal", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SendStateResponse" } } } }, "400": { "description": "Reserva u objeto invalido", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "409": { "description": "Conflicto o ventana cerrada", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "502": { "description": "Rechazo del proveedor", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } } }
+    },
+    "/conversaciones/{telefono}/estado-lectura": {
+      "patch": { "operationId": "markConversationUnread", "security": [{ "BearerAuth": [] }], "parameters": [{ "name": "telefono", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{8,15}$" } }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MarkUnreadRequest" } } } }, "responses": { "200": { "description": "Conversacion marcada no leida", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": false, "required": ["data"], "properties": { "data": { "$ref": "#/components/schemas/ConversationSummary" } } } } } }, "400": { "description": "Entrada invalida", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "404": { "description": "Conversacion inexistente", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } } }
+    },
+    "/envios-inbox/{clientMessageId}/reintentar": {
+      "post": { "operationId": "retryInboxSend", "security": [{ "BearerAuth": [] }], "parameters": [{ "name": "clientMessageId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RetrySendRequest" } } } }, "responses": { "200": { "description": "Reintento confirmado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SendStateResponse" } } } }, "202": { "description": "Reintento no terminal", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SendStateResponse" } } } }, "404": { "description": "No encontrado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "409": { "description": "No reintentable o agotado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "502": { "description": "Rechazo del proveedor", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } } }
+    },
+    "/conversaciones/acciones/marcar-leidas": {
+      "patch": { "operationId": "startMarkAllRead", "security": [{ "BearerAuth": [] }], "parameters": [{ "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string", "format": "uuid" } }], "requestBody": { "required": false, "content": { "application/json": { "schema": { "type": "object", "additionalProperties": false } } } }, "responses": { "202": { "description": "Operacion aceptada", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BulkOperation" } } } }, "400": { "description": "Entrada invalida", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "409": { "description": "Conflicto de idempotencia", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } } }
+    },
+    "/conversaciones/acciones/recalcular-no-leidas": {
+      "patch": { "operationId": "startRecalculateUnread", "security": [{ "BearerAuth": [] }], "parameters": [{ "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string", "format": "uuid" } }], "requestBody": { "required": false, "content": { "application/json": { "schema": { "type": "object", "additionalProperties": false } } } }, "responses": { "202": { "description": "Operacion aceptada", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BulkOperation" } } } }, "400": { "description": "Entrada invalida", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "409": { "description": "Conflicto de idempotencia", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } } }
+    },
+    "/conversaciones/suscripcion": {
+      "get": { "operationId": "createInboxSubscription", "security": [{ "BearerAuth": [] }], "parameters": [{ "name": "scope", "in": "query", "required": true, "schema": { "type": "string", "enum": ["list", "detail"] } }, { "name": "phone", "in": "query", "required": false, "schema": { "type": "string", "pattern": "^[0-9]{8,15}$" } }], "responses": { "200": { "description": "Ticket efimero", "headers": { "Cache-Control": { "schema": { "type": "string", "const": "no-store" } } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Subscription" } } } }, "400": { "description": "Scope invalido", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "429": { "description": "Limite temporal alcanzado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } } }
+    },
+    "/operaciones-inbox": {
+      "get": { "operationId": "getActiveInboxOperation", "security": [{ "BearerAuth": [] }], "parameters": [{ "name": "kind", "in": "query", "required": true, "schema": { "type": "string", "enum": ["mark_all_read", "recalculate_unread"] } }, { "name": "state", "in": "query", "required": true, "schema": { "type": "string", "const": "active" } }], "responses": { "200": { "description": "Operacion activa o null", "content": { "application/json": { "schema": { "oneOf": [{ "$ref": "#/components/schemas/BulkOperation" }, { "type": "null" }] } } } }, "400": { "description": "Consulta invalida", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } } }
+    },
+    "/operaciones-inbox/{operationId}": {
+      "get": { "operationId": "getInboxOperation", "security": [{ "BearerAuth": [] }], "parameters": [{ "name": "operationId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" } }], "responses": { "200": { "description": "Estado durable", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BulkOperation" } } } }, "400": { "description": "ID invalido", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "404": { "description": "Operacion inexistente", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } } }
+    },
+    "/webhooks/whatsapp": {
+      "get": { "operationId": "verifyWhatsAppWebhook", "parameters": [{ "name": "hub.mode", "in": "query", "required": true, "schema": { "type": "string" } }, { "name": "hub.verify_token", "in": "query", "required": true, "schema": { "type": "string" } }, { "name": "hub.challenge", "in": "query", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Challenge validado", "content": { "text/plain": { "schema": { "type": "string" } } } }, "403": { "description": "Token de verificacion invalido" } } },
+      "post": { "operationId": "receiveWhatsAppWebhook", "parameters": [{ "name": "X-Hub-Signature-256", "in": "header", "required": true, "schema": { "type": "string", "pattern": "^sha256=[0-9a-f]{64}$" } }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } }, "responses": { "200": { "description": "Evento aceptado o ignorado" }, "413": { "description": "Body mayor a 1 MiB", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "503": { "description": "Persistencia no disponible", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } } }
+    },
+    "/envios-inbox/{clientMessageId}/resolucion": {
+      "patch": { "operationId": "resolveInboxSend", "security": [{ "BearerAuth": [] }], "parameters": [{ "name": "clientMessageId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ResolveSendRequest" } } } }, "responses": { "200": { "description": "Envio resuelto", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SendStateResponse" } } } }, "400": { "description": "Resolucion invalida", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "404": { "description": "No encontrado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "409": { "description": "No resoluble", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } } }
+    }
+  }
+}

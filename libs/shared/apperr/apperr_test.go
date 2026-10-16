@@ -69,6 +69,24 @@ func TestIsExpected_MatchesHTTPStatusBoundary(t *testing.T) {
 	}
 }
 
+func TestInboxCatalogMapsExactHTTPStatuses(t *testing.T) {
+	tests := map[string]int{
+		CodeValidationInputInvalid: 400, CodeValidationPhoneInvalid: 400,
+		CodeValidationCursorInvalid: 400, CodeInboxCursorExpired: 400,
+		CodeAuthUnauthorized: 401, CodeAuthForbidden: 403,
+		CodeInboxUploadNotFound: 404, CodeInboxUploadExpired: 409,
+		CodeInboxUploadContentInvalid: 422, CodeInboxSnapshotLimitReached: 429,
+		CodeInboxProviderRejected: 502, CodeInboxCapacityUnavailable: 503,
+	}
+	for code, status := range tests {
+		t.Run(code, func(t *testing.T) {
+			if got := New(code, "mensaje").HTTPStatus(); got != status {
+				t.Fatalf("HTTPStatus() = %d, want %d", got, status)
+			}
+		})
+	}
+}
+
 // TestNew_PanicsOnUnknownCode verifica que New rechace codigos fuera del
 // catalogo de api-design.md en vez de aceptarlos silenciosamente: la regla
 // "sin codigos nuevos" se hace cumplir en tiempo de ejecucion.

@@ -1,0 +1,28 @@
+{
+  "asyncapi": "3.0.0",
+  "info": { "title": "Indomito Hub Inbox Realtime", "version": "1.0.0" },
+  "servers": { "inbox": { "host": "{websocketHost}", "protocol": "wss", "pathname": "/{stage}", "variables": { "websocketHost": { "default": "localhost" }, "stage": { "default": "dev" } } } },
+  "channels": {
+    "inboxEvents": {
+      "address": "/",
+      "messages": {
+        "listEvent": { "$ref": "#/components/messages/ListEvent" },
+        "detailEvent": { "$ref": "#/components/messages/DetailEvent" },
+        "resyncRequired": { "$ref": "#/components/messages/ResyncRequired" }
+      }
+    }
+  },
+  "operations": {
+    "receiveInboxEvents": { "action": "receive", "channel": { "$ref": "#/channels/inboxEvents" }, "messages": [{ "$ref": "#/channels/inboxEvents/messages/listEvent" }, { "$ref": "#/channels/inboxEvents/messages/detailEvent" }, { "$ref": "#/channels/inboxEvents/messages/resyncRequired" }] }
+  },
+  "components": {
+    "schemas": {
+      "Envelope": { "type": "object", "additionalProperties": false, "required": ["eventId", "type", "stream", "sequence", "occurredAt", "payload"], "properties": { "eventId": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" }, "type": { "type": "string" }, "stream": { "type": "string", "pattern": "^(list|detail:[0-9]{8,15})$" }, "sequence": { "type": "integer", "minimum": 1 }, "occurredAt": { "type": "string", "format": "date-time" }, "payload": { "type": "object" } } }
+    },
+    "messages": {
+      "ListEvent": { "name": "listEvent", "payload": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "properties": { "type": { "enum": ["conversation.updated", "conversation.deleted", "bulk.updated"] }, "stream": { "const": "list" } } }] } },
+      "DetailEvent": { "name": "detailEvent", "payload": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "properties": { "type": { "enum": ["message.created", "message.delivery.updated", "conversation.updated"] } } }] } },
+      "ResyncRequired": { "name": "resyncRequired", "payload": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "properties": { "type": { "const": "resync_required" } } }] } }
+    }
+  }
+}
