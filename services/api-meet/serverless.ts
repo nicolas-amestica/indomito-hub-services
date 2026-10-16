@@ -3,7 +3,6 @@ import { REGION, STAGE } from "../../common/custom-parameters.js";
 import { buildGoServiceServerless, type GoHttpEndpoint } from "../../common/go-service.js";
 import { ssmReadPolicy } from "../../aws/policies/ssm.js";
 
-if (STAGE !== "dev") throw new Error("api-meet habilitado solo en DEV hasta validar OAuth y autorización");
 const parameterArn = {"Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/${STAGE}/google/*`};
 const endpoints: GoHttpEndpoint[] = [
   {name:"fn-listar-reuniones-v1",method:"GET",path:"/v1/reuniones",public:false,timeout:30,memorySize:128},

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -180,7 +181,11 @@ type smtpConfig struct {
 type mailer struct{ config smtpConfig }
 
 func loadSMTP(ctx context.Context, client *ssm.Client) (smtpConfig, error) {
-	output, err := client.GetParameter(ctx, &ssm.GetParameterInput{Name: aws.String("/indomito/dev/payments/receipt-smtp"), WithDecryption: aws.Bool(true)})
+	stage := os.Getenv("APP_STAGE")
+	if stage != "dev" && stage != "prd" {
+		return smtpConfig{}, errors.New("SMTP_CONFIGURATION_REQUIRED")
+	}
+	output, err := client.GetParameter(ctx, &ssm.GetParameterInput{Name: aws.String("/indomito/" + stage + "/payments/receipt-smtp"), WithDecryption: aws.Bool(true)})
 	if err != nil || output.Parameter == nil || output.Parameter.Value == nil {
 		return smtpConfig{}, fmt.Errorf("leer SMTP: %w", err)
 	}
@@ -193,7 +198,7 @@ func parseSMTPConfig(raw []byte) (smtpConfig, error) {
 		return smtpConfig{}, errors.New("SMTP_CONFIGURATION_REQUIRED")
 	}
 	from, err := mail.ParseAddress(config.From)
-	if err != nil || from.Address != "no-reply-dev@girasindomito.cl" {
+	if err != nil || from.Address != receiptSenderAddress() {
 		return smtpConfig{}, errors.New("SMTP_CONFIGURATION_REQUIRED")
 	}
 	return config, nil
@@ -233,7 +238,7 @@ func buildMailMessage(from, to, receiptID, deliveryID string, document []byte, r
 		return nil, errors.New("RECEIPT_EMAIL_MISSING")
 	}
 	fromAddress, err := mail.ParseAddress(from)
-	if err != nil || fromAddress.Address != "no-reply-dev@girasindomito.cl" {
+	if err != nil || fromAddress.Address != receiptSenderAddress() {
 		return nil, errors.New("SMTP_CONFIGURATION_REQUIRED")
 	}
 	text := "Consulta el portal para revisar el saldo actualizado."
@@ -243,13 +248,26 @@ func buildMailMessage(from, to, receiptID, deliveryID string, document []byte, r
 	message := gomail.NewMsg(gomail.WithNoDefaultUserAgent())
 	message.FromMailAddress(fromAddress)
 	message.ToMailAddress(toAddress)
-	message.Subject("Giras Indomito: comprobante de registro de pago (DEV)")
+	subject := "Giras Indomito: comprobante de registro de pago"
+	bodySuffix := "Este documento no es una boleta ni factura del SII."
+	if os.Getenv("APP_STAGE") == "dev" {
+		subject += " (DEV)"
+		bodySuffix += " Ambiente de desarrollo."
+	}
+	message.Subject(subject)
 	message.SetMessageIDWithValue("receipt-" + receiptID + "-" + deliveryID + "@girasindomito.cl")
-	message.SetBodyString(gomail.TypeTextPlain, fmt.Sprintf("Adjuntamos el comprobante %s. %s Este documento no es una boleta ni factura del SII. Ambiente de desarrollo.", receiptID, text))
+	message.SetBodyString(gomail.TypeTextPlain, fmt.Sprintf("Adjuntamos el comprobante %s. %s %s", receiptID, text, bodySuffix))
 	if err = message.AttachReader("comprobante-"+receiptID+".pdf", bytes.NewReader(document), gomail.WithFileContentType(gomail.ContentType("application/pdf"))); err != nil {
 		return nil, fmt.Errorf("adjuntar comprobante: %w", err)
 	}
 	return message, nil
+}
+
+func receiptSenderAddress() string {
+	if os.Getenv("APP_STAGE") == "prd" {
+		return "no-reply@girasindomito.cl"
+	}
+	return "no-reply-dev@girasindomito.cl"
 }
 
 func randomOwner() (string, error) {

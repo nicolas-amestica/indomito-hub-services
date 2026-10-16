@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -64,7 +65,11 @@ func renderReceipt(model receiptModel) (renderedDocument, error) {
 	pdf.RectFromUpperLeftWithStyle(0, 0, 595, 112, "F")
 	writePDFText(pdf, "bold", 21, 235, 255, 0, 48, 36, "GIRAS INDÓMITO")
 	writePDFText(pdf, "regular", 11, 255, 255, 255, 48, 72, "Comprobante de registro de pago")
-	writePDFText(pdf, "bold", 11, 28, 28, 28, 48, 140, "AMBIENTE DE DESARROLLO")
+	stageLabel := "PRODUCCIÓN"
+	if os.Getenv("APP_STAGE") != "prd" {
+		stageLabel = "AMBIENTE DE DESARROLLO"
+	}
+	writePDFText(pdf, "bold", 11, 28, 28, 28, 48, 140, stageLabel)
 	writePDFText(pdf, "regular", 10, 28, 28, 28, 48, 161, "Este documento no es una boleta ni una factura emitida por el SII.")
 
 	identity := model.AccountID
@@ -108,7 +113,11 @@ func renderReceipt(model receiptModel) (renderedDocument, error) {
 	} else {
 		writeWrapped(pdf, "regular", 9, 97, 97, 97, 48, 658, 499, "Conserva el número de comprobante para consultas. Las devoluciones se registran por separado y no eliminan el ingreso original.")
 	}
-	writePDFText(pdf, "regular", 8, 97, 97, 97, 48, 785, fmt.Sprintf("Giras Indómito · Registro financiero · DEV · Documento v%d", model.Version))
+	footerStage := "PRD"
+	if os.Getenv("APP_STAGE") != "prd" {
+		footerStage = "DEV"
+	}
+	writePDFText(pdf, "regular", 8, 97, 97, 97, 48, 785, fmt.Sprintf("Giras Indómito · Registro financiero · %s · Documento v%d", footerStage, model.Version))
 	bytes, err := pdf.GetBytesPdfReturnErr()
 	if err != nil {
 		return renderedDocument{}, fmt.Errorf("generar comprobante: %w", err)

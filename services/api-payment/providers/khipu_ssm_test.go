@@ -14,11 +14,12 @@ type fakeParameters struct {
 	t     *testing.T
 	plain bool
 	calls int
+	stage string
 }
 
 func (f *fakeParameters) GetParameter(_ context.Context, in *ssm.GetParameterInput, _ ...func(*ssm.Options)) (*ssm.GetParameterOutput, error) {
 	f.calls++
-	if !aws.ToBool(in.WithDecryption) || !strings.HasPrefix(aws.ToString(in.Name), "/indomito/dev/payments/khipu/") {
+	if !aws.ToBool(in.WithDecryption) || !strings.HasPrefix(aws.ToString(in.Name), "/indomito/"+f.stage+"/payments/khipu/") {
 		f.t.Fatal("invalid SSM request")
 	}
 	value := "synthetic-test-secret"
@@ -32,7 +33,7 @@ func (f *fakeParameters) GetParameter(_ context.Context, in *ssm.GetParameterInp
 	return &ssm.GetParameterOutput{Parameter: &types.Parameter{Type: kind, Value: aws.String(value)}}, nil
 }
 func TestLoadDevelopmentSecrets(t *testing.T) {
-	f := &fakeParameters{t: t}
+	f := &fakeParameters{t: t, stage: "dev"}
 	result, err := LoadKhipuDevelopment(context.Background(), f, "dev")
 	if err != nil || result.Client == nil || result.WebhookSecret == "" || f.calls != 3 {
 		t.Fatal("DEV configuration not loaded")
@@ -44,5 +45,13 @@ func TestLoadDevelopmentSecrets(t *testing.T) {
 	f.plain = true
 	if _, err = LoadKhipuDevelopment(context.Background(), f, "dev"); err == nil {
 		t.Fatal("plaintext parameter accepted")
+	}
+}
+
+func TestLoadProductionSecrets(t *testing.T) {
+	f := &fakeParameters{t: t, stage: "prd"}
+	result, err := LoadKhipu(context.Background(), f, "prd")
+	if err != nil || result.Client == nil || result.WebhookSecret == "" || f.calls != 3 {
+		t.Fatal("PRD configuration not loaded")
 	}
 }

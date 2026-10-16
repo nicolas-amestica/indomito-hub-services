@@ -37,6 +37,7 @@ func sessionClaims(t *testing.T, token, secret string) map[string]any {
 }
 
 func TestPassengerSessionClaims(t *testing.T) {
+	t.Setenv("APP_STAGE", "dev")
 	id := "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	secret := strings.Repeat("s", 64)
 	now := time.Now().UTC()
@@ -74,6 +75,7 @@ func TestPassengerSessionClaims(t *testing.T) {
 }
 
 func TestLookupIssuesSessionOnlyAfterSuccessfulResolution(t *testing.T) {
+	t.Setenv("APP_STAGE", "dev")
 	a, db := lookupFixture(t)
 	a.SessionSecret = strings.Repeat("s", 64)
 	a.CheckoutEnabled = true

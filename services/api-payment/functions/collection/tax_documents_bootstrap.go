@@ -27,7 +27,8 @@ func (s s3TaxDocumentSigner) Download(ctx context.Context, key string) (string, 
 
 // TaxDocumentsHandler gestiona boletas manuales sin permisos sobre Khipu ni SMTP.
 func TaxDocumentsHandler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
-	if req.RequestContext.Authorizer == nil || req.RequestContext.Authorizer.Lambda["paymentAccess"] != "admin" || os.Getenv("APP_STAGE") != "dev" || os.Getenv("PAYMENTS_TABLE_NAME") == "" || os.Getenv("RECEIPTS_BUCKET_NAME") == "" {
+	_, stageErr := currentStage()
+	if req.RequestContext.Authorizer == nil || req.RequestContext.Authorizer.Lambda["paymentAccess"] != "admin" || stageErr != nil || os.Getenv("PAYMENTS_TABLE_NAME") == "" || os.Getenv("RECEIPTS_BUCKET_NAME") == "" {
 		return portalFailure(403), nil
 	}
 	cfg, err := bootstrap.LoadAWSConfig(ctx, bootstrap.LoadConfig())

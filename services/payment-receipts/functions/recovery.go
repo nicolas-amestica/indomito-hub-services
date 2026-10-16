@@ -24,10 +24,11 @@ type RecoveryItem struct {
 	Status     string `json:"status"`
 }
 
-// RecoverJobs simula por defecto; apply puede reenviar correos y exige toda la configuración DEV.
+// RecoverJobs simula por defecto; apply puede reenviar correos y exige configuración válida.
 func RecoverJobs(ctx context.Context, date string, limit int32, cursor string, apply bool) (RecoveryResult, error) {
 	parsed, err := time.Parse(time.DateOnly, date)
-	if err != nil || parsed.Format(time.DateOnly) != date || limit < 1 || limit > 100 || (cursor != "" && !receiptIDPattern.MatchString(cursor)) || os.Getenv("APP_STAGE") != "dev" || os.Getenv("PAYMENTS_TABLE_NAME") == "" {
+	stage := os.Getenv("APP_STAGE")
+	if err != nil || parsed.Format(time.DateOnly) != date || limit < 1 || limit > 100 || (cursor != "" && !receiptIDPattern.MatchString(cursor)) || (stage != "dev" && stage != "prd") || os.Getenv("PAYMENTS_TABLE_NAME") == "" {
 		return RecoveryResult{}, errors.New("INVALID_RECOVERY_REQUEST")
 	}
 	awsConfig, err := config.LoadDefaultConfig(ctx)

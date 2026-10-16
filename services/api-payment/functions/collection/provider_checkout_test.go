@@ -13,6 +13,7 @@ import (
 type checkoutGatewayFake struct {
 	mu                   sync.Mutex
 	calls                int
+	bankCalls            int
 	input                providers.CheckoutRequest
 	bankErr, errorCreate error
 	url                  string
@@ -20,6 +21,7 @@ type checkoutGatewayFake struct {
 }
 
 func (f *checkoutGatewayFake) DevelopmentBank(context.Context) (string, error) {
+	f.bankCalls++
 	return "demo", f.bankErr
 }
 func (f *checkoutGatewayFake) Create(_ context.Context, in providers.CheckoutRequest) (providers.Checkout, error) {
@@ -47,7 +49,7 @@ func TestDevelopmentCheckoutPersistsAndReusesResult(t *testing.T) {
 			gateway := &checkoutGatewayFake{afterCreate: func() { db.mu.Lock(); db.lostResponse = lost; db.mu.Unlock() }}
 			now := time.Now().UTC()
 			ctx := context.Background()
-			first, err := s.CreateDevelopmentCheckout(ctx, gateway, "account", "attempt", "session", testCheckoutURLs(), now)
+			first, err := s.CreateCheckout(ctx, gateway, "dev", "account", "attempt", "session", testCheckoutURLs(), now)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -57,7 +59,7 @@ func TestDevelopmentCheckoutPersistsAndReusesResult(t *testing.T) {
 			if !scheduled {
 				t.Fatal("checkout persisted without durable reconciliation job")
 			}
-			again, err := s.CreateDevelopmentCheckout(ctx, gateway, "account", "attempt", "session", testCheckoutURLs(), now.Add(time.Minute))
+			again, err := s.CreateCheckout(ctx, gateway, "dev", "account", "attempt", "session", testCheckoutURLs(), now.Add(time.Minute))
 			if err != nil || first != again || gateway.calls != 1 || gateway.input.Amount != 20000 || gateway.input.TransactionID != "attempt" || gateway.input.BankID != "demo" {
 				t.Fatalf("replay %+v %v calls=%d", again, err, gateway.calls)
 			}
@@ -65,7 +67,7 @@ func TestDevelopmentCheckoutPersistsAndReusesResult(t *testing.T) {
 			if err != nil || a.Installments[0].Paid != 0 || a.OpenAttemptID != "attempt" {
 				t.Fatalf("cash changed %+v %v", a, err)
 			}
-			if _, err = s.CreateDevelopmentCheckout(ctx, gateway, "account", "attempt", "session", testCheckoutURLs(), now.Add(2*time.Hour)); !errors.Is(err, ErrDispatchUncertain) || gateway.calls != 1 {
+			if _, err = s.CreateCheckout(ctx, gateway, "dev", "account", "attempt", "session", testCheckoutURLs(), now.Add(2*time.Hour)); !errors.Is(err, ErrDispatchUncertain) || gateway.calls != 1 {
 				t.Fatalf("expired checkout recreated: %v", err)
 			}
 		})
@@ -90,7 +92,7 @@ func TestDevelopmentCheckoutAmbiguityDoesNotRepeatCreate(t *testing.T) {
 				expectedCalls = 0
 			}
 			for range 2 {
-				if _, err := s.CreateDevelopmentCheckout(context.Background(), gateway, "account", "attempt", "session", testCheckoutURLs(), time.Now()); !errors.Is(err, ErrDispatchUncertain) {
+				if _, err := s.CreateCheckout(context.Background(), gateway, "dev", "account", "attempt", "session", testCheckoutURLs(), time.Now()); !errors.Is(err, ErrDispatchUncertain) {
 					t.Fatalf("unexpected result %v", err)
 				}
 			}
@@ -109,7 +111,7 @@ func TestDevelopmentCheckoutConcurrentCreation(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := s.CreateDevelopmentCheckout(context.Background(), gateway, "account", "attempt", "session", testCheckoutURLs(), time.Now())
+			_, err := s.CreateCheckout(context.Background(), gateway, "dev", "account", "attempt", "session", testCheckoutURLs(), time.Now())
 			if err != nil && !errors.Is(err, ErrDispatchUncertain) {
 				t.Errorf("unexpected error %v", err)
 			}
@@ -124,7 +126,18 @@ func TestDevelopmentCheckoutConcurrentCreation(t *testing.T) {
 func TestDevelopmentCheckoutRejectsNonDemoBeforeClaim(t *testing.T) {
 	s, db := dispatchFixture(t)
 	gateway := &checkoutGatewayFake{bankErr: providers.ErrVerification}
-	if _, err := s.CreateDevelopmentCheckout(context.Background(), gateway, "account", "attempt", "session", testCheckoutURLs(), time.Now()); !errors.Is(err, providers.ErrVerification) || gateway.calls != 0 || db.commits != 1 {
+	if _, err := s.CreateCheckout(context.Background(), gateway, "dev", "account", "attempt", "session", testCheckoutURLs(), time.Now()); !errors.Is(err, providers.ErrVerification) || gateway.calls != 0 || db.commits != 1 {
 		t.Fatalf("demo gate bypassed %v", err)
+	}
+}
+
+func TestProductionCheckoutUsesRealBankSelectionAndLabel(t *testing.T) {
+	s, _ := dispatchFixture(t)
+	gateway := &checkoutGatewayFake{bankErr: providers.ErrVerification}
+	if _, err := s.CreateCheckout(context.Background(), gateway, "prd", "account", "attempt", "session", testCheckoutURLs(), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if gateway.bankCalls != 0 || gateway.input.BankID != "" || gateway.input.Subject != "Cuota de viaje — Giras Indómito" {
+		t.Fatalf("invalid production checkout: bankCalls=%d input=%+v", gateway.bankCalls, gateway.input)
 	}
 }

@@ -43,11 +43,12 @@ func secureCheckoutURL(raw string) bool {
 	return err == nil && u.Scheme == "https" && u.Hostname() != "" && u.User == nil && u.Fragment == ""
 }
 
-// CreateDevelopmentCheckout enlaza una reserva con Khipu solo después de verificar DemoBank.
+// CreateCheckout enlaza una reserva con Khipu. DEV exige DemoBank; PRD deja que
+// Khipu presente los bancos reales disponibles para la cuenta de cobro.
 // No realiza reintentos externos. Una interrupción conserva la cuenta bloqueada para conciliación.
 // La identidad debe venir de una sesión autorizada; esta función no es un handler público.
-func (s Service) CreateDevelopmentCheckout(ctx context.Context, gateway CheckoutGateway, accountID, attemptID, actor string, urls CheckoutURLs, now time.Time) (CheckoutResult, error) {
-	if gateway == nil || s.DB == nil || s.Table == "" || accountID == "" || attemptID == "" || actor == "" || now.IsZero() || !secureCheckoutURL(urls.Return) || !secureCheckoutURL(urls.Cancel) || !secureCheckoutURL(urls.Notify) {
+func (s Service) CreateCheckout(ctx context.Context, gateway CheckoutGateway, stage, accountID, attemptID, actor string, urls CheckoutURLs, now time.Time) (CheckoutResult, error) {
+	if (stage != "dev" && stage != "prd") || gateway == nil || s.DB == nil || s.Table == "" || accountID == "" || attemptID == "" || actor == "" || now.IsZero() || !secureCheckoutURL(urls.Return) || !secureCheckoutURL(urls.Cancel) || !secureCheckoutURL(urls.Notify) {
 		return CheckoutResult{}, domain.ErrInvalid
 	}
 	a, err := s.GetAccount(ctx, accountID)
@@ -73,16 +74,23 @@ func (s Service) CreateDevelopmentCheckout(ctx context.Context, gateway Checkout
 	} else if !errors.Is(err, ErrNotFound) {
 		return CheckoutResult{}, err
 	}
-	bank, err := gateway.DevelopmentBank(ctx)
-	if err != nil || bank == "" {
-		return CheckoutResult{}, providers.ErrVerification
+	bank := ""
+	if stage == "dev" {
+		bank, err = gateway.DevelopmentBank(ctx)
+		if err != nil || bank == "" {
+			return CheckoutResult{}, providers.ErrVerification
+		}
 	}
 	attempt, err := s.ClaimCheckoutDispatch(ctx, accountID, attemptID, actor, now)
 	if err != nil {
 		return CheckoutResult{}, err
 	}
 	expires := now.UTC().Add(time.Hour)
-	out, err := gateway.Create(ctx, providers.CheckoutRequest{BankID: bank, TransactionID: attempt.ID, Amount: attempt.Amount, Subject: "Cuota de viaje — prueba DEV sin dinero real", ReturnURL: urls.Return, CancelURL: urls.Cancel, NotifyURL: urls.Notify, ExpiresAt: expires})
+	subject := "Cuota de viaje — Giras Indómito"
+	if stage == "dev" {
+		subject = "Cuota de viaje — prueba DEV sin dinero real"
+	}
+	out, err := gateway.Create(ctx, providers.CheckoutRequest{BankID: bank, TransactionID: attempt.ID, Amount: attempt.Amount, Subject: subject, ReturnURL: urls.Return, CancelURL: urls.Cancel, NotifyURL: urls.Notify, ExpiresAt: expires})
 	if err != nil {
 		return CheckoutResult{}, ErrDispatchUncertain
 	}

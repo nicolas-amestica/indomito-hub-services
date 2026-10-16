@@ -20,6 +20,7 @@ type PortalApp struct {
 	URLs            CheckoutURLs
 	Now             func() time.Time
 	CheckoutEnabled bool
+	Stage           string
 	Recaptcha       interface {
 		Assess(context.Context, string, string, string, string) error
 	}
@@ -50,7 +51,7 @@ func validPortalID(id string) bool {
 	return err == nil && parsed.String() == id
 }
 
-// HandleCheckout valida sesión y correo, reserva y crea un único checkout DEV.
+// HandleCheckout valida sesión y correo, reserva y crea un único checkout.
 func (a PortalApp) HandleCheckout(ctx context.Context, req events.APIGatewayV2HTTPRequest) events.APIGatewayV2HTTPResponse {
 	if req.RequestContext.HTTP.Method != "POST" {
 		return portalFailure(405)
@@ -122,7 +123,7 @@ func (a PortalApp) HandleCheckout(ctx context.Context, req events.APIGatewayV2HT
 	if account.RequiresPaymentReview() {
 		return portalFailure(409)
 	}
-	_, err = a.Accounts.CreateDevelopmentCheckout(ctx, a.Gateway, account.ID, id, "passenger:"+account.ID, a.URLs, a.Now())
+	_, err = a.Accounts.CreateCheckout(ctx, a.Gateway, a.Stage, account.ID, id, "passenger:"+account.ID, a.URLs, a.Now())
 	if err != nil {
 		if errors.Is(err, ErrDispatchUncertain) {
 			return portalResponse(202, PortalAttempt{ID: id, Status: "RECONCILIATION_REQUIRED"})

@@ -21,8 +21,9 @@ var cached struct {
 }
 
 func loadDependencies(ctx context.Context) (dependencies, error) {
-	if os.Getenv("APP_STAGE") != "dev" || os.Getenv("PAYMENTS_TABLE_NAME") == "" || os.Getenv("RECEIPTS_BUCKET_NAME") == "" {
-		return dependencies{}, errors.New("DEV_CONFIGURATION_REQUIRED")
+	stage := os.Getenv("APP_STAGE")
+	if (stage != "dev" && stage != "prd") || os.Getenv("PAYMENTS_TABLE_NAME") == "" || os.Getenv("RECEIPTS_BUCKET_NAME") == "" {
+		return dependencies{}, errors.New("PAYMENT_RECEIPTS_CONFIGURATION_REQUIRED")
 	}
 	cached.Lock()
 	defer cached.Unlock()

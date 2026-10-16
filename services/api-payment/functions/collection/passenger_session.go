@@ -24,7 +24,8 @@ var passengerCodeKey = regexp.MustCompile(`^CODE#[a-f0-9]{64}$`)
 // issuePassengerSession firma solamente identidades resueltas por el servidor.
 // La validación del JWT pertenece exclusivamente al authorizer compartido.
 func issuePassengerSession(secret, accountID, tripID, codeKey string, now time.Time) (PassengerSession, error) {
-	if len(secret) < 32 || now.IsZero() || now.Unix() <= 0 || !passengerCodeKey.MatchString(codeKey) {
+	stage, stageErr := currentStage()
+	if stageErr != nil || len(secret) < 32 || now.IsZero() || now.Unix() <= 0 || !passengerCodeKey.MatchString(codeKey) {
 		return PassengerSession{}, domain.ErrInvalid
 	}
 	for _, id := range []string{accountID, tripID} {
@@ -48,7 +49,7 @@ func issuePassengerSession(secret, accountID, tripID, codeKey string, now time.T
 		CodeKey   string `json:"codeKey"`
 		Issued    int64  `json:"iat"`
 		Expires   int64  `json:"exp"`
-	}{"indomito-payments-dev", "indomito-payment-portal-dev", "passenger-payment", accountID, tripID, id.String(), codeKey, now.Unix(), expires}
+	}{"indomito-payments-" + stage, "indomito-payment-portal-" + stage, "passenger-payment", accountID, tripID, id.String(), codeKey, now.Unix(), expires}
 	payload, err := json.Marshal(claims)
 	if err != nil {
 		return PassengerSession{}, err

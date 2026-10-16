@@ -34,7 +34,7 @@ func ReceiptsHandler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (e
 	if access != "passenger" && access != "admin" {
 		return portalFailure(403), nil
 	}
-	if os.Getenv("APP_STAGE") != "dev" || os.Getenv("PAYMENTS_TABLE_NAME") == "" || os.Getenv("RECEIPTS_BUCKET_NAME") == "" {
+	if _, stageErr := currentStage(); stageErr != nil || os.Getenv("PAYMENTS_TABLE_NAME") == "" || os.Getenv("RECEIPTS_BUCKET_NAME") == "" {
 		return portalFailure(503), nil
 	}
 	cfg, err := bootstrap.LoadAWSConfig(ctx, bootstrap.LoadConfig())

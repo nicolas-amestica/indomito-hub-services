@@ -25,8 +25,8 @@ func getAdminApp(ctx context.Context) (*AdminApp, error) {
 	if adminInstance != nil {
 		return adminInstance, nil
 	}
-	if os.Getenv("APP_STAGE") != "dev" || os.Getenv("PAYMENTS_TABLE_NAME") == "" || os.Getenv("PROGRAMS_TABLE_NAME") == "" {
-		return nil, errors.New("configuracion administrativa DEV incompleta")
+	if _, stageErr := currentStage(); stageErr != nil || os.Getenv("PAYMENTS_TABLE_NAME") == "" || os.Getenv("PROGRAMS_TABLE_NAME") == "" {
+		return nil, errors.New("configuración administrativa incompleta")
 	}
 	cfg, err := bootstrap.LoadAWSConfig(ctx, bootstrap.LoadConfig())
 	if err != nil {
@@ -52,7 +52,11 @@ func getAdminAppWithLookup(ctx context.Context) (*AdminApp, error) {
 		if configErr != nil {
 			return nil, configErr
 		}
-		parameter, err := ssm.NewFromConfig(cfg).GetParameter(ctx, &ssm.GetParameterInput{Name: aws.String("/indomito/dev/payments/lookup-secret"), WithDecryption: aws.Bool(true)})
+		stage, stageErr := currentStage()
+		if stageErr != nil {
+			return nil, stageErr
+		}
+		parameter, err := ssm.NewFromConfig(cfg).GetParameter(ctx, &ssm.GetParameterInput{Name: aws.String(stageParameter(stage, "payments/lookup-secret")), WithDecryption: aws.Bool(true)})
 		if err != nil || parameter == nil || parameter.Parameter == nil || len(aws.ToString(parameter.Parameter.Value)) < 32 {
 			return nil, errors.New("configuración de búsqueda incompleta")
 		}

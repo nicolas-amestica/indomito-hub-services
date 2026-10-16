@@ -20,7 +20,7 @@ func AccountOperationsHandler(ctx context.Context, req events.APIGatewayV2HTTPRe
 	if req.RequestContext.Authorizer.Lambda["paymentAccess"] != "admin" {
 		return adminFailure(req, 403, "FORBIDDEN")
 	}
-	if os.Getenv("APP_STAGE") != "dev" || os.Getenv("PAYMENTS_TABLE_NAME") == "" {
+	if _, stageErr := currentStage(); stageErr != nil || os.Getenv("PAYMENTS_TABLE_NAME") == "" {
 		return adminFailure(req, 502, "PAYMENT_SERVICE_UNAVAILABLE")
 	}
 	cfg, err := bootstrap.LoadAWSConfig(ctx, bootstrap.LoadConfig())

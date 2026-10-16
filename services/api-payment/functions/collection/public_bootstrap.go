@@ -38,19 +38,20 @@ func getPublicApp(ctx context.Context) (*PublicApp, error) {
 	if publicInstance != nil && time.Since(publicLoaded) < 5*time.Minute {
 		return publicInstance, nil
 	}
-	if os.Getenv("APP_STAGE") != "dev" || os.Getenv("PAYMENTS_TABLE_NAME") == "" || os.Getenv("CONFIGURATIONS_TABLE_NAME") == "" {
-		return nil, errors.New("configuración pública DEV incompleta")
+	stage, stageErr := currentStage()
+	if stageErr != nil || os.Getenv("PAYMENTS_TABLE_NAME") == "" || os.Getenv("CONFIGURATIONS_TABLE_NAME") == "" {
+		return nil, errors.New("configuración pública incompleta")
 	}
 	cfg, err := bootstrap.LoadAWSConfig(ctx, bootstrap.LoadConfig())
 	if err != nil {
 		return nil, err
 	}
 	reader := ssm.NewFromConfig(cfg)
-	lookup, err := loadPublicSecret(ctx, reader, "/indomito/dev/payments/lookup-secret")
+	lookup, err := loadPublicSecret(ctx, reader, stageParameter(stage, "payments/lookup-secret"))
 	if err != nil {
 		return nil, err
 	}
-	signing, err := loadPublicSecret(ctx, reader, "/indomito/dev/auth/payment-session-secret")
+	signing, err := loadPublicSecret(ctx, reader, stageParameter(stage, "auth/payment-session-secret"))
 	if err != nil {
 		return nil, err
 	}

@@ -4,27 +4,31 @@ import { buildGoServiceServerless, type GoHttpEndpoint } from "../../common/go-s
 import { ssmReadPolicy } from "../../aws/policies/ssm.js";
 import type { IamStatement } from "../../aws/policies/types.js";
 
-if (STAGE !== "dev") throw new Error("api-payment está habilitado exclusivamente para DEV");
-const tableArn = "${cf:indomito-hub-infra-ddb-dev.PagosTableArn}";
-const tableName = "${cf:indomito-hub-infra-ddb-dev.PagosTableName}";
-const tableStreamArn = "${cf:indomito-hub-infra-ddb-dev.PagosTableStreamArn}";
-const contractsArn = "${cf:indomito-hub-infra-ddb-dev.ProgramasTableArn}";
-const contractsName = "${cf:indomito-hub-infra-ddb-dev.ProgramasTableName}";
-const configurationsArn = "${cf:indomito-hub-infra-ddb-dev.ConfiguracionesTableArn}";
-const configurationsName = "${cf:indomito-hub-infra-ddb-dev.ConfiguracionesTableName}";
-const baseUrl = "${cf:indomito-hub-infra-api-gateway-dev.HttpApiUrl}";
+const ddbStack = `indomito-hub-infra-ddb-${STAGE}`;
+const s3Stack = `indomito-hub-infra-s3-${STAGE}`;
+const tableArn = `\${cf:${ddbStack}.PagosTableArn}`;
+const tableName = `\${cf:${ddbStack}.PagosTableName}`;
+const tableStreamArn = `\${cf:${ddbStack}.PagosTableStreamArn}`;
+const contractsArn = `\${cf:${ddbStack}.ProgramasTableArn}`;
+const contractsName = `\${cf:${ddbStack}.ProgramasTableName}`;
+const configurationsArn = `\${cf:${ddbStack}.ConfiguracionesTableArn}`;
+const configurationsName = `\${cf:${ddbStack}.ConfiguracionesTableName}`;
+const baseUrl = STAGE === "prd" ? "https://api.girasindomito.cl" : "https://api.dev.girasindomito.cl";
+const portalUrl = STAGE === "prd" ? "https://pagos.girasindomito.cl" : "https://pagos.dev.girasindomito.cl";
+const receiptsBucketName = `\${cf:${s3Stack}.ReceiptsBucketName}`;
+const receiptsBucketArn = `\${cf:${s3Stack}.ReceiptsBucketArn}`;
 const reconciliationQueueArn = { 'Fn::GetAtt': ['PaymentReconciliationQueue', 'Arn'] };
 const reconciliationQueueUrl = { Ref: 'PaymentReconciliationQueue' } as unknown as string;
 const secrets = ["api-key", "webhook-secret", "receiver-id"].map((name) =>
-  ssmReadPolicy({"Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/dev/payments/khipu/${name}`}),
+  ssmReadPolicy({"Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/${STAGE}/payments/khipu/${name}`}),
 );
 const read: IamStatement = { Effect:"Allow", Action:["dynamodb:GetItem"], Resource:tableArn };
 const activePlanCheck: IamStatement = {Effect:"Allow",Action:["dynamodb:ConditionCheckItem"],Resource:tableArn,Condition:{"ForAllValues:StringLike":{"dynamodb:LeadingKeys":["TRIP#*"]}}};
 const write: IamStatement = { Effect:"Allow", Action:["dynamodb:GetItem","dynamodb:PutItem","dynamodb:UpdateItem"], Resource:tableArn };
 const contractRead: IamStatement = { Effect:"Allow", Action:["dynamodb:GetItem"], Resource:contractsArn };
-const lookupSecret = ssmReadPolicy({"Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/dev/payments/lookup-secret`});
-const sessionSecret = ssmReadPolicy({"Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/dev/auth/payment-session-secret`});
-const recaptchaConfig = ssmReadPolicy({"Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/dev/payments/recaptcha/config`});
+const lookupSecret = ssmReadPolicy({"Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/${STAGE}/payments/lookup-secret`});
+const sessionSecret = ssmReadPolicy({"Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/${STAGE}/auth/payment-session-secret`});
+const recaptchaConfig = ssmReadPolicy({"Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/${STAGE}/payments/recaptcha/config`});
 const lookupRead: IamStatement = {Effect:"Allow",Action:["dynamodb:GetItem","dynamodb:Query"],Resource:tableArn,Condition:{"ForAllValues:StringLike":{"dynamodb:LeadingKeys":["CODE#*","TRIP#*","ACCOUNT#*","RATE#*","ADMIN_RUT#*"]}}};
 const masterConfigRead:IamStatement={Effect:"Allow",Action:["dynamodb:GetItem"],Resource:configurationsArn,Condition:{"ForAllValues:StringEquals":{"dynamodb:LeadingKeys":["CONFIGURATION"]}}};
 const rateWrite: IamStatement = {Effect:"Allow",Action:["dynamodb:PutItem"],Resource:tableArn,Condition:{"ForAllValues:StringLike":{"dynamodb:LeadingKeys":["RATE#*"]}}};
@@ -33,10 +37,10 @@ const annexWrite:IamStatement={Effect:'Allow',Action:['dynamodb:PutItem','dynamo
 const receiptRead:IamStatement={Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['CODE#*','TRIP#*','ACCOUNT#*','RECEIPT#*']}}};
 const receiptQuery:IamStatement={Effect:'Allow',Action:['dynamodb:Query'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['ACCOUNT#*']}}};
 const groupReceiptQuery:IamStatement={Effect:'Allow',Action:['dynamodb:Query'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['TRIP#*']}}};
-const receiptDownload:IamStatement={Effect:'Allow',Action:['s3:GetObject'],Resource:'${cf:indomito-hub-infra-s3-dev.ReceiptsBucketArn}/receipts/*'};
+const receiptDownload:IamStatement={Effect:'Allow',Action:['s3:GetObject'],Resource:`${receiptsBucketArn}/receipts/*`};
 const taxDocumentRead:IamStatement={Effect:'Allow',Action:['dynamodb:GetItem','dynamodb:Query'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['TAX_REQUEST#*','TAX_QUEUE#PENDING','TAX_QUEUE#RECORDED','COMMAND#*']}}};
 const taxDocumentWrite:IamStatement={Effect:'Allow',Action:['dynamodb:PutItem','dynamodb:DeleteItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['TAX_REQUEST#*','TAX_QUEUE#PENDING','TAX_QUEUE#RECORDED','TAX_FOLIO#*','COMMAND#*']}}};
-const taxDocumentObjects:IamStatement={Effect:'Allow',Action:['s3:PutObject','s3:GetObject'],Resource:'${cf:indomito-hub-infra-s3-dev.ReceiptsBucketArn}/tax-documents/manual/*'};
+const taxDocumentObjects:IamStatement={Effect:'Allow',Action:['s3:PutObject','s3:GetObject'],Resource:`${receiptsBucketArn}/tax-documents/manual/*`};
 const endpoints: GoHttpEndpoint[] = [
 	{name:'fn-verificar-comprobante-publico-v1',method:'POST',path:'/pagos/comprobantes/verificaciones',public:true,timeout:10,policies:[{Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['RECEIPT#*','ATTEMPT#*','RATE#*']}}},rateWrite,lookupSecret]},
 	{name:'fn-listar-solicitudes-tributarias-v1',method:'GET',path:'/pagos/documentos-tributarios/pendientes',public:false,timeout:10,policies:[taxDocumentRead]},
@@ -130,12 +134,24 @@ const endpoints: GoHttpEndpoint[] = [
   {name:"fn-notificacion-khipu-v1",method:"POST",path:"/pagos/khipu/notificaciones",public:true,timeout:29, policies:[write, ...secrets]},
   {name:"fn-retorno-pago-v1",method:"GET",path:"/pagos/retorno",public:true,timeout:29, policies:[]},
 ];
-const configuration = buildGoServiceServerless(ApiServices.Payment, endpoints, {
-	env: { PAYMENTS_TABLE_NAME: tableName, CONFIGURATIONS_TABLE_NAME:configurationsName, PAYMENTS_BASE_URL: baseUrl, PAYMENTS_PORTAL_URL:'https://pagos.dev.girasindomito.cl', PAYMENTS_CHECKOUT_ENABLED:'true', PROGRAMS_TABLE_NAME:contractsName, RECEIPTS_BUCKET_NAME:'${cf:indomito-hub-infra-s3-dev.ReceiptsBucketName}' },
+const developmentOnlyFunctions = new Set([
+  'fn-configuracion-pagos-v1',
+  'fn-crear-prueba-pago-v1',
+  'fn-obtener-prueba-pago-v1',
+  'fn-verificar-prueba-pago-v1',
+  'fn-notificacion-khipu-v1',
+  'fn-retorno-pago-v1',
+]);
+const deployEndpoints = STAGE === 'prd'
+  ? endpoints.filter(({ name }) => !developmentOnlyFunctions.has(name))
+  : endpoints;
+const configuration = buildGoServiceServerless(ApiServices.Payment, deployEndpoints, {
+	env: { PAYMENTS_TABLE_NAME: tableName, CONFIGURATIONS_TABLE_NAME:configurationsName, PAYMENTS_BASE_URL: baseUrl, PAYMENTS_PORTAL_URL:portalUrl, PAYMENTS_CHECKOUT_ENABLED:'true', PROGRAMS_TABLE_NAME:contractsName, RECEIPTS_BUCKET_NAME:receiptsBucketName },
 });
 configuration.resources ??= { Resources: {} };
-configuration.resources.Resources = {
-  ...(configuration.resources.Resources ?? {}),
+const resources = configuration.resources.Resources as Record<string, unknown> | undefined;
+(configuration.resources as { Resources: Record<string, unknown> }).Resources = {
+  ...(resources ?? {}),
   PaymentReconciliationDLQ: { Type:'AWS::SQS::Queue', Properties:{MessageRetentionPeriod:1209600,SqsManagedSseEnabled:true}},
   PaymentReconciliationQueue: { Type:'AWS::SQS::Queue', Properties:{VisibilityTimeout:60,MessageRetentionPeriod:1209600,SqsManagedSseEnabled:true,RedrivePolicy:{deadLetterTargetArn:{'Fn::GetAtt':['PaymentReconciliationDLQ','Arn']},maxReceiveCount:5}}},
 };

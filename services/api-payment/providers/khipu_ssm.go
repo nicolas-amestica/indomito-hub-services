@@ -28,23 +28,23 @@ func readSecureParameter(ctx context.Context, reader ParameterReader, name strin
 	return value, nil
 }
 
-// KhipuDevelopment contiene secretos solo en memoria del backend. Nunca serializar.
-type KhipuDevelopment struct {
+// KhipuCredentials contiene secretos solo en memoria del backend. Nunca serializar.
+type KhipuCredentials struct {
 	Client        *Khipu `json:"-"`
 	WebhookSecret string `json:"-"`
 }
 
-// LoadKhipuDevelopment rechaza otro stage y parámetros sin cifrado. Esto no
-// verifica que la cuenta Khipu sea desarrollador: se debe confirmar en su panel.
-func LoadKhipuDevelopment(ctx context.Context, reader ParameterReader, stage string) (KhipuDevelopment, error) {
-	var result KhipuDevelopment
-	errConfig := errors.New("configuración Khipu DEV incompleta o inválida en SSM")
-	if stage != "dev" || reader == nil {
+// LoadKhipu carga credenciales aisladas por ambiente y exige SecureString.
+// En DEV, la validación adicional de DemoBank se mantiene en el flujo de laboratorio.
+func LoadKhipu(ctx context.Context, reader ParameterReader, stage string) (KhipuCredentials, error) {
+	var result KhipuCredentials
+	errConfig := errors.New("configuración Khipu incompleta o inválida en SSM")
+	if (stage != "dev" && stage != "prd") || reader == nil {
 		return result, errConfig
 	}
 	values := make([]string, 0, 3)
 	for _, suffix := range []string{"api-key", "webhook-secret", "receiver-id"} {
-		name := "/indomito/dev/payments/khipu/" + suffix
+		name := "/indomito/" + stage + "/payments/khipu/" + suffix
 		value, err := readSecureParameter(ctx, reader, name)
 		if err != nil {
 			return result, errConfig
@@ -59,5 +59,13 @@ func LoadKhipuDevelopment(ctx context.Context, reader ParameterReader, stage str
 	if err != nil {
 		return result, errConfig
 	}
-	return KhipuDevelopment{Client: client, WebhookSecret: values[1]}, nil
+	return KhipuCredentials{Client: client, WebhookSecret: values[1]}, nil
+}
+
+// LoadKhipuDevelopment conserva el contrato del laboratorio y nunca admite PRD.
+func LoadKhipuDevelopment(ctx context.Context, reader ParameterReader, stage string) (KhipuCredentials, error) {
+	if stage != "dev" {
+		return KhipuCredentials{}, errors.New("configuración Khipu DEV incompleta o inválida en SSM")
+	}
+	return LoadKhipu(ctx, reader, stage)
 }

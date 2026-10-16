@@ -27,7 +27,7 @@ func portalFixture(t *testing.T) (PortalApp, *transactionDB, *checkoutGatewayFak
 	}
 	req := events.APIGatewayV2HTTPRequest{Body: `{"email":"receipt@example.com","recaptchaToken":"synthetic-recaptcha-token-for-test"}`, Headers: map[string]string{"Idempotency-Key": "01ARZ3NDEKTSV4RRFFQ69G5FAW"}, RequestContext: events.APIGatewayV2HTTPRequestContext{HTTP: events.APIGatewayV2HTTPRequestContextHTTPDescription{Method: "POST"}, Authorizer: &events.APIGatewayV2HTTPRequestContextAuthorizerDescription{Lambda: map[string]interface{}{"paymentAccess": "passenger", "paymentAccountId": id, "paymentTripId": id, "paymentSessionId": id, "paymentCodeKey": code}}}}
 	gateway := &checkoutGatewayFake{}
-	return PortalApp{Accounts: s, Gateway: gateway, Recaptcha: captchaFake{}, URLs: testCheckoutURLs(), Now: time.Now}, db, gateway, req
+	return PortalApp{Accounts: s, Gateway: gateway, Recaptcha: captchaFake{}, URLs: testCheckoutURLs(), Now: time.Now, Stage: "dev"}, db, gateway, req
 }
 
 type captchaFake struct{ reject bool }

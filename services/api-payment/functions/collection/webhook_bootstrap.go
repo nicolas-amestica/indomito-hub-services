@@ -25,14 +25,15 @@ func getWebhookApp(ctx context.Context) (*WebhookApp, error) {
 	if webhookInstance != nil && time.Since(webhookLoaded) < 5*time.Minute {
 		return webhookInstance, nil
 	}
-	if os.Getenv("APP_STAGE") != "dev" || os.Getenv("PAYMENTS_TABLE_NAME") == "" {
-		return nil, errors.New("configuración DEV incompleta")
+	stage, stageErr := currentStage()
+	if stageErr != nil || os.Getenv("PAYMENTS_TABLE_NAME") == "" {
+		return nil, errors.New("configuración de pagos incompleta")
 	}
 	cfg, err := bootstrap.LoadAWSConfig(ctx, bootstrap.LoadConfig())
 	if err != nil {
 		return nil, err
 	}
-	secrets, err := providers.LoadKhipuDevelopment(ctx, ssm.NewFromConfig(cfg), "dev")
+	secrets, err := providers.LoadKhipu(ctx, ssm.NewFromConfig(cfg), stage)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +46,7 @@ func getWebhookApp(ctx context.Context) (*WebhookApp, error) {
 	return webhookInstance, nil
 }
 
-// InstallmentWebhookHandler es la entrada DEV; no expone secretos ni errores internos.
+// InstallmentWebhookHandler no expone secretos ni errores internos.
 func InstallmentWebhookHandler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	if req.RequestContext.HTTP.Method != "POST" {
 		return webhookResponse(405), nil

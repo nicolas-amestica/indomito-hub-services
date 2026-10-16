@@ -72,14 +72,17 @@ func (k *Khipu) Create(ctx context.Context, in CheckoutRequest) (Checkout, error
 			return out, ErrVerification
 		}
 	}
-	body, err := json.Marshal(map[string]any{
-		"bank_id": in.BankID,
-		"amount":  in.Amount, "currency": "CLP", "subject": in.Subject,
+	payload := map[string]any{
+		"amount": in.Amount, "currency": "CLP", "subject": in.Subject,
 		"transaction_id": in.TransactionID, "return_url": in.ReturnURL,
 		"cancel_url": in.CancelURL, "notify_url": in.NotifyURL,
 		"notify_api_version": "3.0", "expires_date": in.ExpiresAt.UTC().Format(time.RFC3339),
 		"send_email": false, "send_reminders": false,
-	})
+	}
+	if in.BankID != "" {
+		payload["bank_id"] = in.BankID
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return out, ErrVerification
 	}

@@ -25,14 +25,15 @@ func getReceiptVerificationApp(ctx context.Context) (*PublicApp, error) {
 	if receiptVerificationInstance != nil && time.Since(receiptVerificationLoaded) < 5*time.Minute {
 		return receiptVerificationInstance, nil
 	}
-	if os.Getenv("APP_STAGE") != "dev" || os.Getenv("PAYMENTS_TABLE_NAME") == "" {
-		return nil, errors.New("configuración de verificación DEV incompleta")
+	stage, stageErr := currentStage()
+	if stageErr != nil || os.Getenv("PAYMENTS_TABLE_NAME") == "" {
+		return nil, errors.New("configuración de verificación incompleta")
 	}
 	cfg, err := bootstrap.LoadAWSConfig(ctx, bootstrap.LoadConfig())
 	if err != nil {
 		return nil, err
 	}
-	lookup, err := loadPublicSecret(ctx, ssm.NewFromConfig(cfg), "/indomito/dev/payments/lookup-secret")
+	lookup, err := loadPublicSecret(ctx, ssm.NewFromConfig(cfg), stageParameter(stage, "payments/lookup-secret"))
 	if err != nil {
 		return nil, err
 	}

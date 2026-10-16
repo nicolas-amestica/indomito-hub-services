@@ -1,24 +1,27 @@
 import type { AWS } from '@serverless/typescript';
 import { DEPLOYMENT_BUCKET, REGION, STAGE } from '../../common/custom-parameters.js';
 
-if (STAGE !== 'dev') throw new Error('Comprobantes habilitados exclusivamente para DEV');
-
-const tableArn = '${cf:indomito-hub-infra-ddb-dev.PagosTableArn}';
-const streamArn = '${cf:indomito-hub-infra-ddb-dev.PagosTableStreamArn}';
-const bucketArn = '${cf:indomito-hub-infra-s3-dev.ReceiptsBucketArn}';
+const ddbStack = `indomito-hub-infra-ddb-${STAGE}`;
+const s3Stack = `indomito-hub-infra-s3-${STAGE}`;
+const tableArn = `\${cf:${ddbStack}.PagosTableArn}`;
+const streamArn = `\${cf:${ddbStack}.PagosTableStreamArn}`;
+const tableName = `\${cf:${ddbStack}.PagosTableName}`;
+const bucketArn = `\${cf:${s3Stack}.ReceiptsBucketArn}`;
+const bucketName = `\${cf:${s3Stack}.ReceiptsBucketName}`;
+const portalDomain = STAGE === 'prd' ? 'pagos.girasindomito.cl' : 'pagos.dev.girasindomito.cl';
 
 const configuration: AWS = {
-  service: 'payment-receipts', frameworkVersion: '4',
+  service: 'payment-receipts', frameworkVersion: '4.6.2',
   provider: {
     name: 'aws', runtime: 'provided.al2023', architecture: 'arm64', region: REGION, stage: STAGE,
     deploymentBucket: { name: DEPLOYMENT_BUCKET }, memorySize: 128, timeout: 60, logRetentionInDays: 14,
-    environment: { APP_STAGE: 'dev', PAYMENTS_TABLE_NAME: '${cf:indomito-hub-infra-ddb-dev.PagosTableName}', RECEIPTS_BUCKET_NAME: '${cf:indomito-hub-infra-s3-dev.ReceiptsBucketName}', RECEIPT_VERIFICATION_URL: 'https://pagos.dev.girasindomito.cl/verificar-comprobante' },
+    environment: { APP_STAGE: STAGE, PAYMENTS_TABLE_NAME: tableName, RECEIPTS_BUCKET_NAME: bucketName, RECEIPT_VERIFICATION_URL: `https://${portalDomain}/verificar-comprobante` },
     iam: { role: { statements: [
       { Effect: 'Allow', Action: ['dynamodb:GetItem', 'dynamodb:UpdateItem'], Resource: tableArn, Condition: { 'ForAllValues:StringLike': { 'dynamodb:LeadingKeys': ['RECEIPT#*', 'JOB#*'] } } },
       { Effect: 'Allow', Action: ['dynamodb:DescribeStream', 'dynamodb:GetRecords', 'dynamodb:GetShardIterator'], Resource: streamArn },
       { Effect: 'Allow', Action: ['dynamodb:ListStreams'], Resource: tableArn },
       { Effect: 'Allow', Action: ['s3:PutObject', 's3:GetObject'], Resource: `${bucketArn}/receipts/*` },
-      { Effect: 'Allow', Action: ['ssm:GetParameter'], Resource: { 'Fn::Sub': 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/indomito/dev/payments/receipt-smtp' } },
+      { Effect: 'Allow', Action: ['ssm:GetParameter'], Resource: { 'Fn::Sub': `arn:\${AWS::Partition}:ssm:\${AWS::Region}:\${AWS::AccountId}:parameter/indomito/${STAGE}/payments/receipt-smtp` } },
       { Effect: 'Allow', Action: ['sqs:SendMessage'], Resource: { 'Fn::GetAtt': ['ReceiptFailures', 'Arn'] } },
     ] } },
   },

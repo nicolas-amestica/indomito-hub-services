@@ -33,7 +33,11 @@ func PortalCheckoutHandler(ctx context.Context, req events.APIGatewayV2HTTPReque
 	if err != nil {
 		return portalFailure(503), nil
 	}
-	portal := PortalApp{Accounts: app.Accounts, Gateway: gateway, Recaptcha: recaptcha, Now: time.Now, URLs: CheckoutURLs{Return: portalBase + "/retorno", Cancel: portalBase + "/cancelado", Notify: base + "/pagos/cuotas/khipu/notificaciones"}}
+	stage, err := currentStage()
+	if err != nil {
+		return portalFailure(503), nil
+	}
+	portal := PortalApp{Accounts: app.Accounts, Gateway: gateway, Recaptcha: recaptcha, Now: time.Now, Stage: stage, URLs: CheckoutURLs{Return: portalBase + "/retorno", Cancel: portalBase + "/cancelado", Notify: base + "/pagos/cuotas/khipu/notificaciones"}}
 	return portal.HandleCheckout(ctx, req), nil
 }
 
@@ -42,7 +46,7 @@ func PortalAttemptHandler(ctx context.Context, req events.APIGatewayV2HTTPReques
 	if req.RequestContext.Authorizer == nil || req.RequestContext.Authorizer.Lambda["paymentAccess"] != "passenger" {
 		return portalFailure(403), nil
 	}
-	if os.Getenv("APP_STAGE") != "dev" || os.Getenv("PAYMENTS_TABLE_NAME") == "" {
+	if _, stageErr := currentStage(); stageErr != nil || os.Getenv("PAYMENTS_TABLE_NAME") == "" {
 		return portalFailure(503), nil
 	}
 	cfg, err := bootstrap.LoadAWSConfig(ctx, bootstrap.LoadConfig())
@@ -58,7 +62,7 @@ func PortalAccountHandler(ctx context.Context, req events.APIGatewayV2HTTPReques
 	if req.RequestContext.Authorizer == nil || req.RequestContext.Authorizer.Lambda["paymentAccess"] != "passenger" {
 		return portalFailure(403), nil
 	}
-	if os.Getenv("APP_STAGE") != "dev" || os.Getenv("PAYMENTS_TABLE_NAME") == "" {
+	if _, stageErr := currentStage(); stageErr != nil || os.Getenv("PAYMENTS_TABLE_NAME") == "" {
 		return portalFailure(503), nil
 	}
 	cfg, err := bootstrap.LoadAWSConfig(ctx, bootstrap.LoadConfig())
