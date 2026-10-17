@@ -187,6 +187,11 @@ func GetApp(ctx context.Context) (*App, error) {
 		}
 		appInstance = &App{List: service, Detail: detail, Send: sender, Contact: contact, Attachment: attachments, Mutation: mutation, Bulk: bulk, Subscription: subscription, Webhook: webhook, VerifyToken: whatsApp.VerifyToken, Port: base.Port}
 	})
+	if appError != nil {
+		// El detalle se registra solo en CloudWatch; la respuesta HTTP conserva el
+		// error genérico para no exponer configuración interna al cliente.
+		fmt.Printf("[INBOX][INIT] application initialization failed: %v\n", appError)
+	}
 	return appInstance, appError
 }
 

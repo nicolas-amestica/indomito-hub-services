@@ -250,8 +250,14 @@ func profilePermissions(ctx context.Context, a *App, code string) ([]permissionV
 	}
 	if len(items) == 0 {
 		items, e = query(ctx, a, "PROFILE#"+code)
+		if e != nil {
+			return nil, e
+		}
 	}
-	modules, _ := listModuleRecords(ctx, a)
+	modules, e := listModuleRecords(ctx, a)
+	if e != nil {
+		return nil, e
+	}
 	out := []permissionView{}
 	for _, it := range items {
 		var p domain.Permission
@@ -302,15 +308,21 @@ func listPartition(ctx context.Context, a *App, pk string, kind any) (events.API
 	switch kind.(type) {
 	case domain.User:
 		var out []domain.User
-		attributevalue.UnmarshalListOfMaps(items, &out)
+		if e := attributevalue.UnmarshalListOfMaps(items, &out); e != nil {
+			return fail(500, "INTERNAL_ERROR", "No fue posible leer usuarios")
+		}
 		return response(200, out)
 	case domain.Profile:
 		var out []domain.Profile
-		attributevalue.UnmarshalListOfMaps(items, &out)
+		if e := attributevalue.UnmarshalListOfMaps(items, &out); e != nil {
+			return fail(500, "INTERNAL_ERROR", "No fue posible leer perfiles")
+		}
 		return response(200, out)
 	default:
 		var out []domain.Module
-		attributevalue.UnmarshalListOfMaps(items, &out)
+		if e := attributevalue.UnmarshalListOfMaps(items, &out); e != nil {
+			return fail(500, "INTERNAL_ERROR", "No fue posible leer módulos")
+		}
 		sort.Slice(out, func(i, j int) bool { return out[i].Order < out[j].Order })
 		return response(200, out)
 	}
@@ -362,15 +374,23 @@ func saveUser(ctx context.Context, a *App, req events.APIGatewayV2HTTPRequest) (
 	if e := put(ctx, a, u); e != nil {
 		return fail(500, "INTERNAL_ERROR", "No fue posible guardar")
 	}
-	put(ctx, a, domain.LoginAlias{PK: "LOGIN#" + domain.NormalizeLogin(u.Email), SK: "IDENTITY", UserID: u.ID})
-	put(ctx, a, domain.LoginAlias{PK: "LOGIN#" + domain.NormalizeLogin(u.RUT), SK: "IDENTITY", UserID: u.ID})
+	if e := put(ctx, a, domain.LoginAlias{PK: "LOGIN#" + domain.NormalizeLogin(u.Email), SK: "IDENTITY", UserID: u.ID}); e != nil {
+		return fail(500, "INTERNAL_ERROR", "No fue posible guardar el acceso por correo")
+	}
+	if e := put(ctx, a, domain.LoginAlias{PK: "LOGIN#" + domain.NormalizeLogin(u.RUT), SK: "IDENTITY", UserID: u.ID}); e != nil {
+		return fail(500, "INTERNAL_ERROR", "No fue posible guardar el acceso por RUT")
+	}
 	projection := u
 	projection.PK = "USERS"
 	projection.SK = "USER#" + u.ID
 	projection.PasswordHash = ""
-	put(ctx, a, projection)
+	if e := put(ctx, a, projection); e != nil {
+		return fail(500, "INTERNAL_ERROR", "No fue posible guardar la proyección de usuario")
+	}
 	// Proyección Axity: una asignación por usuario y aplicación, consultable por PK.
-	put(ctx, a, map[string]any{"pk": userProfilesPK, "sk": "UPL#USR#" + u.Email + "#" + appPK + "#PFL#" + u.ProfileCode, "id": u.ProfileCode, "email": u.Email, "documentId": u.RUT, "profileCode": u.ProfileCode, "assignedAt": time.Now().UTC().Format(time.RFC3339), "isActive": u.Active})
+	if e := put(ctx, a, map[string]any{"pk": userProfilesPK, "sk": "UPL#USR#" + u.Email + "#" + appPK + "#PFL#" + u.ProfileCode, "id": u.ProfileCode, "email": u.Email, "documentId": u.RUT, "profileCode": u.ProfileCode, "assignedAt": time.Now().UTC().Format(time.RFC3339), "isActive": u.Active}); e != nil {
+		return fail(500, "INTERNAL_ERROR", "No fue posible asignar el perfil")
+	}
 	return response(200, u)
 }
 func saveProfile(ctx context.Context, a *App, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -380,7 +400,9 @@ func saveProfile(ctx context.Context, a *App, req events.APIGatewayV2HTTPRequest
 	}
 	p.PK = "PROFILES"
 	p.SK = "PROFILE#" + p.Code
-	put(ctx, a, p)
+	if e := put(ctx, a, p); e != nil {
+		return fail(500, "INTERNAL_ERROR", "No fue posible guardar el perfil")
+	}
 	return response(200, p)
 }
 func saveModule(ctx context.Context, a *App, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -395,7 +417,9 @@ func saveModule(ctx context.Context, a *App, req events.APIGatewayV2HTTPRequest)
 	}
 	m.PK = "MODULES"
 	m.SK = "MODULE#" + m.Code
-	put(ctx, a, m)
+	if e := put(ctx, a, m); e != nil {
+		return fail(500, "INTERNAL_ERROR", "No fue posible guardar el módulo")
+	}
 	return response(200, m)
 }
 func savePermissions(ctx context.Context, a *App, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -428,7 +452,9 @@ func savePermissions(ctx context.Context, a *App, req events.APIGatewayV2HTTPReq
 		if x.ParentCode != "" {
 			sk += "#LV2#" + x.ModuleCode
 		}
-		put(ctx, a, domain.Permission{PK: profilePermissionsPK, SK: sk, ModuleCode: x.ModuleCode, ParentCode: x.ParentCode, Allowances: x.Allowances})
+		if e := put(ctx, a, domain.Permission{PK: profilePermissionsPK, SK: sk, ModuleCode: x.ModuleCode, ParentCode: x.ParentCode, Allowances: x.Allowances}); e != nil {
+			return fail(500, "INTERNAL_ERROR", "No fue posible guardar los permisos")
+		}
 	}
 	return response(http.StatusOK, items)
 }
