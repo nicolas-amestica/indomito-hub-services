@@ -98,6 +98,58 @@ func (a AdminApp) tripAccess(ctx context.Context, tripID string) (TripAccessView
 	return TripAccessView{TripID: tripID, TripCode: tripCode, Version: 1, Status: "ACTIVE"}, nil
 }
 
+// ensureTripAccess publica el codigo inicial junto con su indice HMAC. Se
+// ejecuta despues de publicar la puesta en marcha y tambien repara reintentos
+// de planes creados antes de que el acceso se persistiera.
+func (a AdminApp) ensureTripAccess(ctx context.Context, tripID, preferredCode string) (TripAccessView, error) {
+	if view, err := a.tripAccess(ctx, tripID); err == nil {
+		return view, nil
+	} else if !errors.Is(err, ErrNotFound) {
+		return TripAccessView{}, err
+	}
+	if len(a.LookupSecret) < 32 {
+		return TripAccessView{}, domain.ErrInvalid
+	}
+	code := strings.ToUpper(strings.TrimSpace(preferredCode))
+	for attempt := 0; attempt < 4; attempt++ {
+		if code == "" {
+			var err error
+			code, err = newPaymentTripCode(rand.Reader)
+			if err != nil {
+				return TripAccessView{}, err
+			}
+		}
+		if len(code) != 6 {
+			return TripAccessView{}, domain.ErrInvalid
+		}
+		codeKey, err := paymentaccess.CodeKey(a.LookupSecret, code)
+		if err != nil {
+			return TripAccessView{}, err
+		}
+		approval := record{PK: "TRIP#" + tripID, SK: "APPROVAL", TripID: tripID, TripCode: code, CodeKey: codeKey, CodeVersion: 1, Status: "ACTIVE"}
+		approvalWrite, err := a.Accounts.put(approval, "attribute_not_exists(pk)", nil)
+		if err != nil {
+			return TripAccessView{}, err
+		}
+		codeWrite, err := a.Accounts.put(record{PK: codeKey, SK: "META", TripID: tripID, CodeVersion: 1, Status: "RESERVED_APPROVED"}, "attribute_not_exists(pk)", nil)
+		if err != nil {
+			return TripAccessView{}, err
+		}
+		_, err = a.Accounts.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{approvalWrite, codeWrite}})
+		if err == nil {
+			return TripAccessView{TripID: tripID, TripCode: code, Version: 1, Status: "ACTIVE"}, nil
+		}
+		if view, readErr := a.tripAccess(ctx, tripID); readErr == nil {
+			return view, nil
+		}
+		if preferredCode != "" {
+			return TripAccessView{}, domain.ErrConflict
+		}
+		code = ""
+	}
+	return TripAccessView{}, domain.ErrConflict
+}
+
 func (a AdminApp) changeTripAccess(ctx context.Context, tripID, action string, version int64, audit domain.Audit) (TripAccessView, error) {
 	if prior, err := a.Accounts.read(ctx, "COMMAND#"+audit.CommandID, "META"); err == nil {
 		if prior.TripID != tripID || prior.CodeVersion != version+1 || prior.AccessAudit == nil {

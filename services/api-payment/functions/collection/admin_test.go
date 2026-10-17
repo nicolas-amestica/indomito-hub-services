@@ -65,6 +65,15 @@ func TestSetupUsesApprovedContractAndDoesNotCountPledgedDeposit(t *testing.T) {
 	if lookupErr != nil || lookup.AccountID != account.ID || lookup.TripID != approvedID {
 		t.Fatal("missing transactional RUT lookup")
 	}
+	access, accessErr := app.tripAccess(ctx, approvedID)
+	if accessErr != nil || access.Status != "ACTIVE" || access.Version != 1 || len(access.TripCode) != 6 {
+		t.Fatalf("missing initial trip access: %+v %v", access, accessErr)
+	}
+	codeKey, codeErr := paymentaccess.CodeKey(app.LookupSecret, access.TripCode)
+	codeRow, codeReadErr := app.Accounts.read(ctx, codeKey, "META")
+	if codeErr != nil || codeReadErr != nil || codeRow.TripID != approvedID || codeRow.Status != "RESERVED_APPROVED" {
+		t.Fatal("missing initial code lookup")
+	}
 	free, err := app.Accounts.GetAccount(ctx, view.Members[1].ID)
 	if err != nil || !free.Free || len(free.Installments) != 0 {
 		t.Fatal("free passenger billed")

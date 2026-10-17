@@ -89,6 +89,9 @@ func (a AdminApp) HandleSetup(ctx context.Context, req events.APIGatewayV2HTTPRe
 	if err = a.Accounts.PreparePlan(ctx, startup, actor); err != nil {
 		return domainFailure(req, err)
 	}
+	if _, err = a.ensureTripAccess(ctx, view.ContractID, view.TripCode); err != nil {
+		return domainFailure(req, err)
+	}
 	return lambdautil.SuccessResponseWithHeaders(200, map[string]any{"tripId": view.ContractID, "status": "ACTIVE", "participantCount": len(view.Members), "freeCount": view.FreeCount}, map[string]string{"cache-control": "no-store"})
 }
 
