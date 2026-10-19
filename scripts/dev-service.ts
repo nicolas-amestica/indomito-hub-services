@@ -86,19 +86,46 @@ let providerEnvironment: Record<string, string> = {};
 if (stage === 'local') {
   console.log(`🏠 Stage local: usando variables de configs/.env.local (raíz) y ${serviceConfig.name}/configs/.env.local (sin resolver SSM)`);
 } else {
-  const rawOutput = execSync(`npx serverless print --stage ${stage} --region ${region}`, {
+  // Serverless Framework v4 emite la configuracion por stderr, no por stdout,
+  // por lo que se redirige stderr a stdout para capturarla completa. Sin esto el
+  // parseo recibe una salida vacia y el servicio arranca sin las variables de
+  // provider.environment, fallando mas tarde y por una causa poco evidente.
+  const rawOutput = execSync(`npx serverless print --stage ${stage} --region ${region} 2>&1`, {
     cwd: servicePath,
     encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'inherit'],
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
 
-  const lines = rawOutput.split('\n');
-  const yamlStartIndex = lines.findIndex(line => /^\w+:/.test(line));
-  const output = yamlStartIndex >= 0 ? lines.slice(yamlStartIndex).join('\n') : rawOutput;
+  const yamlStartIndex = rawOutput.search(/^service:/m);
+
+  if (yamlStartIndex === -1) {
+    console.error(`Error: la salida de serverless print no contiene la clave 'service:'`);
+    console.error(`Salida recibida:\n${rawOutput}`);
+    process.exit(1);
+  }
+
+  const output = rawOutput.substring(yamlStartIndex);
 
   const YAML = await import('yaml');
   const serverlessConfig = YAML.parse(output);
+
+  // YAML.parse devuelve un string cuando la entrada no es un mapa. Sin esta
+  // comprobacion providerEnvironment queda vacio y el servidor local arranca
+  // mal configurado en silencio.
+  if (typeof serverlessConfig !== 'object' || serverlessConfig === null) {
+    console.error(`Error: serverless print no devolvió una configuración válida`);
+    console.error(`Salida recibida:\n${output}`);
+    process.exit(1);
+  }
+
   providerEnvironment = serverlessConfig.provider?.environment ?? {};
+
+  if (Object.keys(providerEnvironment).length === 0) {
+    console.error(
+      `Error: provider.environment llegó vacío para ${serviceConfig.name}. El servicio arrancaría sin sus variables de entorno.`,
+    );
+    process.exit(1);
+  }
 }
 
 const child = spawn('go', ['run', serviceConfig.localEntrypoint], {

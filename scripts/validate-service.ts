@@ -102,10 +102,13 @@ const errors: string[] = [];
 let serverlessConfig: any;
 
 try {
-  let output = execSync(`npx serverless print --stage ${stage} --region ${region}`, {
+  // Serverless Framework v4 emite la configuracion por stderr, no por stdout,
+  // por lo que se redirige stderr a stdout para capturarla completa. Sin esto el
+  // parseo recibe una salida vacia y todas las validaciones fallan en falso.
+  let output = execSync(`npx serverless print --stage ${stage} --region ${region} 2>&1`, {
     cwd: servicePath,
     encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'inherit'],
+    stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...(hasAmbientAwsCredentials
         ? processEnvWithoutAwsProfile
@@ -116,15 +119,28 @@ try {
     },
   });
 
-  const yamlStart = output.indexOf('service:');
+  const yamlStart = output.search(/^service:/m);
 
-  if (yamlStart > 0) {
-    output = output.substring(yamlStart);
+  if (yamlStart === -1) {
+    console.error(`Error: la salida de serverless print no contiene la clave 'service:'`);
+    console.error(`Salida recibida:\n${output}`);
+    process.exit(1);
   }
+
+  output = output.substring(yamlStart);
 
   // Dynamic import para YAML (dependencia del package.json)
   const YAML = await import('yaml');
   serverlessConfig = YAML.parse(output);
+
+  // YAML.parse devuelve un string cuando la entrada no es un mapa. Sin esta
+  // comprobacion el objeto queda vacio y las validaciones siguientes fallan en
+  // falso, culpando al servicio en vez de al parseo.
+  if (typeof serverlessConfig !== 'object' || serverlessConfig === null) {
+    console.error(`Error: serverless print no devolvió una configuración válida`);
+    console.error(`Salida recibida:\n${output}`);
+    process.exit(1);
+  }
 } catch {
   console.error(`Error: serverless print falló para ${serviceConfig.name}`);
   process.exit(1);
