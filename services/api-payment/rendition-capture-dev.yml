@@ -1,0 +1,128 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Captura temporal DEV de DRN sin permisos financieros. No desplegar junto a la ruta final.
+Parameters:
+  ArtifactBucket:
+    Type: String
+  ArtifactKey:
+    Type: String
+Conditions:
+  IsAuthorizedDev: !And
+    - !Equals [!Ref 'AWS::AccountId', '382670112717']
+    - !Equals [!Ref 'AWS::Region', us-east-1]
+Resources:
+  EvidenceBucket:
+    Type: AWS::S3::Bucket
+    Condition: IsAuthorizedDev
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: ind-khipu-rendition-capture-dev-382670112717
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireDiagnosticEvidence
+            Status: Enabled
+            Prefix: unverified/
+            ExpirationInDays: 7
+  EvidencePolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: IsAuthorizedDev
+    Properties:
+      Bucket: !Ref EvidenceBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt EvidenceBucket.Arn
+              - !Sub '${EvidenceBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+  CaptureLogs:
+    Type: AWS::Logs::LogGroup
+    Condition: IsAuthorizedDev
+    Properties:
+      LogGroupName: /aws/lambda/ind-khipu-rendition-capture-dev
+      RetentionInDays: 7
+  CaptureRole:
+    Type: AWS::IAM::Role
+    Condition: IsAuthorizedDev
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CaptureOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !GetAtt CaptureLogs.Arn
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/indomito/dev/payments/khipu/renditions/capture-config'
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject]
+                Resource: !Sub '${EvidenceBucket.Arn}/unverified/slot-*.json'
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt EvidenceBucket.Arn
+  CaptureFunction:
+    Type: AWS::Lambda::Function
+    Condition: IsAuthorizedDev
+    Properties:
+      FunctionName: ind-khipu-rendition-capture-dev
+      Runtime: provided.al2023
+      Handler: bootstrap
+      Architectures: [arm64]
+      MemorySize: 128
+      Timeout: 20
+      Role: !GetAtt CaptureRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref ArtifactKey
+  CaptureIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Condition: IsAuthorizedDev
+    Properties:
+      ApiId: 1f4sn5utdi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt CaptureFunction.Arn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 21000
+  CaptureRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: IsAuthorizedDev
+    Properties:
+      ApiId: 1f4sn5utdi
+      RouteKey: POST /pagos/khipu/rendiciones
+      AuthorizationType: NONE
+      Target: !Sub 'integrations/${CaptureIntegration}'
+  InvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: IsAuthorizedDev
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref CaptureFunction
+      Principal: apigateway.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:1f4sn5utdi/*/POST/pagos/khipu/rendiciones'

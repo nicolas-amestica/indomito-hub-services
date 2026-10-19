@@ -39,6 +39,7 @@ func (d *transactionDB) Query(ctx context.Context, in *dynamodb.QueryInput, _ ..
 	defer d.mu.Unlock()
 	pk := in.ExpressionAttributeValues[":pk"].(*types.AttributeValueMemberS).Value
 	prefix := ""
+	_, hasPrefix := in.ExpressionAttributeValues[":prefix"]
 	from, to := "", ""
 	if value, ok := in.ExpressionAttributeValues[":prefix"].(*types.AttributeValueMemberS); ok {
 		prefix = value.Value
@@ -53,7 +54,7 @@ func (d *transactionDB) Query(ctx context.Context, in *dynamodb.QueryInput, _ ..
 	keys := []string{}
 	for k, row := range d.items {
 		sk := row["sk"].(*types.AttributeValueMemberS).Value
-		matchesRange := (prefix != "" && strings.HasPrefix(sk, prefix)) || (prefix == "" && sk >= from && sk <= to)
+		matchesRange := (hasPrefix && strings.HasPrefix(sk, prefix)) || (!hasPrefix && sk >= from && sk <= to)
 		if row["pk"].(*types.AttributeValueMemberS).Value == pk && matchesRange && sk > start {
 			keys = append(keys, k)
 		}

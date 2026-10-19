@@ -42,6 +42,7 @@ const taxDocumentRead:IamStatement={Effect:'Allow',Action:['dynamodb:GetItem','d
 const taxDocumentWrite:IamStatement={Effect:'Allow',Action:['dynamodb:PutItem','dynamodb:DeleteItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['TAX_REQUEST#*','TAX_QUEUE#PENDING','TAX_QUEUE#RECORDED','TAX_FOLIO#*','COMMAND#*']}}};
 const taxDocumentObjects:IamStatement={Effect:'Allow',Action:['s3:PutObject','s3:GetObject'],Resource:`${receiptsBucketArn}/tax-documents/manual/*`};
 const endpoints: GoHttpEndpoint[] = [
+  ...renditionEndpoints(),
 	{name:'fn-verificar-comprobante-publico-v1',method:'POST',path:'/pagos/comprobantes/verificaciones',public:true,timeout:10,policies:[{Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['RECEIPT#*','ATTEMPT#*','RATE#*']}}},rateWrite,lookupSecret]},
 	{name:'fn-listar-solicitudes-tributarias-v1',method:'GET',path:'/pagos/documentos-tributarios/pendientes',public:false,timeout:10,policies:[taxDocumentRead]},
 	{name:'fn-registrar-boleta-manual-v1',method:'POST',path:'/pagos/documentos-tributarios/{requestId}/emision-manual',public:false,timeout:29,policies:[taxDocumentRead,taxDocumentWrite,taxDocumentObjects]},
@@ -149,6 +150,8 @@ const configuration = buildGoServiceServerless(ApiServices.Payment, deployEndpoi
 	env: { PAYMENTS_TABLE_NAME: tableName, CONFIGURATIONS_TABLE_NAME:configurationsName, PAYMENTS_BASE_URL: baseUrl, PAYMENTS_PORTAL_URL:portalUrl, PAYMENTS_CHECKOUT_ENABLED:'true', PROGRAMS_TABLE_NAME:contractsName, RECEIPTS_BUCKET_NAME:receiptsBucketName },
 });
 configuration.resources ??= { Resources: {} };
+const renditionWorker = configuration.functions?.['fn-procesar-rendiciones-khipu-v1'];
+if (renditionWorker && typeof renditionWorker === 'object') renditionWorker.reservedConcurrency = 1;
 const resources = configuration.resources.Resources as Record<string, unknown> | undefined;
 (configuration.resources as { Resources: Record<string, unknown> }).Resources = {
   ...(resources ?? {}),
@@ -156,3 +159,17 @@ const resources = configuration.resources.Resources as Record<string, unknown> |
   PaymentReconciliationQueue: { Type:'AWS::SQS::Queue', Properties:{VisibilityTimeout:60,MessageRetentionPeriod:1209600,SqsManagedSseEnabled:true,RedrivePolicy:{deadLetterTargetArn:{'Fn::GetAtt':['PaymentReconciliationDLQ','Arn']},maxReceiveCount:5}}},
 };
 module.exports = configuration;
+
+function renditionEndpoints(): GoHttpEndpoint[] {
+  const config = ssmReadPolicy({'Fn::Sub': `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/${STAGE}/payments/khipu/renditions/config`});
+  const inboxRead: IamStatement = {Effect:'Allow',Action:['dynamodb:GetItem','dynamodb:Query'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['RENDITION#*','RENDITION_MONTH#*','RENDITION_JOBS']}}};
+  const inboxWrite: IamStatement = {Effect:'Allow',Action:['dynamodb:PutItem','dynamodb:DeleteItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['RENDITION#*','RENDITION_MONTH#*','RENDITION_JOBS']}}};
+  const objects = `${receiptsBucketArn}/renditions/${STAGE}/*`;
+  return [
+    {name:'fn-recibir-rendicion-khipu-v1',method:'POST',path:'/pagos/khipu/rendiciones',public:true,timeout:29,memorySize:256,policies:[config,inboxRead,inboxWrite,{Effect:'Allow',Action:['s3:PutObject'],Resource:objects}]},
+    {name:'fn-procesar-rendiciones-khipu-v1',timeout:60,memorySize:256,events:[{schedule:'rate(1 minute)'}],policies:[config,inboxRead,inboxWrite,{Effect:'Allow',Action:['s3:GetObject'],Resource:objects},{Effect:'Allow',Action:['dynamodb:ConditionCheckItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['ATTEMPT#*']}}},{Effect:'Allow',Action:['dynamodb:GetItem','dynamodb:PutItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['ATTEMPT#*','ACCOUNT#*','TRIP#*','COMMAND#*','REFERENCE#*','CASH#*']}}}]},
+    {name:'fn-listar-rendiciones-khipu-v1',method:'GET',path:'/pagos/tesoreria/rendiciones',public:false,timeout:15,policies:[config,inboxRead]},
+    {name:'fn-obtener-rendicion-khipu-v1',method:'GET',path:'/pagos/tesoreria/rendiciones/{id}',public:false,timeout:15,policies:[config,inboxRead]},
+    {name:'fn-reprocesar-rendicion-khipu-v1',method:'POST',path:'/pagos/tesoreria/rendiciones/{id}/reintentos',public:false,timeout:15,policies:[config,inboxRead,inboxWrite]},
+  ];
+}

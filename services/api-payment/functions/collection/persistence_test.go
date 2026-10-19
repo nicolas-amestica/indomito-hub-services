@@ -50,6 +50,19 @@ func (d *transactionDB) TransactWriteItems(ctx context.Context, in *dynamodb.Tra
 	for _, w := range in.TransactItems {
 		if check := w.ConditionCheck; check != nil {
 			old := d.items[itemKey(check.Key)]
+			if *check.ConditionExpression == "attribute_not_exists(pk)" {
+				if old != nil {
+					return nil, &types.TransactionCanceledException{}
+				}
+				continue
+			}
+			if *check.ConditionExpression == "settlement.SettledGross = :zero" {
+				var row record
+				if attributevalue.UnmarshalMap(old, &row) != nil || row.Settlement == nil || row.Settlement.SettledGross != 0 {
+					return nil, &types.TransactionCanceledException{}
+				}
+				continue
+			}
 			if *check.ConditionExpression != "#status = :active" && *check.ConditionExpression != "#status = :active AND (attribute_not_exists(rosterClosed) OR rosterClosed = :false)" && *check.ConditionExpression != "#status = :updating AND pendingAnnexId = :annex" && *check.ConditionExpression != "#status = :applying AND pendingGroupId = :command" && *check.ConditionExpression != "#status = :preparing AND pendingGroupId = :command" && *check.ConditionExpression != "#version = :version" {
 				return nil, errors.New("unexpected condition check")
 			}
@@ -103,6 +116,12 @@ func (d *transactionDB) TransactWriteItems(ctx context.Context, in *dynamodb.Tra
 		}
 		old := d.items[itemKey(w.Put.Item)]
 		switch *w.Put.ConditionExpression {
+		case "attribute_exists(pk) OR attribute_not_exists(pk)":
+			// Escritura de resultado protegida por checkpoint en la misma transacción.
+		case "attribute_exists(pk)":
+			if old == nil {
+				return nil, &types.TransactionCanceledException{}
+			}
 		case "#status = :active":
 			if old == nil || old["status"].(*types.AttributeValueMemberS).Value != w.Put.ExpressionAttributeValues[":active"].(*types.AttributeValueMemberS).Value {
 				return nil, &types.TransactionCanceledException{}

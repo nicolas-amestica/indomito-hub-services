@@ -13,6 +13,11 @@
     "PAYMENTS_PORTAL_URL"
   ],
   "functions": [
+    {"name":"fn-recibir-rendicion-khipu-v1","entrypoint":"./cmd/fn-recibir-rendicion-khipu-v1"},
+    {"name":"fn-procesar-rendiciones-khipu-v1","entrypoint":"./cmd/fn-procesar-rendiciones-khipu-v1"},
+    {"name":"fn-listar-rendiciones-khipu-v1","entrypoint":"./cmd/fn-rendiciones-admin-v1"},
+    {"name":"fn-obtener-rendicion-khipu-v1","entrypoint":"./cmd/fn-rendiciones-admin-v1"},
+    {"name":"fn-reprocesar-rendicion-khipu-v1","entrypoint":"./cmd/fn-rendiciones-admin-v1"},
     {"name":"fn-verificar-comprobante-publico-v1","entrypoint":"./cmd/fn-verificar-comprobante-publico-v1"},
     {"name":"fn-listar-solicitudes-tributarias-v1","entrypoint":"./cmd/fn-listar-solicitudes-tributarias-v1"},
     {"name":"fn-registrar-boleta-manual-v1","entrypoint":"./cmd/fn-registrar-boleta-manual-v1"},

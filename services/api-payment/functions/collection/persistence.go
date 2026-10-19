@@ -62,6 +62,8 @@ var ErrReferenceUsed = errors.New("referencia financiera ya registrada")
 var ErrNotFound = errors.New("cuenta no encontrada")
 
 type record struct {
+	Rendition            *RenditionState                `dynamodbav:"rendition,omitempty"`
+	RenditionResult      *RenditionResult               `dynamodbav:"renditionResult,omitempty"`
 	AttemptID            string                         `dynamodbav:"attemptId,omitempty"`
 	ProviderStatus       string                         `dynamodbav:"providerStatus,omitempty"`
 	ProviderDetail       string                         `dynamodbav:"providerDetail,omitempty"`
@@ -394,6 +396,15 @@ func (s Service) Apply(ctx context.Context, command Command, transition func(col
 			return collection.Change{}, err
 		}
 		writes = append(writes, write)
+	}
+	if c.Event.Type == "PAYMENT_REVERSED_BY_PROVIDER" {
+		// La lectura previa no basta: una rendición puede liquidar entre esa
+		// lectura y este commit. Reversa y liquidación se excluyen atómicamente.
+		paymentID := strings.TrimPrefix(command.Reference, "khipu-reversal:")
+		if !checkoutPaymentID.MatchString(paymentID) {
+			return collection.Change{}, collection.ErrInvalid
+		}
+		writes = append(writes, types.TransactWriteItem{ConditionCheck: &types.ConditionCheck{TableName: &s.Table, Key: key("TRIP#"+a.TripID, "SETTLEMENT#khipu:"+paymentID), ConditionExpression: aws.String("settlement.SettledGross = :zero"), ExpressionAttributeValues: map[string]types.AttributeValue{":zero": &types.AttributeValueMemberN{Value: "0"}}}})
 	}
 	_, err = s.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: writes})
 	if err == nil {

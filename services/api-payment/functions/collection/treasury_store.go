@@ -56,7 +56,7 @@ func (s Service) ListSettlements(ctx context.Context, tripID, cursor string) (Se
 	return page, nil
 }
 
-func (s Service) ReconcileSettlement(ctx context.Context, tripID, paymentReference string, version, gross, fee int64, bankReference, effectiveDate string, audit domain.Audit) (domain.Settlement, domain.Event, error) {
+func (s Service) ReconcileSettlement(ctx context.Context, tripID, paymentReference string, version, gross, fee int64, bankReference, effectiveDate string, audit domain.Audit, guards ...types.TransactWriteItem) (domain.Settlement, domain.Event, error) {
 	pk, sk := "TRIP#"+tripID, "SETTLEMENT#"+paymentReference
 	commandHash, err := fingerprint(Command{ID: audit.CommandID, AccountID: tripID, ExpectedVersion: version, Reference: bankReference, Payload: struct {
 		Payment    string
@@ -105,6 +105,7 @@ func (s Service) ReconcileSettlement(ctx context.Context, tripID, paymentReferen
 		}
 		writes = append(writes, write)
 	}
+	writes = append(writes, guards...)
 	_, err = s.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: writes})
 	if err != nil {
 		if prior, e := s.read(ctx, "COMMAND#"+audit.CommandID, "META"); e == nil && prior.Fingerprint == commandHash {
