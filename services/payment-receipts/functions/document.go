@@ -11,7 +11,14 @@ import (
 	"strings"
 	"time"
 
+	"ind-hub-api-gox-sls-pri-gh/libs/pdfbrand"
+
 	"github.com/signintech/gopdf"
+)
+
+const (
+	receiptPageWidth = 595.0
+	receiptTagline   = "Dale una vuelta a la aventura"
 )
 
 //go:embed assets/CourierNew.ttf
@@ -61,16 +68,16 @@ func renderReceipt(model receiptModel) (renderedDocument, error) {
 		return renderedDocument{}, fmt.Errorf("cargar fuente bold: %w", err)
 	}
 	pdf.AddPage()
-	pdf.SetFillColor(28, 28, 28)
-	pdf.RectFromUpperLeftWithStyle(0, 0, 595, 112, "F")
-	writePDFText(pdf, "bold", 21, 235, 255, 0, 48, 36, "GIRAS INDÓMITO")
-	writePDFText(pdf, "regular", 11, 255, 255, 255, 48, 72, "Comprobante de registro de pago")
+	pdfbrand.DrawHeader(pdf)
+	pdfbrand.DrawFooter(pdf)
+	writeCenteredPDFText(pdf, "regular", 12, 255, 255, 255, receiptPageWidth/2, 84, receiptTagline)
+	writeCenteredPDFText(pdf, "regular", 10, 255, 255, 255, receiptPageWidth/2, 102, "Comprobante de registro de pago")
 	stageLabel := "PRODUCCIÓN"
 	if os.Getenv("APP_STAGE") != "prd" {
 		stageLabel = "AMBIENTE DE DESARROLLO"
 	}
-	writePDFText(pdf, "bold", 11, 28, 28, 28, 48, 140, stageLabel)
-	writePDFText(pdf, "regular", 10, 28, 28, 28, 48, 161, "Este documento no es una boleta ni una factura emitida por el SII.")
+	writePDFText(pdf, "bold", 11, 28, 28, 28, 48, 178, stageLabel)
+	writePDFText(pdf, "regular", 10, 28, 28, 28, 48, 196, "Este documento no es una boleta ni una factura emitida por el SII.")
 
 	identity := model.AccountID
 	label := "Cuenta del pasajero"
@@ -89,35 +96,35 @@ func renderReceipt(model receiptModel) (renderedDocument, error) {
 	}
 	rows := [][2]string{{"Comprobante", model.ID}, {"Viaje / gira", model.TripID}, {label, identity}, {"Fecha efectiva", model.EffectiveDate}, {"Concepto", concept}}
 	for index, row := range rows {
-		y := 225 + float64(index*41)
+		y := 228 + float64(index*38)
 		writePDFText(pdf, "regular", 9, 97, 97, 97, 48, y, row[0])
 		writePDFText(pdf, "bold", 11, 28, 28, 28, 48, y+14, row[1])
 	}
 	pdf.SetFillColor(243, 244, 246)
-	pdf.RectFromUpperLeftWithStyle(48, 448, 499, 68, "F")
-	writePDFText(pdf, "regular", 10, 28, 28, 28, 64, 461, "Monto recibido")
-	writePDFText(pdf, "bold", 24, 28, 28, 28, 64, 479, formatCLP(model.Amount))
+	pdf.RectFromUpperLeftWithStyle(48, 428, 499, 68, "F")
+	writePDFText(pdf, "regular", 10, 28, 28, 28, 64, 441, "Monto recibido")
+	writePDFText(pdf, "bold", 24, 28, 28, 28, 64, 459, formatCLP(model.Amount))
 	noteLine1 := "Este comprobante acredita el registro del ingreso indicado."
 	noteLine2 := "No certifica que todas las obligaciones del viaje estén pagadas."
 	if model.Review {
 		noteLine1 = "El dinero está registrado, pero todavía no se aplicó a una cuota."
 		noteLine2 = "No realices otro pago sin verificar el estado con Giras Indómito."
 	}
-	writePDFText(pdf, "regular", 9, 28, 28, 28, 48, 542, noteLine1)
-	writePDFText(pdf, "regular", 9, 28, 28, 28, 48, 558, noteLine2)
+	writePDFText(pdf, "regular", 9, 28, 28, 28, 48, 520, noteLine1)
+	writePDFText(pdf, "regular", 9, 28, 28, 28, 48, 536, noteLine2)
 	if model.Version == 3 {
-		writePDFText(pdf, "regular", 8, 97, 97, 97, 48, 596, "Las devoluciones se registran por separado y no eliminan el ingreso original.")
+		writePDFText(pdf, "regular", 8, 97, 97, 97, 48, 566, "Las devoluciones se registran por separado y no eliminan el ingreso original.")
 		if err := drawReceiptVerification(pdf, model.VerificationURL, model.ID); err != nil {
 			return renderedDocument{}, err
 		}
 	} else {
-		writeWrapped(pdf, "regular", 9, 97, 97, 97, 48, 658, 499, "Conserva el número de comprobante para consultas. Las devoluciones se registran por separado y no eliminan el ingreso original.")
+		writeWrapped(pdf, "regular", 9, 97, 97, 97, 48, 580, 499, "Conserva el número de comprobante para consultas. Las devoluciones se registran por separado y no eliminan el ingreso original.")
 	}
 	footerStage := "PRD"
 	if os.Getenv("APP_STAGE") != "prd" {
 		footerStage = "DEV"
 	}
-	writePDFText(pdf, "regular", 8, 97, 97, 97, 48, 785, fmt.Sprintf("Giras Indómito · Registro financiero · %s · Documento v%d", footerStage, model.Version))
+	writePDFText(pdf, "regular", 8, 97, 97, 97, 48, 806, fmt.Sprintf("Giras Indómito · Registro financiero · %s · Documento v%d", footerStage, model.Version))
 	bytes, err := pdf.GetBytesPdfReturnErr()
 	if err != nil {
 		return renderedDocument{}, fmt.Errorf("generar comprobante: %w", err)
@@ -136,6 +143,16 @@ func writePDFText(pdf *gopdf.GoPdf, font string, size int, red, green, blue uint
 	pdf.SetX(x)
 	pdf.SetY(y)
 	_ = pdf.Cell(nil, value)
+}
+
+// writeCenteredPDFText escribe una línea centrada horizontalmente respecto de centerX.
+func writeCenteredPDFText(pdf *gopdf.GoPdf, font string, size int, red, green, blue uint8, centerX, y float64, value string) {
+	_ = pdf.SetFont(font, "", size)
+	width, err := pdf.MeasureTextWidth(value)
+	if err != nil {
+		width = 0
+	}
+	writePDFText(pdf, font, size, red, green, blue, centerX-width/2, y, value)
 }
 
 func writeWrapped(pdf *gopdf.GoPdf, font string, size int, red, green, blue uint8, x, y, width float64, value string) {

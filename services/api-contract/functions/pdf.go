@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"ind-hub-api-gox-sls-pri-gh/libs/pdfbrand"
 	"ind-hub-api-gox-sls-pri-gh/services/api-contract/domain"
 
 	"github.com/signintech/gopdf"
@@ -35,12 +36,6 @@ const (
 	clauseSpacing     = 15.0
 	generalPostGap    = 20.0
 )
-
-//go:embed assets/header.png
-var headerPNG []byte
-
-//go:embed assets/footer.png
-var footerPNG []byte
 
 //go:embed assets/CourierNew.ttf
 var courierTTF []byte
@@ -201,12 +196,8 @@ func buildClauses(c domain.Content) []clause {
 func (d *contractPDF) addPage() {
 	d.pdf.AddPage()
 	d.y = 160
-	if holder, err := gopdf.ImageHolderByBytes(headerPNG); err == nil {
-		_ = d.pdf.ImageByHolder(holder, -8, 0, &gopdf.Rect{W: 632, H: 163})
-	}
-	if holder, err := gopdf.ImageHolderByBytes(footerPNG); err == nil {
-		_ = d.pdf.ImageByHolder(holder, -15, 718, &gopdf.Rect{W: 642, H: 74})
-	}
+	pdfbrand.DrawHeader(d.pdf)
+	pdfbrand.DrawFooter(d.pdf)
 	if d.preview {
 		_ = d.pdf.SetFont("courier", "", 120)
 		d.pdf.SetTextColor(230, 230, 230)
