@@ -147,6 +147,13 @@ func TestRenditionSignatureAndTrust(t *testing.T) {
 			if (e == nil) != tc.want {
 				t.Fatalf("valid=%v err=%v", tc.want, e)
 			}
+			capture := RenditionCaptureVerifier{Roots: v.Roots, Pinned: v.Pinned}
+			_, captureErr := capture.Verify(b, n)
+			// Únicamente la comparación del destino se omite en diagnóstico.
+			wantCapture := tc.want || tc.name == "wrong destination"
+			if (captureErr == nil) != wantCapture {
+				t.Fatalf("capture valid=%v err=%v", wantCapture, captureErr)
+			}
 		})
 	}
 	var huge bytes.Buffer
@@ -158,8 +165,14 @@ func TestRenditionSignatureAndTrust(t *testing.T) {
 		t.Fatal(err)
 	}
 	v := RenditionVerifier{Roots: roots, RecipientUID: "merchant", Bank: "test-bank", Account: "test-account"}
+	if _, err = (RenditionVerifier{Roots: roots}).Verify(valid, now); err == nil {
+		t.Fatal("normal verification accepted an unknown destination")
+	}
 	if _, err = v.Verify(huge.Bytes(), now); err == nil {
 		t.Fatal("gzip expansion accepted")
+	}
+	if _, err = (RenditionCaptureVerifier{Roots: roots}).Verify(huge.Bytes(), now); err == nil {
+		t.Fatal("capture accepted gzip expansion")
 	}
 }
 

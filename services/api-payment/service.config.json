@@ -13,6 +13,7 @@
     "PAYMENTS_PORTAL_URL"
   ],
   "functions": [
+    {"name":"fn-capturar-rendicion-khipu-v1","entrypoint":"./cmd/fn-capturar-rendicion-khipu-v1","stages":["prd"]},
     {"name":"fn-recibir-rendicion-khipu-v1","entrypoint":"./cmd/fn-recibir-rendicion-khipu-v1"},
     {"name":"fn-procesar-rendiciones-khipu-v1","entrypoint":"./cmd/fn-procesar-rendiciones-khipu-v1"},
     {"name":"fn-listar-rendiciones-khipu-v1","entrypoint":"./cmd/fn-rendiciones-admin-v1"},

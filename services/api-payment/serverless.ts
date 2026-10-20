@@ -150,8 +150,6 @@ const configuration = buildGoServiceServerless(ApiServices.Payment, deployEndpoi
 	env: { PAYMENTS_TABLE_NAME: tableName, CONFIGURATIONS_TABLE_NAME:configurationsName, PAYMENTS_BASE_URL: baseUrl, PAYMENTS_PORTAL_URL:portalUrl, PAYMENTS_CHECKOUT_ENABLED:'true', PROGRAMS_TABLE_NAME:contractsName, RECEIPTS_BUCKET_NAME:receiptsBucketName },
 });
 configuration.resources ??= { Resources: {} };
-const renditionWorker = configuration.functions?.['fn-procesar-rendiciones-khipu-v1'];
-if (renditionWorker && typeof renditionWorker === 'object') renditionWorker.reservedConcurrency = 1;
 const resources = configuration.resources.Resources as Record<string, unknown> | undefined;
 (configuration.resources as { Resources: Record<string, unknown> }).Resources = {
   ...(resources ?? {}),
@@ -166,6 +164,13 @@ function renditionEndpoints(): GoHttpEndpoint[] {
   const inboxWrite: IamStatement = {Effect:'Allow',Action:['dynamodb:PutItem','dynamodb:DeleteItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['RENDITION#*','RENDITION_MONTH#*','RENDITION_JOBS']}}};
   const objects = `${receiptsBucketArn}/renditions/${STAGE}/*`;
   return [
+    ...(STAGE === 'prd' ? [{
+      name:'fn-capturar-rendicion-khipu-v1',method:'POST' as const,path:'/pagos/khipu/rendiciones/capturas',public:true,timeout:29,memorySize:256,
+      policies:[
+        ssmReadPolicy({'Fn::Sub': `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/prd/payments/khipu/renditions/bootstrap-config`}),
+        {Effect:'Allow' as const,Action:['s3:PutObject','s3:GetObject'],Resource:`${receiptsBucketArn}/rendition-bootstrap/prd/*`},
+      ],
+    }] : []),
     {name:'fn-recibir-rendicion-khipu-v1',method:'POST',path:'/pagos/khipu/rendiciones',public:true,timeout:29,memorySize:256,policies:[config,inboxRead,inboxWrite,{Effect:'Allow',Action:['s3:PutObject'],Resource:objects}]},
     {name:'fn-procesar-rendiciones-khipu-v1',timeout:60,memorySize:256,events:[{schedule:'rate(1 minute)'}],policies:[config,inboxRead,inboxWrite,{Effect:'Allow',Action:['s3:GetObject'],Resource:objects},{Effect:'Allow',Action:['dynamodb:ConditionCheckItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['ATTEMPT#*']}}},{Effect:'Allow',Action:['dynamodb:GetItem','dynamodb:PutItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['ATTEMPT#*','ACCOUNT#*','TRIP#*','COMMAND#*','REFERENCE#*','CASH#*']}}}]},
     {name:'fn-listar-rendiciones-khipu-v1',method:'GET',path:'/pagos/tesoreria/rendiciones',public:false,timeout:15,policies:[config,inboxRead]},

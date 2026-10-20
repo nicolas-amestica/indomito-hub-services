@@ -100,8 +100,34 @@ func (v DevelopmentRenditionVerifier) Verify(raw []byte, now time.Time) (Renditi
 }
 
 func (v RenditionVerifier) verify(raw []byte, now time.Time, development bool) (Rendition, error) {
+	if v.RecipientUID == "" || v.Bank == "" || v.Account == "" {
+		return Rendition{}, ErrVerification
+	}
+	r, err := v.verifyEnvelope(raw, now, development)
+	if err != nil {
+		return Rendition{}, err
+	}
+	if r.RecipientUID != v.RecipientUID || r.Bank != v.Bank || r.Account != v.Account {
+		return Rendition{}, ErrVerification
+	}
+	return r, nil
+}
+
+// RenditionCaptureVerifier autentica el emisor, pero NO el destino del dinero.
+// Solo se usa para evidencia de diagnóstico; nunca para conciliación.
+type RenditionCaptureVerifier struct {
+	Roots  *x509.CertPool
+	Pinned *x509.Certificate
+}
+
+// Verify mantiene la validación estricta sin requerir un destinatario conocido.
+func (v RenditionCaptureVerifier) Verify(raw []byte, now time.Time) (Rendition, error) {
+	return (RenditionVerifier{Roots: v.Roots, Pinned: v.Pinned}).verifyEnvelope(raw, now, false)
+}
+
+func (v RenditionVerifier) verifyEnvelope(raw []byte, now time.Time, development bool) (Rendition, error) {
 	var empty Rendition
-	if len(raw) == 0 || len(raw) > MaxRenditionBytes || now.IsZero() || v.RecipientUID == "" || v.Bank == "" || v.Account == "" {
+	if len(raw) == 0 || len(raw) > MaxRenditionBytes || now.IsZero() {
 		return empty, ErrVerification
 	}
 	gz, err := gzip.NewReader(bytes.NewReader(raw))
@@ -184,9 +210,6 @@ func (v RenditionVerifier) verify(raw []byte, now time.Time, development bool) (
 		return empty, ErrVerification
 	}
 	r := envelope.Report
-	if r.RecipientUID != v.RecipientUID || r.Bank != v.Bank || r.Account != v.Account {
-		return empty, ErrVerification
-	}
 	if err = r.Validate(); err != nil {
 		return empty, err
 	}
