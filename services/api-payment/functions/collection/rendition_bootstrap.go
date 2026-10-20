@@ -81,6 +81,10 @@ func getRenditionApp(ctx context.Context) (*RenditionApp, error) {
 	if err != nil {
 		return nil, err
 	}
+	// La excepción vive en un entrypoint y una cuenta separados, nunca aquí.
+	if c.Policy.DevelopmentSimulation {
+		return nil, providers.ErrRenditionPolicy
+	}
 	v := providers.RenditionVerifier{RecipientUID: c.RecipientUID, Bank: c.Bank, Account: c.Account}
 	if c.CertificatePEM != "" {
 		block, rest := pem.Decode([]byte(c.CertificatePEM))

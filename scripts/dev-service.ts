@@ -56,6 +56,19 @@ const servicePath = resolve(getArg('service'));
 const stage = getArg('stage', 'local');
 const region = getArg('region', 'us-east-1');
 
+// Mismo criterio de perfil que validate-service.ts y deploy-service.ts: sin esto
+// `serverless print` resuelve variables de CloudFormation sin credenciales y
+// falla con InvalidClientTokenId.
+const defaultProfiles: Record<string, string> = { dev: 'pa-dev', prd: 'pa-prd' };
+const awsProfile = process.env.AWS_PROFILE || defaultProfiles[stage];
+const hasAmbientAwsCredentials = Boolean(
+  process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY,
+);
+
+if (stage !== 'local' && !hasAmbientAwsCredentials && !awsProfile) {
+  throw new Error(`No hay perfil AWS configurado para stage=${stage}`);
+}
+
 const serviceConfig = JSON.parse(
   readFileSync(join(servicePath, 'service.config.json'), 'utf8'),
 ) as ServiceConfig;
@@ -94,6 +107,12 @@ if (stage === 'local') {
     cwd: servicePath,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      STAGE: stage,
+      ...(!hasAmbientAwsCredentials && { AWS_PROFILE: awsProfile }),
+      NODE_OPTIONS: '--no-deprecation',
+    },
   });
 
   const yamlStartIndex = rawOutput.search(/^service:/m);

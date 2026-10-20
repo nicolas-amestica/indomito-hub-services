@@ -19,16 +19,18 @@ import (
 type RenditionApp struct {
 	Accounts Service
 	Objects  RenditionObjects
-	Verifier providers.RenditionVerifier
-	Policy   RenditionPolicy
-	Stage    string
-	Now      func() time.Time
+	Verifier interface {
+		Verify([]byte, time.Time) (providers.Rendition, error)
+	}
+	Policy RenditionPolicy
+	Stage  string
+	Now    func() time.Time
 }
 
 // Handle recibe únicamente mensajes firmados. El mismo receptor permite reenvío
 // de evidencia original; no acepta JSON sin autenticar ni dispara caja en HTTP.
 func (a RenditionApp) Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest) events.APIGatewayV2HTTPResponse {
-	if a.Now == nil || a.Objects == nil {
+	if a.Now == nil || a.Objects == nil || a.Verifier == nil {
 		return webhookResponse(503)
 	}
 	if req.RequestContext.HTTP.Method != "POST" {
@@ -89,6 +91,9 @@ func (a RenditionApp) Run(ctx context.Context) error {
 		// La configuración vigente funciona como interruptor de aplicación. No
 		// continúa aplicando un lote si se revocó o cambió su política validada.
 		row, workErr := a.Accounts.read(ctx, renditionPK(job.AccountID), "META")
+		if workErr == nil && row.Rendition != nil && row.Rendition.Policy.DevelopmentSimulation && (!a.Policy.DevelopmentSimulation || a.Stage != "dev") {
+			workErr = providers.ErrRenditionPolicy
+		}
 		if workErr == nil && row.Rendition != nil && row.Rendition.Policy.Mode == "APPLY" && (a.Policy.Mode != "APPLY" || a.Policy.Revision != row.Rendition.Policy.Revision) {
 			workErr = providers.ErrRenditionPolicy
 		}
@@ -97,6 +102,19 @@ func (a RenditionApp) Run(ctx context.Context) error {
 		}
 		if err = a.Accounts.RescheduleRendition(ctx, job.AccountID, job.SK, a.Now(), workErr != nil); err != nil {
 			failures = append(failures, err)
+		}
+		if workErr != nil {
+			// El reintento durable no convierte el procesamiento fallido en éxito.
+			// Error estable: permite alertar sin incluir contenido del proveedor.
+			failures = append(failures, errors.New("rendition processing failed; durable retry or review required"))
+		}
+		if a.Stage == "dev" && a.Policy.DevelopmentSimulation {
+			latest, readErr := a.Accounts.read(ctx, renditionPK(job.AccountID), "META")
+			if readErr != nil {
+				failures = append(failures, errors.New("rendition status read failed"))
+			} else if latest.Rendition != nil && latest.Rendition.Status == "REVIEW_REQUIRED" {
+				renditionDevMetric("ReviewRequired", 1)
+			}
 		}
 	}
 	return errors.Join(failures...)

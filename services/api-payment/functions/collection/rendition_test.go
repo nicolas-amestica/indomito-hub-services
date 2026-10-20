@@ -52,7 +52,7 @@ func renditionFixture(t *testing.T, n int) (Service, *transactionDB, *renditionM
 		accountID := paymentOperationID(fmt.Sprintf("rendition-fixture-account-%d", i))
 		tripID := paymentOperationID(fmt.Sprintf("rendition-fixture-trip-%d", i/44))
 		r.Items = append(r.Items, providers.RenditionItem{PaymentID: payment, AttemptID: attemptID, PaymentDate: "2026-10-17T10:00:00Z", Amount: "10000.0000", Fee: "100", FeeScheme: "test-deducted"})
-		saveLookupRow(t, db, record{PK: "ATTEMPT#" + attemptID, SK: "META", Attempt: &domain.Attempt{ID: attemptID, AccountID: accountID}})
+		saveLookupRow(t, db, record{PK: "ATTEMPT#" + attemptID, SK: "META", Attempt: &domain.Attempt{ID: attemptID, AccountID: accountID, Amount: 10000}})
 		saveLookupRow(t, db, record{PK: "ACCOUNT#" + accountID, SK: "META", Account: &domain.Account{ID: accountID, TripID: tripID}})
 		saveLookupRow(t, db, record{PK: "ATTEMPT#" + attemptID, SK: "OUTCOME", Event: &domain.Event{Type: "PAYMENT_RECEIVED", AccountID: accountID, TripID: tripID, Amount: 10000, Reference: "khipu:" + payment}})
 		saveLookupRow(t, db, record{PK: "TRIP#" + tripID, SK: "SETTLEMENT#khipu:" + payment, Version: 1, Settlement: &domain.Settlement{PaymentReference: "khipu:" + payment, TripID: tripID, Amount: 10000, Version: 1}})
@@ -303,8 +303,8 @@ func TestRenditionWorkerDurableRetriesAndKillSwitch(t *testing.T) {
 	}
 	clock := now.Add(time.Second)
 	a := RenditionApp{Accounts: s, Objects: objects, Policy: RenditionPolicy{Mode: "OBSERVE"}, Now: func() time.Time { return clock }}
-	if err = a.Run(context.Background()); err != nil {
-		t.Fatal(err)
+	if err = a.Run(context.Background()); err == nil {
+		t.Fatal("revoked policy must be visible as worker failure")
 	}
 	row, err := s.read(context.Background(), renditionPK(id), "META")
 	if err != nil {
@@ -348,8 +348,8 @@ func TestRenditionBeforeConfirmationRecovers(t *testing.T) {
 	}
 	clock := now.Add(time.Second)
 	a := RenditionApp{Accounts: s, Objects: objects, Policy: testRenditionApplyPolicy(), Now: func() time.Time { return clock }}
-	if err = a.Run(context.Background()); err != nil {
-		t.Fatal(err)
+	if err = a.Run(context.Background()); err == nil {
+		t.Fatal("missing confirmation must be visible as worker failure")
 	}
 	saveLookupRow(t, db, outcome)
 	clock = clock.Add(6 * time.Minute)
@@ -420,7 +420,7 @@ func TestRenditionAdminPaginationAndPrivacy(t *testing.T) {
 }
 
 func TestRenditionPublicHandlerRejectsInvalidEvidence(t *testing.T) {
-	a := RenditionApp{Objects: &renditionMemoryObjects{values: map[string][]byte{}}, Now: time.Now}
+	a := RenditionApp{Objects: &renditionMemoryObjects{values: map[string][]byte{}}, Now: time.Now, Verifier: providers.RenditionVerifier{}}
 	for _, tc := range []struct {
 		body   string
 		base64 bool

@@ -84,6 +84,26 @@ func TestRenditionSignatureAndTrust(t *testing.T) {
 	}
 	valid := sign(cert, "RS512", renditionTestReport(), now.Unix(), true)
 	for _, tc := range []struct {
+		name, stage, account string
+		cert                 *x509.Certificate
+		algorithm            string
+		at                   time.Time
+		valid                bool
+	}{
+		{"expired arbitrary certificate", "dev", "382670112717", wrongHost, "RS512", now.Add(365 * 24 * time.Hour), true},
+		{"production rejected", "prd", "382670112717", wrongHost, "RS512", now, false},
+		{"other account rejected", "dev", "000000000000", wrongHost, "RS512", now, false},
+		{"invalid algorithm rejected", "dev", "382670112717", wrongHost, "HS512", now, false},
+	} {
+		t.Run("development/"+tc.name, func(t *testing.T) {
+			v := DevelopmentRenditionVerifier{RenditionVerifier: RenditionVerifier{RecipientUID: "merchant", Bank: "test-bank", Account: "test-account"}, Stage: tc.stage, AWSAccount: tc.account}
+			_, err := v.Verify(sign(tc.cert, tc.algorithm, renditionTestReport(), now.Unix(), true), tc.at)
+			if (err == nil) != tc.valid {
+				t.Fatal("unexpected development verification result", err)
+			}
+		})
+	}
+	for _, tc := range []struct {
 		name   string
 		mutate func(*RenditionVerifier, *[]byte, *time.Time)
 		want   bool

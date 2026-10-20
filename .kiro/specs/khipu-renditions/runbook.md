@@ -1,5 +1,7 @@
 # Prueba DEV y activación de rendiciones
 
+**Actualización de alcance DEV:** el usuario autorizó excepción permanente y automatización simulada aislada. Ver `permanent-dev.md`; reemplaza la exigencia de certificado confiable para DEV, no para PRD. La configuración de ese stack es `automation-config`, distinta de la configuración estricta descrita abajo.
+
 ## Estado inicial
 
 El usuario confirma que hoy se realizó el primer pago productivo; todavía no se ha contrastado su rendición con cartola. También dispone de una cuenta Khipu developer. No confundir confirmación de ese pago con recepción de rendición.
@@ -46,6 +48,10 @@ La política es una instantánea por lote. Los lotes ya observados se reanudan u
 Para detener nuevas aplicaciones, establecer OBSERVE: el trabajador impide continuar lotes APPLY bajo un modo/revisión revocados. Los asientos ya aplicados no se borran ni revierten automáticamente. Hasta cinco minutos pueden transcurrir entre reintentos; una ejecución ya iniciada puede completar su bloque.
 
 ## Control operativo
+
+Actualización 2026-10-19: el worker propaga un error genérico cuando falla el procesamiento aunque haya guardado correctamente su reintento. Así la métrica Lambda Errors no oculta estos fallos. La prueba de regresión verifica doce fallos, transición a REVIEW_REQUIRED, eliminación del trabajo programado y cero aplicaciones financieras. Este cambio es local; no se ha desplegado ni creado una alarma o suscripción.
+
+La configuración financiera `renditions/config` sigue ausente en DEV (verificado por metadatos SSM). El receptor temporal conserva la ruta: no desplegar encima otro propietario. La excepción diagnóstica solo autoriza un reporte exacto y no habilita reportes futuros. La prueba financiera manual tampoco valida el ingreso automático. Antes de sustituir la captura se requiere resolver la confianza del certificado developer, verificar el destinatario de forma independiente y definir el destino de alertas. No activar APPLY con la muestra no autenticada.
 
 - Revisar REVIEW_REQUIRED y los pagos Khipu en tránsito que no aparezcan en rendiciones.
 - Si falta un aviso, pedir reenvío firmado a Khipu o usar su procedimiento oficial confirmado. No inventar IDs ni comisiones.

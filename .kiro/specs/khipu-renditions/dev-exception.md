@@ -1,5 +1,7 @@
 # Observación limitada DEV — 2026-10-19
 
+**Histórico:** el usuario autorizó posteriormente una excepción permanente para futuros reportes DEV. Ver `permanent-dev.md`. Los límites y vencimiento de esta página corresponden únicamente al procesador diagnóstico anterior.
+
 ## Alcance autorizado
 
 Herramienta manual `services/api-payment/cmd/observe-rendition-dev`, separada del webhook y del verificador financiero estricto. No se desplegó el servicio financiero ni se activó APPLY. No modifica producción ni la notificación instantánea de pagos.
@@ -41,4 +43,4 @@ La observación no entra al inbox financiero ni aparece automáticamente en su U
 
 `go test ./...` y `go vet ./...` del módulo pasan. Pruebas race del nuevo paquete pasan, cobertura 81,7%; lint acotado sin diagnósticos. Incluyen aislamiento por ambiente/cuenta, caducidad, pins, firma alterada, restricciones de política, replay y ausencia de escrituras DynamoDB. Persisten diagnósticos globales preexistentes documentados en tasks.md.
 
-Siguiente etapa pendiente: autorizar y preparar una prueba financiera controlada exclusivamente DEV. No utilizar esta excepción como fallback productivo. Antes de producción, validar firma/cadena oficiales y contrastar destinatario, fecha bancaria y comisiones con evidencia independiente.
+Actualización 2026-10-19: prueba financiera controlada autorizada y completada; ver `financial-dev-test.md`. Los valores en cero de la observación anterior describen el estado previo: las tres liquidaciones DEV ahora están conciliadas como prueba. No utilizar esta excepción como fallback productivo. Antes de producción, validar firma/cadena oficiales y contrastar destinatario, fecha bancaria y comisiones con evidencia independiente.

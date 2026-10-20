@@ -53,27 +53,33 @@
     },
     {
       "name": "fn-configuracion-pagos-v1",
-      "entrypoint": "./cmd/fn-configuracion-pagos-v1"
+      "entrypoint": "./cmd/fn-configuracion-pagos-v1",
+      "stages": ["dev"]
     },
     {
       "name": "fn-crear-prueba-pago-v1",
-      "entrypoint": "./cmd/fn-crear-prueba-pago-v1"
+      "entrypoint": "./cmd/fn-crear-prueba-pago-v1",
+      "stages": ["dev"]
     },
     {
       "name": "fn-obtener-prueba-pago-v1",
-      "entrypoint": "./cmd/fn-obtener-prueba-pago-v1"
+      "entrypoint": "./cmd/fn-obtener-prueba-pago-v1",
+      "stages": ["dev"]
     },
     {
       "name": "fn-verificar-prueba-pago-v1",
-      "entrypoint": "./cmd/fn-verificar-prueba-pago-v1"
+      "entrypoint": "./cmd/fn-verificar-prueba-pago-v1",
+      "stages": ["dev"]
     },
     {
       "name": "fn-notificacion-khipu-v1",
-      "entrypoint": "./cmd/fn-notificacion-khipu-v1"
+      "entrypoint": "./cmd/fn-notificacion-khipu-v1",
+      "stages": ["dev"]
     },
     {
       "name": "fn-retorno-pago-v1",
-      "entrypoint": "./cmd/fn-retorno-pago-v1"
+      "entrypoint": "./cmd/fn-retorno-pago-v1",
+      "stages": ["dev"]
     },
     {"name":"fn-aplicar-anexo-v1","entrypoint":"./cmd/fn-aplicar-anexo-v1"},
     {"name":"fn-aprobar-descuento-grupal-v1","entrypoint":"./cmd/fn-aprobar-descuento-grupal-v1"},

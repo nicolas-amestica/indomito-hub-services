@@ -12,6 +12,7 @@ type ServiceConfig = {
     name: string;
     entrypoint: string;
     artifact?: string;
+    stages?: string[];
   }>;
 };
 
@@ -258,7 +259,9 @@ for (const fnDir of cmdFnDirs) {
 }
 
 // --- Validation 15: manifest and Serverless contain exactly the same functions ---
-const manifestFunctionNames = serviceConfig.functions.map(fn => fn.name);
+const manifestFunctionNames = serviceConfig.functions
+  .filter(fn => !fn.stages || fn.stages.includes(stage))
+  .map(fn => fn.name);
 const duplicateManifestNames = manifestFunctionNames.filter(
   (name, index) => manifestFunctionNames.indexOf(name) !== index,
 );

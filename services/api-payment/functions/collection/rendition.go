@@ -28,13 +28,14 @@ type RenditionObjects interface {
 // RenditionPolicy requiere validación explícita del contrato antes de modificar caja.
 // ReportEnd significa fecha de rendición del proveedor, nunca fecha verificada en cartola.
 type RenditionPolicy struct {
-	Mode                string   `json:"mode"`
-	Revision            string   `json:"revision"`
-	ValidatedBy         string   `json:"validatedBy"`
-	Evidence            string   `json:"evidence"`
-	EffectiveDateSource string   `json:"effectiveDateSource"`
-	DeductedFeeSchemes  []string `json:"deductedFeeSchemes"`
-	DeferredFeeSchemes  []string `json:"deferredFeeSchemes"`
+	DevelopmentSimulation bool     `json:"developmentSimulation,omitempty"`
+	Mode                  string   `json:"mode"`
+	Revision              string   `json:"revision"`
+	ValidatedBy           string   `json:"validatedBy"`
+	Evidence              string   `json:"evidence"`
+	EffectiveDateSource   string   `json:"effectiveDateSource"`
+	DeductedFeeSchemes    []string `json:"deductedFeeSchemes"`
+	DeferredFeeSchemes    []string `json:"deferredFeeSchemes"`
 }
 
 func (p RenditionPolicy) validate() error {
@@ -58,6 +59,7 @@ func (p RenditionPolicy) validate() error {
 
 // RenditionState permite reanudar lotes grandes sin repetir sus asientos.
 type RenditionState struct {
+	Trust      string          `json:"trust,omitempty"`
 	ID         string          `json:"id"`
 	ProviderID int64           `json:"providerId"`
 	ReceivedAt time.Time       `json:"receivedAt"`
@@ -94,6 +96,9 @@ func renditionJobSK(at time.Time, id string) string { return at.UTC().Format(tim
 // ReceiveRendition persiste evidencia e inbox/job antes de reconocer el aviso.
 // El hash excluye iat y orden de items: reenvíos equivalentes conservan la misma identidad.
 func (s Service) ReceiveRendition(ctx context.Context, objects RenditionObjects, stage string, report providers.Rendition, raw []byte, policy RenditionPolicy, now time.Time) (string, error) {
+	if policy.DevelopmentSimulation && stage != "dev" {
+		return "", providers.ErrRenditionPolicy
+	}
 	if (stage != "dev" && stage != "prd") || objects == nil || now.IsZero() || len(raw) == 0 || report.Validate() != nil || policy.validate() != nil {
 		return "", domain.ErrInvalid
 	}
@@ -141,6 +146,9 @@ func (s Service) ReceiveRendition(ctx context.Context, objects RenditionObjects,
 		return "", err
 	}
 	state := RenditionState{ID: id, ProviderID: report.ID, ReceivedAt: now, ObjectKey: prefix + ".json", Digest: digest, RawKey: rawKey, Status: "PENDING", Total: len(report.Items), Policy: policy}
+	if policy.DevelopmentSimulation {
+		state.Trust = "DEV_UNAUTHENTICATED_SIMULATION"
+	}
 	row := record{PK: renditionPK(id), SK: "META", Version: 1, Fingerprint: digest, Rendition: &state}
 	job := record{PK: "RENDITION_JOBS", SK: renditionJobSK(now, id), AccountID: id, Status: "PENDING"}
 	index := record{PK: "RENDITION_MONTH#" + now.UTC().Format("2006-01"), SK: id, Rendition: &state}
@@ -264,6 +272,19 @@ func (s Service) matchRendition(ctx context.Context, id string, item providers.R
 		return RenditionResult{}, err
 	}
 	result := RenditionResult{PaymentID: item.PaymentID, Gross: gross, Fee: fee, EffectiveDate: date, FeeScheme: item.FeeScheme, FeeTreatment: "UNVALIDATED"}
+	if policy.DevelopmentSimulation {
+		delayed := int64(0)
+		if item.DelayedFee != "" {
+			delayed, err = providers.CLPInteger(item.DelayedFee)
+			if err != nil {
+				return result, err
+			}
+		}
+		if fee != 0 || delayed != 0 {
+			result.Status = "DEV_NONZERO_FEE_REVIEW"
+			return result, nil
+		}
+	}
 	for _, scheme := range policy.DeductedFeeSchemes {
 		if scheme == item.FeeScheme {
 			result.FeeTreatment = "DEDUCTED"
@@ -298,7 +319,7 @@ func (s Service) matchRendition(ctx context.Context, id string, item providers.R
 		return result, err
 	}
 	ref := "khipu:" + item.PaymentID
-	if confirmed.Event == nil || confirmed.Event.Reference != ref || confirmed.Event.Amount != gross || confirmed.Event.AccountID != account.Account.ID {
+	if confirmed.Event == nil || confirmed.Event.Type != "PAYMENT_RECEIVED" || confirmed.Event.Reference != ref || confirmed.Event.Amount != gross || confirmed.Event.AccountID != account.Account.ID || confirmed.Event.TripID != account.Account.TripID || attempt.Attempt.Amount != gross {
 		result.Status = "PAYMENT_MISMATCH"
 		return result, nil
 	}
@@ -365,6 +386,10 @@ func (s Service) matchRendition(ctx context.Context, id string, item providers.R
 	// La identidad padre no se disfraza como referencia bancaria. Cada asignación
 	// tiene una identidad única y conserva el vínculo al reporte firmado.
 	audit := domain.Audit{CommandID: commandID, Actor: "provider:khipu:rendition", Reason: "Rendición " + id + "; política " + policy.Revision + "; fecha de proveedor, sin verificación de cartola", RecordedAt: now.UTC()}
+	if policy.DevelopmentSimulation {
+		audit.Actor = "system:dev-rendition-simulation"
+		audit.Reason = "SIMULACIÓN DEV; emisor NO autenticado; certificado arbitrario; " + audit.Reason
+	}
 	guard := types.TransactWriteItem{ConditionCheck: &types.ConditionCheck{TableName: &s.Table, Key: key("ATTEMPT#"+item.AttemptID, "RESOLUTION"), ConditionExpression: aws.String("attribute_not_exists(pk)")}}
 	_, _, err = s.ReconcileSettlement(ctx, result.TripID, ref, settled.Settlement.Version, gross, fee, "rendition:"+id+":"+item.PaymentID, date, audit, guard)
 	if err != nil {

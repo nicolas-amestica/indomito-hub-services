@@ -51,4 +51,6 @@ Antes de desplegar `api-payment` con la ruta final, retirar la ruta/integración
 
 ## Actualización — 2026-10-19
 
+La captura temporal está siendo sustituida en el mismo stack por automatización permanente autorizada exclusivamente DEV; ver `permanent-dev.md`. No reutilizar las instrucciones de despliegue temporal para sobrescribir la automatización.
+
 Se recibió en `unverified/slot-01.json` un reporte de tres pagos developer. Su firma matemática es válida, pero su certificado expirado y su cadena/SAN no satisfacen el verificador estricto. No se incorporó al flujo financiero. Se ejecutó una observación excepcional DEV, acotada y temporal, descrita en `dev-exception.md`; no modifica el receptor de captura ni flexibiliza producción.

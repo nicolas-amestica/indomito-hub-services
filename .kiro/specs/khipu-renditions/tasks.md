@@ -51,6 +51,9 @@ Ver `capture-dev.md`: la captura no es la conciliación financiera y ambos stack
 - [x] Implementar procesador separado OBSERVE, limitado a cuenta DEV, certificado y reporte exactos, con caducidad.
 - [x] Aprovisionar política SecureString temporal DEV y observar tres coincidencias por CLP 104.245, sin escrituras de caja.
 - [x] Repetir contra AWS: duplicado reconocido, un único resumen S3 y liquidaciones todavía en cero.
-- [ ] Autorizar y ejecutar prueba financiera controlada DEV; no incluida en esta observación.
+- [x] Autorizar y ejecutar prueba financiera controlada DEV (2026-10-19): tres liquidaciones por CLP 104.245, replay idéntico y cuentas de pasajeros sin cambios. Ver `financial-dev-test.md`.
+- [ ] Completar despliegue y validación del procesamiento automático; la prueba manual no activa el worker ni autentica el certificado developer.
+- [x] Corregir localmente fallos silenciosos del worker: un reintento guardado no se reporta como procesamiento exitoso. Regresión de doce fallos y paso a revisión sin caja.
+- [ ] Resolver confianza para nuevos reportes DEV y destinatario de alertas antes de sustituir el receptor temporal; el pin del reporte anterior no autoriza nuevos avisos.
 
 Ver `dev-exception.md`. Esta excepción no completa la validación de autenticidad ni el despliegue de extremo a extremo del flujo financiero.

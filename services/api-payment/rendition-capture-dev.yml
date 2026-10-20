@@ -1,14 +1,20 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Captura temporal DEV de DRN sin permisos financieros. No desplegar junto a la ruta final.
+Description: Automatizacion permanente de rendiciones simuladas DEV. Certificado no autenticado; aislada de produccion.
 Parameters:
   ArtifactBucket:
     Type: String
   ArtifactKey:
     Type: String
+  AlertEmail:
+    Type: String
+    Default: ''
 Conditions:
   IsAuthorizedDev: !And
     - !Equals [!Ref 'AWS::AccountId', '382670112717']
     - !Equals [!Ref 'AWS::Region', us-east-1]
+  HasDevAlertEmail: !And
+    - !Condition IsAuthorizedDev
+    - !Not [!Equals [!Ref AlertEmail, '']]
 Resources:
   EvidenceBucket:
     Type: AWS::S3::Bucket
@@ -35,6 +41,10 @@ Resources:
             Status: Enabled
             Prefix: unverified/
             ExpirationInDays: 7
+          - Id: ExpireDevelopmentRenditions
+            Status: Enabled
+            Prefix: renditions/dev/
+            ExpirationInDays: 30
   EvidencePolicy:
     Type: AWS::S3::BucketPolicy
     Condition: IsAuthorizedDev
@@ -79,13 +89,16 @@ Resources:
                 Resource: !GetAtt CaptureLogs.Arn
               - Effect: Allow
                 Action: ssm:GetParameter
-                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/indomito/dev/payments/khipu/renditions/capture-config'
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/indomito/dev/payments/khipu/renditions/automation-config'
               - Effect: Allow
                 Action: [s3:GetObject, s3:PutObject]
-                Resource: !Sub '${EvidenceBucket.Arn}/unverified/slot-*.json'
+                Resource: !Sub '${EvidenceBucket.Arn}/renditions/dev/*'
               - Effect: Allow
-                Action: s3:ListBucket
-                Resource: !GetAtt EvidenceBucket.Arn
+                Action: [dynamodb:GetItem, dynamodb:PutItem]
+                Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/ind-dev-pagos-ddb-dev-pri-use1'
+                Condition:
+                  ForAllValues:StringLike:
+                    dynamodb:LeadingKeys: ['RENDITION#*', 'RENDITION_MONTH#*', RENDITION_JOBS]
   CaptureFunction:
     Type: AWS::Lambda::Function
     Condition: IsAuthorizedDev
@@ -94,7 +107,7 @@ Resources:
       Runtime: provided.al2023
       Handler: bootstrap
       Architectures: [arm64]
-      MemorySize: 128
+      MemorySize: 256
       Timeout: 20
       Role: !GetAtt CaptureRole.Arn
       Code:
@@ -126,3 +139,181 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceAccount: !Ref 'AWS::AccountId'
       SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:1f4sn5utdi/*/POST/pagos/khipu/rendiciones'
+  WorkerLogs:
+    Type: AWS::Logs::LogGroup
+    Condition: IsAuthorizedDev
+    Properties:
+      LogGroupName: /aws/lambda/ind-khipu-rendition-worker-dev
+      RetentionInDays: 14
+  WorkerRole:
+    Type: AWS::IAM::Role
+    Condition: IsAuthorizedDev
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: lambda.amazonaws.com}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: DevelopmentRenditionWorker
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !GetAtt WorkerLogs.Arn
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/indomito/dev/payments/khipu/renditions/automation-config'
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub '${EvidenceBucket.Arn}/renditions/dev/*'
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:DeleteItem, dynamodb:Query]
+                Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/ind-dev-pagos-ddb-dev-pri-use1'
+                Condition:
+                  ForAllValues:StringLike:
+                    dynamodb:LeadingKeys: ['RENDITION#*', 'RENDITION_MONTH#*', RENDITION_JOBS]
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem]
+                Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/ind-dev-pagos-ddb-dev-pri-use1'
+                Condition:
+                  ForAllValues:StringLike:
+                    dynamodb:LeadingKeys: ['ATTEMPT#*', 'ACCOUNT#*', 'TRIP#*', 'COMMAND#*', 'REFERENCE#*', 'CASH#*']
+              - Effect: Allow
+                Action: dynamodb:ConditionCheckItem
+                Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/ind-dev-pagos-ddb-dev-pri-use1'
+                Condition:
+                  ForAllValues:StringLike:
+                    dynamodb:LeadingKeys: ['ATTEMPT#*']
+  WorkerFunction:
+    Type: AWS::Lambda::Function
+    Condition: IsAuthorizedDev
+    Properties:
+      FunctionName: ind-khipu-rendition-worker-dev
+      Runtime: provided.al2023
+      Handler: bootstrap
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: 60
+      Role: !GetAtt WorkerRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref ArtifactKey
+  WorkerAsyncConfig:
+    Type: AWS::Lambda::EventInvokeConfig
+    Condition: IsAuthorizedDev
+    Properties:
+      FunctionName: !Ref WorkerFunction
+      Qualifier: '$LATEST'
+      MaximumRetryAttempts: 0
+      MaximumEventAgeInSeconds: 120
+  WorkerSchedule:
+    Type: AWS::Events::Rule
+    Condition: IsAuthorizedDev
+    Properties:
+      ScheduleExpression: rate(1 minute)
+      State: ENABLED
+      Targets:
+        - Id: RenditionWorker
+          Arn: !GetAtt WorkerFunction.Arn
+          RetryPolicy:
+            MaximumEventAgeInSeconds: 120
+            MaximumRetryAttempts: 2
+  WorkerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: IsAuthorizedDev
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref WorkerFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt WorkerSchedule.Arn
+      SourceAccount: !Ref 'AWS::AccountId'
+  AlertsTopic:
+    Type: AWS::SNS::Topic
+    Condition: IsAuthorizedDev
+    Properties:
+      TopicName: ind-khipu-rendition-dev-alerts
+  AlertSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasDevAlertEmail
+    Properties:
+      TopicArn: !Ref AlertsTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+  ReceiverErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: IsAuthorizedDev
+    Properties:
+      AlarmDescription: Error del receptor DEV; comprobar configuracion y persistencia.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{Name: FunctionName, Value: !Ref CaptureFunction}]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertsTopic]
+  WorkerErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: IsAuthorizedDev
+    Properties:
+      AlarmDescription: Fallo del worker DEV; revisar reintentos y lotes pendientes.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{Name: FunctionName, Value: !Ref WorkerFunction}]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertsTopic]
+  WorkerMissingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: IsAuthorizedDev
+    Properties:
+      AlarmDescription: Worker DEV sin invocaciones durante diez minutos.
+      Namespace: AWS/Lambda
+      MetricName: Invocations
+      Dimensions: [{Name: FunctionName, Value: !Ref WorkerFunction}]
+      Statistic: Sum
+      Period: 600
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions: [!Ref AlertsTopic]
+  ReviewAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: IsAuthorizedDev
+    Properties:
+      AlarmDescription: Rendicion simulada DEV requiere revision; no inventar conciliacion.
+      Namespace: Indomito/DEV/Renditions
+      MetricName: ReviewRequired
+      Dimensions: [{Name: Stage, Value: dev}]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertsTopic]
+  RejectedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: IsAuthorizedDev
+    Properties:
+      AlarmDescription: Reporte rechazado por firma, formato, destinatario o conflicto DEV.
+      Namespace: Indomito/DEV/Renditions
+      MetricName: RejectedReports
+      Dimensions: [{Name: Stage, Value: dev}]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertsTopic]

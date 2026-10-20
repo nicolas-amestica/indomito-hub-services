@@ -39,6 +39,7 @@ type RenditionItem struct {
 	Amount        json.Number `json:"txAmount"`
 	Fee           json.Number `json:"khipuFee"`
 	IntegratorFee json.Number `json:"integratorFee"`
+	DelayedFee    json.Number `json:"khipuDelayedFee,omitempty"`
 }
 
 // RenditionVerifier autentica un aviso; el certificado fijo se aprovisiona fuera del mensaje.
@@ -79,6 +80,26 @@ func RenditionDate(value string) (time.Time, error) {
 // Verify valida el sobre firmado y la cuenta destino antes de devolver datos.
 // Un aviso antiguo válido puede recuperarse; la deduplicación usa drnId, no iat.
 func (v RenditionVerifier) Verify(raw []byte, now time.Time) (Rendition, error) {
+	return v.verify(raw, now, false)
+}
+
+// DevelopmentRenditionVerifier admite certificados arbitrarios únicamente en la
+// cuenta DEV. Verifica integridad criptográfica, NO autenticidad del emisor.
+type DevelopmentRenditionVerifier struct {
+	RenditionVerifier
+	Stage      string
+	AWSAccount string
+}
+
+// Verify no aplica caducidad, CA ni SAN en DEV; no acepta firmas inválidas.
+func (v DevelopmentRenditionVerifier) Verify(raw []byte, now time.Time) (Rendition, error) {
+	if v.Stage != "dev" || v.AWSAccount != "382670112717" {
+		return Rendition{}, ErrVerification
+	}
+	return v.verify(raw, now, true)
+}
+
+func (v RenditionVerifier) verify(raw []byte, now time.Time, development bool) (Rendition, error) {
 	var empty Rendition
 	if len(raw) == 0 || len(raw) > MaxRenditionBytes || now.IsZero() || v.RecipientUID == "" || v.Bank == "" || v.Account == "" {
 		return empty, ErrVerification
@@ -128,11 +149,11 @@ func (v RenditionVerifier) Verify(raw []byte, now time.Time) (Rendition, error) 
 			}
 		}
 		// Khipu prescribe Any EKU para este certificado de firma, no ServerAuth.
-		if _, err = cert.Verify(x509.VerifyOptions{Roots: v.Roots, Intermediates: intermediates, DNSName: "khipu.com", CurrentTime: now, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny}}); err != nil {
+		if _, err = cert.Verify(x509.VerifyOptions{Roots: v.Roots, Intermediates: intermediates, DNSName: "khipu.com", CurrentTime: now, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny}}); err != nil && !development {
 			return empty, ErrVerification
 		}
 	}
-	if cert == nil || now.Before(cert.NotBefore) || now.After(cert.NotAfter) {
+	if cert == nil || (!development && (now.Before(cert.NotBefore) || now.After(cert.NotAfter))) {
 		return empty, ErrVerification
 	}
 	key, ok := cert.PublicKey.(*rsa.PublicKey)
@@ -199,6 +220,11 @@ func (r Rendition) Validate() error {
 		if i.IntegratorFee != "" {
 			n, err := CLPInteger(i.IntegratorFee)
 			if err != nil || n > amount-fee {
+				return ErrVerification
+			}
+		}
+		if i.DelayedFee != "" {
+			if _, err := CLPInteger(i.DelayedFee); err != nil {
 				return ErrVerification
 			}
 		}
