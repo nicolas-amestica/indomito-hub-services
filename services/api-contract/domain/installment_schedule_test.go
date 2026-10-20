@@ -41,6 +41,21 @@ func TestMonthlyDueDatesRejectMissingAndImpossibleInputs(t *testing.T) {
 	}
 }
 
+func TestInstallmentsMustFinishBeforeDeparturePaymentLimit(t *testing.T) {
+	installments := Installments{StartYear: 2027, StartMonth: "01", StartDay: 22, Quantity: 15}
+	err := installments.ValidateBeforeDeparture("2027-02-08T00:00:00Z", 10)
+	if err == nil || err.Error() != "la ultima cuota debe vencer a mas tardar el 2027-01-29, 10 dias antes de la salida" {
+		t.Fatalf("unexpected validation result: %v", err)
+	}
+}
+
+func TestInstallmentsAcceptLastDueDateOnPaymentLimit(t *testing.T) {
+	installments := Installments{StartYear: 2027, StartMonth: "01", StartDay: 29, Quantity: 1}
+	if err := installments.ValidateBeforeDeparture("2027-02-08T00:00:00Z", 10); err != nil {
+		t.Fatalf("expected valid schedule: %v", err)
+	}
+}
+
 func TestCurrentTermsReplaceFixedPenaltyWithoutMutatingLegacyContent(t *testing.T) {
 	legacy := validContent()
 	legacy.Payments.Conditions.CancellationPenaltyPercentage = 25

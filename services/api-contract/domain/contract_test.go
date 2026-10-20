@@ -74,7 +74,7 @@ func validContent() Content {
 		Plan:                  Plan{Name: "Brasil 2027", ServicesIncluded: []Service{{Description: "Transporte"}}},
 		Payments: Payments{
 			FreePassengers: 1, PricePerPerson: 500000, DownPayment: 100000, DaysBeforePayment: 10, MaxExchangeRate: 1100,
-			Installments: Installments{Quantity: 5, StartMonth: "Enero", StartYear: 2027, StartDay: 5},
+			Installments: Installments{Quantity: 1, StartMonth: "Diciembre", StartYear: 2026, StartDay: 5},
 			Conditions:   Conditions{SpecialProgramDeposit: 100000},
 			BankAccount:  BankAccount{AccountNumber: "90278249343", AccountHolder: "Giras Indomito Ltda.", HolderDNI: "77.654.796-4", Bank: "Banco Estado · Cuenta Vista", Email: "pagos@work.girasindomito.cl"},
 		},
@@ -94,6 +94,17 @@ func TestValidateContentRejectsDiscountOutsidePercentageRange(t *testing.T) {
 	content.Payments.DiscountPercentage = 101
 	if err := ValidateContent(content); err == nil {
 		t.Fatal("expected invalid discount error")
+	}
+}
+
+func TestValidateContentRejectsInstallmentsAfterPaymentLimit(t *testing.T) {
+	content := validContent()
+	content.Trip.DepartureDate = "2027-02-08T00:00:00Z"
+	content.Trip.ReturnDate = "2027-02-12T00:00:00Z"
+	content.Payments.Installments = Installments{Quantity: 15, StartMonth: "01", StartYear: 2027, StartDay: 22}
+	content.Payments.Conditions.RefundPolicyVersion = 2
+	if err := ValidateContent(content); err == nil || err.Error() != "la ultima cuota debe vencer a mas tardar el 2027-01-29, 10 dias antes de la salida" {
+		t.Fatalf("unexpected validation result: %v", err)
 	}
 }
 

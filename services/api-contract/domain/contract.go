@@ -429,7 +429,7 @@ func ValidateContent(content Content) error {
 	}
 	payment := content.Payments
 	if payment.Conditions.RefundPolicyVersion >= 2 || payment.Installments.StartYear != 0 || payment.Installments.StartDay != 0 {
-		if _, err := payment.Installments.DueDates(); err != nil {
+		if err := payment.Installments.ValidateBeforeDeparture(trip.DepartureDate, payment.DaysBeforePayment); err != nil {
 			return err
 		}
 	}
