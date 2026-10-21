@@ -496,5 +496,16 @@ func (s Service) ReplayRendition(ctx context.Context, id string, policy Renditio
 }
 
 func renditionQuery(pk, prefix string) *dynamodb.QueryInput {
-	return &dynamodb.QueryInput{KeyConditionExpression: aws.String("pk = :pk AND begins_with(sk, :prefix)"), ExpressionAttributeValues: map[string]types.AttributeValue{":pk": &types.AttributeValueMemberS{Value: pk}, ":prefix": &types.AttributeValueMemberS{Value: prefix}}, ConsistentRead: aws.Bool(true), Limit: aws.Int32(50)}
+	input := &dynamodb.QueryInput{
+		KeyConditionExpression:    aws.String("pk = :pk"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{":pk": &types.AttributeValueMemberS{Value: pk}},
+		ConsistentRead:            aws.Bool(true),
+		Limit:                     aws.Int32(50),
+	}
+	// DynamoDB rechaza valores vacíos para atributos de clave, incluso en begins_with.
+	if prefix != "" {
+		input.KeyConditionExpression = aws.String("pk = :pk AND begins_with(sk, :prefix)")
+		input.ExpressionAttributeValues[":prefix"] = &types.AttributeValueMemberS{Value: prefix}
+	}
+	return input
 }

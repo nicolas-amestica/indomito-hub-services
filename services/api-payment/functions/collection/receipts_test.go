@@ -3,6 +3,7 @@ package collection
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sort"
 	"strings"
 	"testing"
@@ -40,10 +41,14 @@ func (d *transactionDB) Query(ctx context.Context, in *dynamodb.QueryInput, _ ..
 	pk := in.ExpressionAttributeValues[":pk"].(*types.AttributeValueMemberS).Value
 	prefix := ""
 	_, hasPrefix := in.ExpressionAttributeValues[":prefix"]
+	_, hasRange := in.ExpressionAttributeValues[":from"]
 	from, to := "", ""
 	if value, ok := in.ExpressionAttributeValues[":prefix"].(*types.AttributeValueMemberS); ok {
 		prefix = value.Value
-	} else {
+		if prefix == "" {
+			return nil, errors.New("DynamoDB: key attribute cannot contain an empty string")
+		}
+	} else if hasRange {
 		from = in.ExpressionAttributeValues[":from"].(*types.AttributeValueMemberS).Value
 		to = in.ExpressionAttributeValues[":to"].(*types.AttributeValueMemberS).Value
 	}
@@ -54,7 +59,7 @@ func (d *transactionDB) Query(ctx context.Context, in *dynamodb.QueryInput, _ ..
 	keys := []string{}
 	for k, row := range d.items {
 		sk := row["sk"].(*types.AttributeValueMemberS).Value
-		matchesRange := (hasPrefix && strings.HasPrefix(sk, prefix)) || (!hasPrefix && sk >= from && sk <= to)
+		matchesRange := (!hasPrefix && !hasRange) || (hasPrefix && strings.HasPrefix(sk, prefix)) || (hasRange && sk >= from && sk <= to)
 		if row["pk"].(*types.AttributeValueMemberS).Value == pk && matchesRange && sk > start {
 			keys = append(keys, k)
 		}

@@ -365,6 +365,59 @@ func TestRenditionBeforeConfirmationRecovers(t *testing.T) {
 	}
 }
 
+func TestRenditionAdminMonthlyList(t *testing.T) {
+	for _, count := range []int{0, 1, 51} {
+		t.Run(fmt.Sprintf("reports_%d", count), func(t *testing.T) {
+			s, db := serviceFixture(t)
+			for i := 0; i < count; i++ {
+				id := paymentOperationID(fmt.Sprintf("monthly-report-%d", i))
+				saveLookupRow(t, db, record{PK: "RENDITION_MONTH#2026-10", SK: id, Rendition: &RenditionState{ID: id, Status: "OBSERVED"}})
+			}
+			// El listado debe permanecer aislado al mes solicitado.
+			saveLookupRow(t, db, record{PK: "RENDITION_MONTH#2026-09", SK: approvedID, Rendition: &RenditionState{ID: approvedID}})
+			a := RenditionApp{Accounts: s}
+			req := adminRequest("GET", "")
+			req.PathParameters = nil
+			req.QueryStringParameters = map[string]string{"month": "2026-10"}
+			seen := map[string]bool{}
+			for pageNumber := 0; ; pageNumber++ {
+				if pageNumber > 1 {
+					t.Fatal("pagination did not terminate")
+				}
+				response, err := a.HandleAdmin(context.Background(), req)
+				if err != nil || response.StatusCode != 200 {
+					t.Fatalf("monthly list: status=%d err=%v", response.StatusCode, err)
+				}
+				var page struct {
+					Data struct {
+						Items []RenditionState `json:"items"`
+						Next  string           `json:"nextCursor"`
+					} `json:"data"`
+				}
+				if err := json.Unmarshal([]byte(response.Body), &page); err != nil {
+					t.Fatal(err)
+				}
+				if len(page.Data.Items) > 50 {
+					t.Fatal("unbounded page")
+				}
+				for _, item := range page.Data.Items {
+					if seen[item.ID] || item.Status != "OBSERVED" {
+						t.Fatal("duplicate report or report from another month")
+					}
+					seen[item.ID] = true
+				}
+				if page.Data.Next == "" {
+					break
+				}
+				req.QueryStringParameters["cursor"] = page.Data.Next
+			}
+			if len(seen) != count {
+				t.Fatalf("got %d reports, want %d", len(seen), count)
+			}
+		})
+	}
+}
+
 func TestRenditionAdminPaginationAndPrivacy(t *testing.T) {
 	s, _, objects, r, now := renditionFixture(t, 51)
 	id, err := s.ReceiveRendition(context.Background(), objects, "dev", r, []byte("signed"), RenditionPolicy{Mode: "OBSERVE"}, now)
