@@ -57,6 +57,12 @@ func Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.API
 		return resetPassword(ctx, app, req)
 	case method == "GET" && path == "/auth/permisos":
 		return permissions(ctx, app, req)
+	case method == "GET" && path == "/auth/foto-perfil":
+		return getProfilePhoto(ctx, app, req)
+	case method == "PUT" && path == "/auth/foto-perfil":
+		return putProfilePhoto(ctx, app, req)
+	case method == "DELETE" && path == "/auth/foto-perfil":
+		return deleteProfilePhoto(ctx, app, req)
 	case method == "GET" && path == "/iam/usuarios":
 		return listUsers(ctx, app)
 	case method == "POST" && path == "/iam/usuarios":
@@ -177,6 +183,7 @@ func login(ctx context.Context, a *App, req events.APIGatewayV2HTTPRequest) (eve
 	if secret.err != nil {
 		return fail(500, "INTERNAL_ERROR", "No fue posible iniciar la sesión")
 	}
+	u.ProfilePhoto, _ = loadProfilePhoto(ctx, a, u.ID)
 	effective := effectivePermissions(permissions.permissions)
 	token := signToken(u, effective, secret.value)
 	return response(200, map[string]any{"token": token, "expiresIn": 28800, "user": u, "permissions": effective})
@@ -298,6 +305,7 @@ func permissions(ctx context.Context, a *App, req events.APIGatewayV2HTTPRequest
 	if e != nil {
 		return fail(500, "INTERNAL_ERROR", "No fue posible renovar la sesión")
 	}
+	u.ProfilePhoto, _ = loadProfilePhoto(ctx, a, u.ID)
 	return response(200, map[string]any{"token": signToken(u, effective, secret), "expiresIn": 28800, "user": u, "permissions": effective})
 }
 func listPartition(ctx context.Context, a *App, pk string, kind any) (events.APIGatewayV2HTTPResponse, error) {

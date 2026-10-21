@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"ind-hub-api-gox-sls-pri-gh/bootstrap"
 	"ind-hub-api-gox-sls-pri-gh/libs/awsddb"
@@ -17,6 +18,8 @@ type App struct {
 	Table           string
 	SecretParam     string
 	ResetEmailParam string
+	ProfilePhotos   profilePhotoStore
+	PhotosBucket    string
 	secretOnce      sync.Once
 	secret          string
 	secretErr       error
@@ -37,11 +40,12 @@ func GetApp(ctx context.Context) (*App, error) {
 		table := os.Getenv("USERS_TABLE_NAME")
 		param := os.Getenv("JWT_SIGNING_SECRET_PARAM")
 		resetEmailParam := os.Getenv("PASSWORD_RESET_EMAIL_PARAM")
-		if table == "" || param == "" || resetEmailParam == "" {
+		photosBucket := os.Getenv("PROFILE_PHOTOS_BUCKET_NAME")
+		if table == "" || param == "" || resetEmailParam == "" || photosBucket == "" {
 			appErr = fmt.Errorf("configuracion de identidad incompleta")
 			return
 		}
-		instance = &App{DDB: awsddb.New(a), SSM: ssm.NewFromConfig(a), Table: table, SecretParam: param, ResetEmailParam: resetEmailParam}
+		instance = &App{DDB: awsddb.New(a), SSM: ssm.NewFromConfig(a), Table: table, SecretParam: param, ResetEmailParam: resetEmailParam, ProfilePhotos: s3.NewFromConfig(a), PhotosBucket: photosBucket}
 	})
 	return instance, appErr
 }

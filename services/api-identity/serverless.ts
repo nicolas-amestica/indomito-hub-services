@@ -1,5 +1,6 @@
 import { dynamodbCrudPolicy } from "../../aws/policies/dynamodb.js";
 import { ssmReadPolicy } from "../../aws/policies/ssm.js";
+import { s3ObjectPolicy, s3ReadPolicy } from "../../aws/policies/s3.js";
 import { ApiServices } from "../../common/api-services.js";
 import { REGION, STAGE } from "../../common/custom-parameters.js";
 import {
@@ -9,6 +10,9 @@ import {
 const DDB_STACK = `indomito-hub-infra-ddb-${STAGE}`;
 const TABLE_ARN = `\${cf:${DDB_STACK}.UsuariosTableArn}`;
 const TABLE_NAME = `\${cf:${DDB_STACK}.UsuariosTableName}`;
+const S3_STACK = `indomito-hub-infra-s3-${STAGE}`;
+const PROFILE_PHOTOS_BUCKET_ARN = `\${cf:${S3_STACK}.MediaBucketArn}`;
+const PROFILE_PHOTOS_BUCKET_NAME = `\${cf:${S3_STACK}.MediaBucketName}`;
 const PARAM = `/indomito/${STAGE}/auth/jwt-secret`;
 const PASSWORD_RESET_EMAIL_PARAM = `/indomito/${STAGE}/auth/password-reset-email`;
 const PARAM_ARN = {
@@ -18,6 +22,8 @@ const PASSWORD_RESET_EMAIL_PARAM_ARN = {
   "Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter${PASSWORD_RESET_EMAIL_PARAM}`,
 };
 const rw = [dynamodbCrudPolicy(TABLE_ARN), ssmReadPolicy(PARAM_ARN)];
+const profilePhotoPolicies = [s3ObjectPolicy(`${PROFILE_PHOTOS_BUCKET_ARN}/profile-photos/*`)];
+const sessionPolicies = [...rw, s3ReadPolicy(`${PROFILE_PHOTOS_BUCKET_ARN}/profile-photos/*`)];
 const passwordResetPolicies = [dynamodbCrudPolicy(TABLE_ARN), ssmReadPolicy(PASSWORD_RESET_EMAIL_PARAM_ARN)];
 const endpoints: GoHttpEndpoint[] = [
   {
@@ -26,7 +32,7 @@ const endpoints: GoHttpEndpoint[] = [
     path: "/auth/login",
     public: true,
     timeout: 10,
-    policies: rw,
+    policies: sessionPolicies,
   },
   {
     name: "fn-solicitar-recuperacion-clave-v1",
@@ -49,8 +55,11 @@ const endpoints: GoHttpEndpoint[] = [
     method: "GET",
     path: "/auth/permisos",
     timeout: 10,
-    policies: rw,
+    policies: sessionPolicies,
   },
+  { name: "fn-obtener-foto-perfil-v1", method: "GET", path: "/auth/foto-perfil", policies: profilePhotoPolicies },
+  { name: "fn-guardar-foto-perfil-v1", method: "PUT", path: "/auth/foto-perfil", policies: profilePhotoPolicies },
+  { name: "fn-eliminar-foto-perfil-v1", method: "DELETE", path: "/auth/foto-perfil", policies: profilePhotoPolicies },
   {
     name: "fn-listar-usuarios-v1",
     method: "GET",
@@ -108,5 +117,5 @@ const endpoints: GoHttpEndpoint[] = [
   },
 ];
 module.exports = buildGoServiceServerless(ApiServices.Identity, endpoints, {
-  env: { USERS_TABLE_NAME: TABLE_NAME, JWT_SIGNING_SECRET_PARAM: PARAM, PASSWORD_RESET_EMAIL_PARAM },
+  env: { USERS_TABLE_NAME: TABLE_NAME, JWT_SIGNING_SECRET_PARAM: PARAM, PASSWORD_RESET_EMAIL_PARAM, PROFILE_PHOTOS_BUCKET_NAME },
 });

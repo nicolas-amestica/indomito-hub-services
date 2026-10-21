@@ -9,7 +9,8 @@
     "APP_REGION",
     "USERS_TABLE_NAME",
     "JWT_SIGNING_SECRET_PARAM",
-    "PASSWORD_RESET_EMAIL_PARAM"
+    "PASSWORD_RESET_EMAIL_PARAM",
+    "PROFILE_PHOTOS_BUCKET_NAME"
   ],
   "functions": [
     {
@@ -28,6 +29,9 @@
       "name": "fn-obtener-permisos-v1",
       "entrypoint": "./cmd/fn-obtener-permisos-v1"
     },
+    { "name": "fn-obtener-foto-perfil-v1", "entrypoint": "./cmd/fn-obtener-foto-perfil-v1" },
+    { "name": "fn-guardar-foto-perfil-v1", "entrypoint": "./cmd/fn-guardar-foto-perfil-v1" },
+    { "name": "fn-eliminar-foto-perfil-v1", "entrypoint": "./cmd/fn-eliminar-foto-perfil-v1" },
     {
       "name": "fn-listar-usuarios-v1",
       "entrypoint": "./cmd/fn-listar-usuarios-v1"

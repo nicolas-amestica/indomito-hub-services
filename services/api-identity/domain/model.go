@@ -12,6 +12,7 @@ type User struct {
 	PasswordHash           string `dynamodbav:"passwordHash" json:"-"`
 	ProfileCode            string `dynamodbav:"profileCode" json:"profileCode"`
 	Active                 bool   `dynamodbav:"active" json:"active"`
+	ProfilePhoto           string `dynamodbav:"-" json:"profilePhoto,omitempty"`
 	CreatedAt              string `dynamodbav:"createdAt" json:"createdAt"`
 	PasswordResetHash      string `dynamodbav:"passwordResetHash,omitempty" json:"-"`
 	PasswordResetExpiresAt int64  `dynamodbav:"passwordResetExpiresAt,omitempty" json:"-"`
