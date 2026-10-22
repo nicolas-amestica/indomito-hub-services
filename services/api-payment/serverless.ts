@@ -171,8 +171,13 @@ function renditionEndpoints(): GoHttpEndpoint[] {
         {Effect:'Allow' as const,Action:['s3:PutObject','s3:GetObject'],Resource:`${receiptsBucketArn}/rendition-bootstrap/prd/*`},
       ],
     }] : []),
-    {name:'fn-recibir-rendicion-khipu-v1',method:'POST',path:'/pagos/khipu/rendiciones',public:true,timeout:29,memorySize:256,policies:[config,inboxRead,inboxWrite,{Effect:'Allow',Action:['s3:PutObject'],Resource:objects}]},
-    {name:'fn-procesar-rendiciones-khipu-v1',timeout:60,memorySize:256,events:[{schedule:'rate(1 minute)'}],policies:[config,inboxRead,inboxWrite,{Effect:'Allow',Action:['s3:GetObject'],Resource:objects},{Effect:'Allow',Action:['dynamodb:ConditionCheckItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['ATTEMPT#*']}}},{Effect:'Allow',Action:['dynamodb:GetItem','dynamodb:PutItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['ATTEMPT#*','ACCOUNT#*','TRIP#*','COMMAND#*','REFERENCE#*','CASH#*']}}}]},
+    ...(STAGE === 'prd' ? [
+      {name:'fn-recibir-rendicion-khipu-v1',method:'POST' as const,path:'/pagos/khipu/rendiciones',public:true,timeout:29,memorySize:256,policies:[config,inboxRead,inboxWrite,{Effect:'Allow' as const,Action:['s3:PutObject'],Resource:objects}]},
+      {name:'fn-procesar-rendiciones-khipu-v1',timeout:60,memorySize:256,events:[{schedule:'rate(1 minute)'}],policies:[config,inboxRead,inboxWrite,{Effect:'Allow' as const,Action:['s3:GetObject'],Resource:objects},{Effect:'Allow' as const,Action:['dynamodb:ConditionCheckItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['ATTEMPT#*']}}},{Effect:'Allow' as const,Action:['dynamodb:GetItem','dynamodb:PutItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['ATTEMPT#*','ACCOUNT#*','TRIP#*','COMMAND#*','REFERENCE#*','CASH#*']}}}]},
+    ] : [
+      {name:'fn-recibir-rendicion-khipu-v1',timeout:29,memorySize:256,policies:[config,inboxRead,inboxWrite,{Effect:'Allow' as const,Action:['s3:PutObject'],Resource:objects}]},
+      {name:'fn-procesar-rendiciones-khipu-v1',timeout:60,memorySize:256,policies:[config,inboxRead,inboxWrite,{Effect:'Allow' as const,Action:['s3:GetObject'],Resource:objects},{Effect:'Allow' as const,Action:['dynamodb:ConditionCheckItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['ATTEMPT#*']}}},{Effect:'Allow' as const,Action:['dynamodb:GetItem','dynamodb:PutItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['ATTEMPT#*','ACCOUNT#*','TRIP#*','COMMAND#*','REFERENCE#*','CASH#*']}}}]},
+    ]),
     {name:'fn-listar-rendiciones-khipu-v1',method:'GET',path:'/pagos/tesoreria/rendiciones',public:false,timeout:15,policies:[config,inboxRead]},
     {name:'fn-obtener-rendicion-khipu-v1',method:'GET',path:'/pagos/tesoreria/rendiciones/{id}',public:false,timeout:15,policies:[config,inboxRead]},
     {name:'fn-reprocesar-rendicion-khipu-v1',method:'POST',path:'/pagos/tesoreria/rendiciones/{id}/reintentos',public:false,timeout:15,policies:[config,inboxRead,inboxWrite]},
