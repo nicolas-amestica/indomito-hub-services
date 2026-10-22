@@ -159,6 +159,14 @@
     },
     {
       "sourcePaths": [
+        "ai/source/skills/jira-task-close.md"
+      ],
+      "outputPath": "ai/generated/ind-hub-api/skills/claude/jira-task-close.md",
+      "targetPath": ".claude/skills/jira-task-close.md",
+      "checksum": "sha256:59218546abfa2612796d33ceb9d70ccd4102fff0d53aa827c0dd3debaea29fe5"
+    },
+    {
+      "sourcePaths": [
         "ai/source/skills/api-contract-review.md"
       ],
       "outputPath": "ai/generated/ind-hub-api/skills/kiro/api-contract-review.md",
@@ -172,10 +180,18 @@
       "outputPath": "ai/generated/ind-hub-api/skills/kiro/aws-naming-review.md",
       "targetPath": ".kiro/skills/aws-naming-review.md",
       "checksum": "sha256:d9f6663b20313cd3bf2dc8629f099b916f6696084238ccad394516ffc28b0c86"
+    },
+    {
+      "sourcePaths": [
+        "ai/source/skills/jira-task-close.md"
+      ],
+      "outputPath": "ai/generated/ind-hub-api/skills/kiro/jira-task-close.md",
+      "targetPath": ".kiro/skills/jira-task-close.md",
+      "checksum": "sha256:59218546abfa2612796d33ceb9d70ccd4102fff0d53aa827c0dd3debaea29fe5"
     }
   ],
   "managedBy": "indomito-context-compiler",
   "artifactFormatVersion": 1,
-  "sourceCommit": "fb753fad2d9c7dae73ce0b5f0461b6f5a470298f",
+  "sourceCommit": "0666a494a1c8b94e141106fe37a33f078f2ee04b",
   "sourceDirty": true
 }
