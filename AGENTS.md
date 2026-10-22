@@ -48,7 +48,7 @@
 - **Variables de entorno**: unicamente via AWS SSM Parameter Store tipo **SecureString**. Prohibido usar variables de entorno planas (no encriptadas), archivos `.env` en producción, u otro servicio distinto de SSM SecureString para este fin.
 - IDs: ULIDs
 - Configuraciones dinámicas: en BD (DynamoDB), no hardcodeadas en frontend
-- Email: Nodemailer (no SES)
+- Email: SMTP desde Go con `github.com/wneessen/go-mail` en el backend Hub (no SES). TLS obligatorio, certificados verificados y credenciales en SSM SecureString. No incorporar un runtime Node solo para enviar correos; esta regla no exige migrar los sistemas legacy.
 
 ## Infraestructura AWS — Reglas No Negociables
 
@@ -60,13 +60,14 @@
 - Todo cambio de UI/UX debe validarse en modo claro y oscuro, además de responder correctamente desde 320 px, teléfonos Android/iOS, tablets y escritorio. Los colores deben usar tokens semánticos o variantes `dark:`; no introducir superficies o textos legibles solo en uno de los temas.
 - Los fondos de marca amarillos deben usar siempre un token de primer plano oscuro y estable, como `--color-night`/`text-night`, tanto en modo claro como oscuro. No usar sobre ellos tokens adaptativos como `--color-ink`/`text-ink`, porque cambian a blanco en modo oscuro. Esta pareja fondo/texto debe definirse en el preset o sistema de tokens compartido y conservar contraste WCAG AA en estados normal, hover, active, focus y disabled.
 - Todo estado de contraste debe diseñarse y comprobarse como una pareja inseparable de fondo y primer plano en modo claro y oscuro. Esto incluye selección de texto, paneles y tarjetas, mensajes Toast, opciones de `p-select`, bloques de totales o destacados y overlays. No combinar un fondo estable con texto adaptativo si el texto puede converger al mismo tono del fondo.
-- La selección de texto sobre el amarillo de marca debe conservar primer plano oscuro estable. Los bordes de `p-panel` y tarjetas anidadas deben usar tokens semánticos suaves en modo oscuro, sin contornos claros de alto contraste que compitan con el contenido. Los Toast deben definir texto, resumen, detalle, icono y cierre legibles para cada severidad. Las opciones de `p-select` deben mantener contraste distinguible en reposo, hover, foco y selección. Los bloques oscuros de totales o destacados deben usar texto claro estable y niveles secundarios perceptibles.
+- La selección de texto sobre el amarillo de marca debe conservar primer plano oscuro estable. Todo borde neutro estructural debe usar el token semántico `line` suavizado: como referencia `border-line/75` en modo claro y `dark:border-line/55` en modo oscuro. Aplicar la misma intensidad al contenedor y a los separadores internos de componentes PrimeNG como `p-dialog`, `p-table`, `p-panel`, overlays y tarjetas anidadas, sin contornos claros de alto contraste que compitan con el contenido. Los bordes de estados semánticos, foco, selección o marca pueden conservar mayor contraste cuando su función lo requiera. Los Toast deben definir texto, resumen, detalle, icono y cierre legibles para cada severidad. Las opciones de `p-select` deben mantener contraste distinguible en reposo, hover, foco y selección. Los bloques oscuros de totales o destacados deben usar texto claro estable y niveles secundarios perceptibles.
 - Acciones adyacentes con la misma jerarquía visual deben usar el mismo componente o directiva PrimeNG y la misma combinación de `severity`, variante, tamaño, borde y radio. No mezclar un enlace construido manualmente con un `pButton` para representar botones equivalentes; cualquier diferencia visual debe responder a una jerarquía funcional intencional.
 - Toda feature nueva o modificada debe diseñarse mobile-first y comprobarse, como mínimo, a 320 px, 390 px, tablet y escritorio. Los layouts deben apilarse o reorganizarse sin scroll horizontal accidental; acciones, tablas, diálogos, formularios, overlays y textos deben seguir siendo visibles, operables y legibles con teclado y táctil en todos los tamaños.
 - Todo código de interfaz debe usar componentes PrimeNG y utilidades Tailwind CSS conforme a sus documentaciones oficiales. No incorporar otras librerías de componentes, CSS/SCSS personalizado ni implementaciones artesanales cuando PrimeNG provea el componente; reservar el HTML semántico nativo para estructura y casos sin equivalente en PrimeNG.
 - En formularios, usar siempre el componente o directiva PrimeNG correspondiente (`pInputText`, `p-select`, `p-datepicker`, `p-inputnumber`, `pButton`, `p-fileupload`, etc.). Tailwind se limita a layout, espaciado y composición externa; no debe reconstruir la apariencia interna de controles PrimeNG.
 - No aplicar en contenedores de componentes PrimeNG clases tipográficas heredables que alteren su contenido (`uppercase`, `font-*`, `text-*`, `tracking-*`, entre otras). El texto de la etiqueta debe estilizarse en un elemento hermano independiente cuando sea necesario.
 - No agregar selectores CSS globales sobre elementos de formulario ni sobrescribir tokens globales de componentes PrimeNG para resolver una pantalla puntual. Un cambio al preset o al orden de capas CSS es una modificación transversal del sistema de diseño y requiere validar visualmente y compilar todas las pantallas afectadas.
+- El sistema de iconos de cada frontend es el que declara su `package.json`, y no se mezcla con otro. La regla concreta de cada repo vive en su propio contexto, porque el set instalado no es el mismo en todos.
 - Cada feature nueva debe ser autocontenida dentro de `src/app/indomito-hub/<feature-name>` y usar nombres de carpetas, archivos e identificadores en inglés.
 - La estructura debe seguir el patrón modular de Axity: cada feature mantiene sus propios `constants`, `components`, `interfaces`, `pages`, `services`, `stores`, `types`, `fn` y archivo `<feature-name>.routes.ts` cuando correspondan.
 - Las páginas, componentes, servicios y stores deben contener solo la responsabilidad de su clase o función principal. Las interfaces, tipos, constantes, factories, validadores y helpers reutilizables deben declararse en las carpetas hermanas correspondientes de la misma feature, no dentro del archivo de una página o componente.
@@ -293,7 +294,7 @@ Backend Go de Indómito Hub. Microservicios serverless desplegados en AWS Lambda
 - DynamoDB
 - AWS Lambda (provided.al2023, ARM64)
 - Serverless Framework v4 (TypeScript config)
-- Nodemailer (envío de emails)
+- github.com/wneessen/go-mail (envío SMTP desde Go)
 - zap (logging estructurado)
 - Región: us-east-1 (Norte de Virginia)
 
@@ -343,7 +344,8 @@ services/api-<nombre>/
 - Logging: zap estructurado (prohibido fmt.Println)
 - Sin directorio store/ ni repositories/ — persistencia directa en functions/ o domain/
 - Context first: `ctx context.Context` como primer argumento
-- Email vía Nodemailer (no usar SES)
+- Email vía SMTP desde Go con `github.com/wneessen/go-mail` (no usar SES). Exigir TLS 1.2 o superior, verificar certificados, usar contexto y timeout; credenciales en SSM SecureString. No agregar Node para enviar correos.
+- Reservar `api-` para servicios HTTP. Los procesadores por eventos o programación, como `payment-receipts` y `payment-monitoring`, no requieren ese prefijo y usan el mismo builder Go.
 
 ## API Gateway compartido
 

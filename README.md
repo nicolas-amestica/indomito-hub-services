@@ -210,4 +210,4 @@ Resumen de lo específico de este repo:
 - Secretos solo vía SSM Parameter Store tipo `SecureString`.
 - Sin directorio `store/` ni `repositories/`: la persistencia vive en
   `functions/` o `domain/`.
-- Email vía Nodemailer (no SES).
+- Email vía SMTP desde Go con `github.com/wneessen/go-mail` (no SES), TLS obligatorio, certificados verificados y credenciales en SSM SecureString. No agregar un runtime Node solo para enviar correos.

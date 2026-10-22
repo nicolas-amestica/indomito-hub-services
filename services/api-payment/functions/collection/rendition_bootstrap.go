@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
+	"go.uber.org/zap"
 	"ind-hub-api-gox-sls-pri-gh/bootstrap"
 	"ind-hub-api-gox-sls-pri-gh/services/api-payment/providers"
 )
@@ -100,7 +101,17 @@ func getRenditionApp(ctx context.Context) (*RenditionApp, error) {
 }
 
 // RenditionWebhookHandler recibe avisos externos sin credenciales administrativas.
-func RenditionWebhookHandler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+func RenditionWebhookHandler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (response events.APIGatewayV2HTTPResponse, handlerErr error) {
+	defer func() {
+		if response.StatusCode >= 400 && req.RequestContext.HTTP.Method == "POST" {
+			// Los HTTP 4xx/5xx retornados con error nil no cuentan como Lambda Errors.
+			zap.NewExample().Info("Rendition receiver rejected request",
+				zap.String("Stage", os.Getenv("APP_STAGE")), zap.Int("ReceiverRejected", 1),
+				zap.Int("statusCode", response.StatusCode),
+				zap.Any("_aws", map[string]any{"Timestamp": time.Now().UnixMilli(), "CloudWatchMetrics": []any{map[string]any{"Namespace": "Indomito/Renditions", "Dimensions": [][]string{{"Stage"}}, "Metrics": []any{map[string]string{"Name": "ReceiverRejected", "Unit": "Count"}}}}}),
+			)
+		}
+	}()
 	if req.RequestContext.HTTP.Method != "POST" {
 		return webhookResponse(405), nil
 	}

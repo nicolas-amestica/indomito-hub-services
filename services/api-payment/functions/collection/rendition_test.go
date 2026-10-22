@@ -174,6 +174,9 @@ func TestRenditionObserveAndReplay(t *testing.T) {
 	if row.Rendition.Applied != 2 {
 		t.Fatalf("%+v", row.Rendition)
 	}
+	if !row.Rendition.PendingSince.Equal(now.Add(time.Minute)) || !row.Rendition.ReceivedAt.Equal(now) {
+		t.Fatal("replay must restart pending age without changing original reception")
+	}
 	if len(db.items) == 0 {
 		t.Fatal("no persistence")
 	}

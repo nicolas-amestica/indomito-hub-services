@@ -22,7 +22,7 @@ Backend Go de Indómito Hub. Microservicios serverless desplegados en AWS Lambda
 - DynamoDB
 - AWS Lambda (provided.al2023, ARM64)
 - Serverless Framework v4 (TypeScript config)
-- Nodemailer (envío de emails)
+- github.com/wneessen/go-mail (envío SMTP desde Go)
 - zap (logging estructurado)
 - Región: us-east-1 (Norte de Virginia)
 
@@ -72,7 +72,8 @@ services/api-<nombre>/
 - Logging: zap estructurado (prohibido fmt.Println)
 - Sin directorio store/ ni repositories/ — persistencia directa en functions/ o domain/
 - Context first: `ctx context.Context` como primer argumento
-- Email vía Nodemailer (no usar SES)
+- Email vía SMTP desde Go con `github.com/wneessen/go-mail` (no usar SES). Exigir TLS 1.2 o superior, verificar certificados, usar contexto y timeout; credenciales en SSM SecureString. No agregar Node para enviar correos.
+- Reservar `api-` para servicios HTTP. Los procesadores por eventos o programación, como `payment-receipts` y `payment-monitoring`, no requieren ese prefijo y usan el mismo builder Go.
 
 ## API Gateway compartido
 

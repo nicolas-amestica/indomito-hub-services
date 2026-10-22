@@ -117,7 +117,7 @@ Todos los recursos AWS DEBEN incluir los siguientes tags:
 
 ## Servicios NO Utilizados
 
-- Email se envía vía Nodemailer (no se usa ningún servicio AWS de email).
+- Email del backend Hub se envía vía SMTP desde Go con `github.com/wneessen/go-mail`, TLS obligatorio y credenciales SSM SecureString (no se usa ningún servicio AWS de email).
 - No se usan colas de mensajes.
 
 ## Checklist de Revisión

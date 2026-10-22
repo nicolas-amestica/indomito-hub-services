@@ -59,22 +59,23 @@ func (p RenditionPolicy) validate() error {
 
 // RenditionState permite reanudar lotes grandes sin repetir sus asientos.
 type RenditionState struct {
-	Trust      string          `json:"trust,omitempty"`
-	ID         string          `json:"id"`
-	ProviderID int64           `json:"providerId"`
-	ReceivedAt time.Time       `json:"receivedAt"`
-	ObjectKey  string          `json:"-"`
-	Digest     string          `json:"-"`
-	RawKey     string          `json:"-"`
-	Status     string          `json:"status"`
-	Cursor     int             `json:"processed"`
-	Total      int             `json:"total"`
-	Applied    int             `json:"applied"`
-	Observed   int             `json:"observed"`
-	Review     int             `json:"review"`
-	Retries    int             `json:"retries"`
-	LastError  string          `json:"lastError,omitempty"`
-	Policy     RenditionPolicy `json:"policy"`
+	Trust        string          `json:"trust,omitempty"`
+	ID           string          `json:"id"`
+	ProviderID   int64           `json:"providerId"`
+	ReceivedAt   time.Time       `json:"receivedAt"`
+	PendingSince time.Time       `json:"pendingSince"`
+	ObjectKey    string          `json:"-"`
+	Digest       string          `json:"-"`
+	RawKey       string          `json:"-"`
+	Status       string          `json:"status"`
+	Cursor       int             `json:"processed"`
+	Total        int             `json:"total"`
+	Applied      int             `json:"applied"`
+	Observed     int             `json:"observed"`
+	Review       int             `json:"review"`
+	Retries      int             `json:"retries"`
+	LastError    string          `json:"lastError,omitempty"`
+	Policy       RenditionPolicy `json:"policy"`
 }
 
 // RenditionResult expone diferencias sin publicar datos personales del reporte.
@@ -145,7 +146,7 @@ func (s Service) ReceiveRendition(ctx context.Context, objects RenditionObjects,
 	if err = objects.Put(ctx, rawKey, raw); err != nil {
 		return "", err
 	}
-	state := RenditionState{ID: id, ProviderID: report.ID, ReceivedAt: now, ObjectKey: prefix + ".json", Digest: digest, RawKey: rawKey, Status: "PENDING", Total: len(report.Items), Policy: policy}
+	state := RenditionState{ID: id, ProviderID: report.ID, ReceivedAt: now, PendingSince: now, ObjectKey: prefix + ".json", Digest: digest, RawKey: rawKey, Status: "PENDING", Total: len(report.Items), Policy: policy}
 	if policy.DevelopmentSimulation {
 		state.Trust = "DEV_UNAUTHENTICATED_SIMULATION"
 	}
@@ -467,6 +468,7 @@ func (s Service) ReplayRendition(ctx context.Context, id string, policy Renditio
 	prior := record{PK: row.PK, SK: fmt.Sprintf("RUN#%020d", previous), Rendition: &priorState, RequestedBy: row.RequestedBy}
 	row.Version++
 	row.Rendition.Status = "PENDING"
+	row.Rendition.PendingSince = now
 	row.Rendition.Cursor = 0
 	row.Rendition.Applied = 0
 	row.Rendition.Observed = 0

@@ -1,0 +1,9 @@
+{
+  "name": "payment-monitoring",
+  "defaultArtifactDir": ".serverless-artifacts",
+  "requiredEnvironment": ["APP_STAGE", "PAYMENTS_TABLE_NAME", "ALARM_TOPIC_ARN"],
+  "functions": [
+    {"name": "monitor", "entrypoint": "./cmd/monitor"},
+    {"name": "alarm", "entrypoint": "./cmd/alarm"}
+  ]
+}
