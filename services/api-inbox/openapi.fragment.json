@@ -16,7 +16,7 @@
       "ConversationSummary": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "phone", "alias", "channel", "status", "reason", "reasonLabel", "unreadCount", "lastMessagePreview", "lastMessageAt", "createdAt", "updatedAt", "generation"],
+        "required": ["id", "phone", "alias", "channel", "status", "reason", "reasonLabel", "agentProcessing", "agentProcessingUntil", "unreadCount", "lastMessagePreview", "lastMessageAt", "createdAt", "updatedAt", "generation"],
         "properties": {
           "id": { "type": "string", "minLength": 1 },
           "phone": { "type": "string", "pattern": "^[0-9]{8,15}$" },
@@ -25,6 +25,8 @@
           "status": { "type": "string", "enum": ["bot", "derived"] },
           "reason": { "type": ["string", "null"] },
           "reasonLabel": { "type": ["string", "null"] },
+          "agentProcessing": { "type": "boolean" },
+          "agentProcessingUntil": { "type": ["string", "null"], "format": "date-time" },
           "unreadCount": { "type": "integer", "minimum": 0 },
           "lastMessagePreview": { "type": ["string", "null"], "maxLength": 200 },
           "lastMessageAt": { "type": ["string", "null"], "format": "date-time" },
@@ -112,6 +114,7 @@
       "PrepareAttachmentsResponse": { "type": "object", "additionalProperties": false, "required": ["data"], "properties": { "data": { "type": "object", "additionalProperties": false, "required": ["batchId", "expiresAt", "uploads"], "properties": { "batchId": { "type": "string", "format": "uuid" }, "expiresAt": { "type": "string", "format": "date-time" }, "uploads": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "$ref": "#/components/schemas/PreparedAttachmentUpload" } } } } } },
       "SendAttachmentRequest": { "type": "object", "additionalProperties": false, "required": ["uploadId", "key", "caption", "clientMessageId"], "properties": { "uploadId": { "type": "string", "format": "uuid" }, "key": { "type": "string", "minLength": 1, "maxLength": 1024 }, "caption": { "type": "string", "maxLength": 1024 }, "clientMessageId": { "type": "string", "format": "uuid" } } },
       "MarkUnreadRequest": { "type": "object", "additionalProperties": false, "required": ["unread"], "properties": { "unread": { "type": "boolean", "const": true } } },
+      "ReactivateAgentRequest": { "type": "object", "additionalProperties": false, "required": ["status"], "properties": { "status": { "type": "string", "const": "bot" } } },
       "DeleteConversationResponse": { "type": "object", "additionalProperties": false, "required": ["data"], "properties": { "data": { "type": "object", "additionalProperties": false, "required": ["deleted"], "properties": { "deleted": { "type": "boolean", "const": true } } } } },
       "SendStateResponse": { "type": "object", "additionalProperties": false, "required": ["data"], "properties": { "data": { "$ref": "#/components/schemas/SendState" } } },
       "ConversationListResponse": {
@@ -264,6 +267,9 @@
     },
     "/conversaciones/{telefono}/estado-lectura": {
       "patch": { "operationId": "markConversationUnread", "security": [{ "BearerAuth": [] }], "parameters": [{ "name": "telefono", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{8,15}$" } }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MarkUnreadRequest" } } } }, "responses": { "200": { "description": "Conversacion marcada no leida", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": false, "required": ["data"], "properties": { "data": { "$ref": "#/components/schemas/ConversationSummary" } } } } } }, "400": { "description": "Entrada invalida", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "404": { "description": "Conversacion inexistente", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } } }
+    },
+    "/conversaciones/{telefono}/estado-agente": {
+      "patch": { "operationId": "reactivateConversationAgent", "security": [{ "BearerAuth": [] }], "parameters": [{ "name": "telefono", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{8,15}$" } }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReactivateAgentRequest" } } } }, "responses": { "200": { "description": "Agente IA reactivado", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": false, "required": ["data"], "properties": { "data": { "$ref": "#/components/schemas/ConversationSummary" } } } } } }, "400": { "description": "Entrada invalida", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "401": { "description": "No autenticado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "404": { "description": "Conversacion inexistente", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } } }
     },
     "/envios-inbox/{clientMessageId}/reintentar": {
       "post": { "operationId": "retryInboxSend", "security": [{ "BearerAuth": [] }], "parameters": [{ "name": "clientMessageId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RetrySendRequest" } } } }, "responses": { "200": { "description": "Reintento confirmado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SendStateResponse" } } } }, "202": { "description": "Reintento no terminal", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SendStateResponse" } } } }, "404": { "description": "No encontrado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "409": { "description": "No reintentable o agotado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }, "502": { "description": "Rechazo del proveedor", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } } } }

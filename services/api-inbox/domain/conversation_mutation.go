@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -52,6 +53,176 @@ func NewConversationMutationService(client conversationMutationDynamo, tableName
 // MarkUnread sets unreadCount to one and publishes versioned list/search projections atomically.
 func (s *ConversationMutationService) MarkUnread(ctx context.Context, phone string) (ConversationSummary, error) {
 	return s.SetUnreadCount(ctx, phone, 1)
+}
+
+// Derive transfers a conversation to the human team and publishes both list and detail updates.
+func (s *ConversationMutationService) Derive(ctx context.Context, phone, reason, reasonLabel string) (ConversationSummary, error) {
+	reason = normalizeDerivationText(reason, 500)
+	reasonLabel = normalizeDerivationText(reasonLabel, 120)
+	if reason == "" {
+		reason = "agent_handoff"
+	}
+	if reasonLabel == "" {
+		reasonLabel = "Requiere atencion del equipo"
+	}
+	for attempt := 0; attempt < mutationMaxAttempts; attempt++ {
+		summary, listSequence, detailSequence, found, err := s.readState(ctx, phone)
+		if err != nil {
+			return ConversationSummary{}, err
+		}
+		if !found {
+			return ConversationSummary{}, ErrConversationNotFound
+		}
+		if summary.Status == ConversationStatusDerived && summary.Reason != nil && *summary.Reason == reason {
+			return summary, nil
+		}
+		now := s.now().UTC()
+		summary.Status = ConversationStatusDerived
+		summary.Reason = &reason
+		summary.ReasonLabel = &reasonLabel
+		if summary.UnreadCount < 1 {
+			summary.UnreadCount = 1
+		}
+		summary.UpdatedAt = &now
+		summary.Generation++
+		writes, writeErr := s.visibleWrites(summary, "upsert", listSequence, detailSequence, "conversation.updated", now)
+		if writeErr != nil {
+			return ConversationSummary{}, writeErr
+		}
+		if err = s.transact(ctx, writes); err == nil {
+			return summary, nil
+		}
+		if !isTransactionConflict(err) {
+			return ConversationSummary{}, fmt.Errorf("derive conversation: %w", err)
+		}
+	}
+	return ConversationSummary{}, errors.New("derive conversation: concurrent update limit reached")
+}
+
+// ActivateBot returns a technically failed conversation to the automated agent.
+func (s *ConversationMutationService) ActivateBot(ctx context.Context, phone string) (ConversationSummary, error) {
+	for attempt := 0; attempt < mutationMaxAttempts; attempt++ {
+		summary, listSequence, detailSequence, found, err := s.readState(ctx, phone)
+		if err != nil {
+			return ConversationSummary{}, err
+		}
+		if !found {
+			return ConversationSummary{}, ErrConversationNotFound
+		}
+		if summary.Status == ConversationStatusBot && summary.Reason == nil && summary.ReasonLabel == nil {
+			return summary, nil
+		}
+		now := s.now().UTC()
+		summary.Status = ConversationStatusBot
+		summary.Reason = nil
+		summary.ReasonLabel = nil
+		summary.UpdatedAt = &now
+		summary.Generation++
+		writes, writeErr := s.visibleWrites(summary, "upsert", listSequence, detailSequence, "conversation.updated", now)
+		if writeErr != nil {
+			return ConversationSummary{}, writeErr
+		}
+		if err = s.transact(ctx, writes); err == nil {
+			return summary, nil
+		}
+		if !isTransactionConflict(err) {
+			return ConversationSummary{}, fmt.Errorf("activate conversation bot: %w", err)
+		}
+	}
+	return ConversationSummary{}, errors.New("activate conversation bot: concurrent update limit reached")
+}
+
+// SetAgentProcessing durably changes the AI processing indicator and publishes
+// a sequenced detail event. A stale worker cannot clear a newer worker's token.
+func (s *ConversationMutationService) SetAgentProcessing(ctx context.Context, phone, messageID string, active bool) error {
+	messageID = strings.TrimSpace(messageID)
+	if messageID == "" {
+		return errors.New("agent processing message id is required")
+	}
+	for attempt := 0; attempt < mutationMaxAttempts; attempt++ {
+		summary, _, detailSequence, found, err := s.readState(ctx, phone)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return ErrConversationNotFound
+		}
+		now := s.now().UTC()
+		if active {
+			if summary.AgentProcessing && summary.AgentProcessingID == messageID && summary.AgentProcessingUntil != nil && summary.AgentProcessingUntil.After(now) {
+				return nil
+			}
+			summary.AgentProcessing = true
+			summary.AgentProcessingID = messageID
+			expiresAt := now.Add(4 * time.Minute)
+			summary.AgentProcessingUntil = &expiresAt
+		} else {
+			if !summary.AgentProcessing || (summary.AgentProcessingID != "" && summary.AgentProcessingID != messageID) {
+				return nil
+			}
+			summary.AgentProcessing = false
+			summary.AgentProcessingID = ""
+			summary.AgentProcessingUntil = nil
+		}
+		writes, writeErr := s.agentProcessingWrites(summary, detailSequence, active, now)
+		if writeErr != nil {
+			return writeErr
+		}
+		if err = s.transact(ctx, writes); err == nil {
+			return nil
+		}
+		if !isTransactionConflict(err) {
+			return fmt.Errorf("set agent processing: %w", err)
+		}
+	}
+	return errors.New("set agent processing: concurrent update limit reached")
+}
+
+func (s *ConversationMutationService) agentProcessingWrites(summary ConversationSummary, detailSequence uint64, active bool, now time.Time) ([]types.TransactWriteItem, error) {
+	nextDetail := detailSequence + 1
+	metaItem, err := attributevalue.MarshalMap(summary)
+	if err != nil {
+		return nil, fmt.Errorf("encode agent processing metadata: %w", err)
+	}
+	metaItem["pk"] = &types.AttributeValueMemberS{Value: "CONV#" + summary.Phone}
+	metaItem["sk"] = &types.AttributeValueMemberS{Value: "META"}
+	metaItem["expiresAt"] = &types.AttributeValueMemberN{Value: fmt.Sprint(now.Add(90 * 24 * time.Hour).Unix())}
+	eventID, err := s.newID(now)
+	if err != nil {
+		return nil, fmt.Errorf("create agent processing event id: %w", err)
+	}
+	payload, err := attributevalue.MarshalMap(map[string]any{"phone": summary.Phone, "active": active, "expiresAt": summary.AgentProcessingUntil})
+	if err != nil {
+		return nil, fmt.Errorf("encode agent processing payload: %w", err)
+	}
+	shard := conversationShard(summary.Phone)
+	eventItem := map[string]types.AttributeValue{
+		"pk":            &types.AttributeValueMemberS{Value: fmt.Sprintf("WORK_DUE#OUTBOX#%02X", shard)},
+		"sk":            &types.AttributeValueMemberS{Value: now.Format(time.RFC3339Nano) + "#" + eventID},
+		"eventId":       &types.AttributeValueMemberS{Value: eventID},
+		"eventType":     &types.AttributeValueMemberS{Value: "agent_processing"},
+		"phone":         &types.AttributeValueMemberS{Value: summary.Phone},
+		"stream":        &types.AttributeValueMemberS{Value: "detail:" + summary.Phone},
+		"sequence":      &types.AttributeValueMemberN{Value: fmt.Sprint(nextDetail)},
+		"payload":       &types.AttributeValueMemberM{Value: payload},
+		"state":         &types.AttributeValueMemberS{Value: "pending"},
+		"nextAttemptAt": &types.AttributeValueMemberS{Value: now.Format(time.RFC3339Nano)},
+		"expiresAt":     &types.AttributeValueMemberN{Value: fmt.Sprint(now.Add(14 * 24 * time.Hour).Unix())},
+	}
+	return []types.TransactWriteItem{
+		sequenceUpdate(s.tableName, "SEQ#DETAIL#"+summary.Phone, detailSequence, nextDetail),
+		{Put: &types.Put{TableName: &s.tableName, Item: metaItem, ConditionExpression: aws.String("generation = :generation"), ExpressionAttributeValues: map[string]types.AttributeValue{":generation": &types.AttributeValueMemberN{Value: fmt.Sprint(summary.Generation)}}}},
+		{Put: &types.Put{TableName: &s.tableName, Item: eventItem, ConditionExpression: aws.String("attribute_not_exists(pk)")}},
+	}, nil
+}
+
+func normalizeDerivationText(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	runes := []rune(value)
+	if len(runes) > limit {
+		return string(runes[:limit])
+	}
+	return value
 }
 
 // SetUnreadCount updates the unread projection while preserving transactional versions and events.

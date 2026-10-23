@@ -18,6 +18,12 @@ type MetaTextProvider struct {
 	endpoint, mediaEndpoint, accessToken string
 }
 
+const metaGraphBaseURL = "https://graph.facebook.com/v26.0"
+
+func metaGraphResourceURL(resourceID string) string {
+	return metaGraphBaseURL + "/" + resourceID
+}
+
 func NewMetaTextProvider(client *http.Client, phoneNumberID, accessToken string) (*MetaTextProvider, error) {
 	if client == nil {
 		client = &http.Client{}
@@ -25,7 +31,7 @@ func NewMetaTextProvider(client *http.Client, phoneNumberID, accessToken string)
 	if phoneNumberID == "" || accessToken == "" {
 		return nil, errors.New("meta provider configuration is required")
 	}
-	base := "https://graph.facebook.com/v21.0/" + phoneNumberID
+	base := metaGraphResourceURL(phoneNumberID)
 	return &MetaTextProvider{client: client, endpoint: base + "/messages", mediaEndpoint: base + "/media", accessToken: accessToken}, nil
 }
 
@@ -151,4 +157,42 @@ func (p *MetaTextProvider) SendText(ctx context.Context, phone, content string) 
 		return "", &ProviderError{TransmissionPossible: true, Cause: errors.New("meta response without message id")}
 	}
 	return parsed.Messages[0].ID, nil
+}
+
+// MarkReadAndTyping confirms that an inbound WhatsApp message was processed and
+// displays the text typing indicator while the agent response is being sent.
+func (p *MetaTextProvider) MarkReadAndTyping(ctx context.Context, messageID string) error {
+	messageID = strings.TrimSpace(messageID)
+	if messageID == "" {
+		return errors.New("whatsapp message id is required")
+	}
+	body, err := json.Marshal(map[string]any{
+		"messaging_product": "whatsapp",
+		"status":            "read",
+		"message_id":        messageID,
+		"typing_indicator":  map[string]string{"type": "text"},
+	})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.endpoint, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("authorization", "Bearer "+p.accessToken)
+	req.Header.Set("content-type", "application/json")
+	response, err := p.client.Do(req)
+	if err != nil {
+		return &ProviderError{TransmissionPossible: true, Cause: fmt.Errorf("meta read receipt transport: %w", err)}
+	}
+	defer func() { _ = response.Body.Close() }()
+	_, readErr := io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
+	if readErr != nil {
+		return &ProviderError{TransmissionPossible: true, Cause: fmt.Errorf("read meta receipt response: %w", readErr)}
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		retryable := response.StatusCode == http.StatusRequestTimeout || response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= 500
+		return &ProviderError{Retryable: retryable, Cause: fmt.Errorf("meta read receipt status %d", response.StatusCode)}
+	}
+	return nil
 }

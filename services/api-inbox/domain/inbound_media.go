@@ -40,7 +40,7 @@ func NewMetaInboundMediaStore(client *http.Client, storage inboundMediaS3, token
 }
 
 func (s *MetaInboundMediaStore) Materialize(ctx context.Context, phone, messageID, mediaID, mimeType, fileName, webhookSHA string) (MessageAttachment, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://graph.facebook.com/v21.0/"+mediaID, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, metaGraphResourceURL(mediaID), nil)
 	if err != nil {
 		return MessageAttachment{}, err
 	}

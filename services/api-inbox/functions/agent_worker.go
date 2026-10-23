@@ -3,6 +3,7 @@ package functions
 import (
 	"context"
 	"encoding/json"
+	"log"
 
 	"github.com/aws/aws-lambda-go/events"
 )
@@ -20,6 +21,9 @@ func ProcessAgentQueue(ctx context.Context, processor AgentMessageProcessor, eve
 			err = processor.Process(ctx, work.Phone, work.MessageID)
 		}
 		if err != nil || work.Phone == "" || work.MessageID == "" {
+			if err != nil {
+				log.Printf("agent processing failed messageId=%s: %v", work.MessageID, err)
+			}
 			result.BatchItemFailures = append(result.BatchItemFailures, events.SQSBatchItemFailure{ItemIdentifier: record.MessageId})
 		}
 	}

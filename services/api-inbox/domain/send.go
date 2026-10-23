@@ -91,6 +91,10 @@ type mediaProvider interface {
 	SendMedia(context.Context, string, string, string, string, []byte) (string, error)
 }
 
+type agentPresenceProvider interface {
+	MarkReadAndTyping(context.Context, string) error
+}
+
 type ProviderError struct {
 	Retryable, TransmissionPossible bool
 	Cause                           error
@@ -121,6 +125,16 @@ func (s *SendService) SendText(ctx context.Context, ownerID, phone, clientMessag
 
 func (s *SendService) SendAgentText(ctx context.Context, phone, clientMessageID, content string) (SendState, error) {
 	return s.sendText(ctx, "agent", phone, clientMessageID, content, MessageTypeAIAgent)
+}
+
+// MarkAgentReadAndTyping delegates the inbound read receipt and typing signal to
+// the WhatsApp provider. It does not journal a business message.
+func (s *SendService) MarkAgentReadAndTyping(ctx context.Context, messageID string) error {
+	provider, ok := s.provider.(agentPresenceProvider)
+	if !ok {
+		return errors.New("agent presence provider is unavailable")
+	}
+	return provider.MarkReadAndTyping(ctx, messageID)
 }
 
 // SendAgentMedia sends and journals a permanent document selected by the agent.

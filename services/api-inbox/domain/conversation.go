@@ -20,19 +20,22 @@ const (
 
 // ConversationSummary representa una fila estable de la bandeja.
 type ConversationSummary struct {
-	ID                 string             `json:"id" dynamodbav:"id"`
-	Phone              string             `json:"phone" dynamodbav:"phone"`
-	Alias              string             `json:"alias" dynamodbav:"alias"`
-	Channel            string             `json:"channel" dynamodbav:"channel"`
-	Status             ConversationStatus `json:"status" dynamodbav:"status"`
-	Reason             *string            `json:"reason" dynamodbav:"reason"`
-	ReasonLabel        *string            `json:"reasonLabel" dynamodbav:"reasonLabel"`
-	UnreadCount        int                `json:"unreadCount" dynamodbav:"unreadCount"`
-	LastMessagePreview *string            `json:"lastMessagePreview" dynamodbav:"lastMessagePreview"`
-	LastMessageAt      *time.Time         `json:"lastMessageAt" dynamodbav:"lastMessageAt"`
-	CreatedAt          *time.Time         `json:"createdAt" dynamodbav:"createdAt"`
-	UpdatedAt          *time.Time         `json:"updatedAt" dynamodbav:"updatedAt"`
-	Generation         int                `json:"generation" dynamodbav:"generation"`
+	ID                   string             `json:"id" dynamodbav:"id"`
+	Phone                string             `json:"phone" dynamodbav:"phone"`
+	Alias                string             `json:"alias" dynamodbav:"alias"`
+	Channel              string             `json:"channel" dynamodbav:"channel"`
+	Status               ConversationStatus `json:"status" dynamodbav:"status"`
+	Reason               *string            `json:"reason" dynamodbav:"reason"`
+	ReasonLabel          *string            `json:"reasonLabel" dynamodbav:"reasonLabel"`
+	AgentProcessing      bool               `json:"agentProcessing" dynamodbav:"agentProcessing"`
+	AgentProcessingID    string             `json:"-" dynamodbav:"agentProcessingId,omitempty"`
+	AgentProcessingUntil *time.Time         `json:"agentProcessingUntil" dynamodbav:"agentProcessingUntil,omitempty"`
+	UnreadCount          int                `json:"unreadCount" dynamodbav:"unreadCount"`
+	LastMessagePreview   *string            `json:"lastMessagePreview" dynamodbav:"lastMessagePreview"`
+	LastMessageAt        *time.Time         `json:"lastMessageAt" dynamodbav:"lastMessageAt"`
+	CreatedAt            *time.Time         `json:"createdAt" dynamodbav:"createdAt"`
+	UpdatedAt            *time.Time         `json:"updatedAt" dynamodbav:"updatedAt"`
+	Generation           int                `json:"generation" dynamodbav:"generation"`
 }
 
 // PageInfo describe una página materializada de la bandeja.

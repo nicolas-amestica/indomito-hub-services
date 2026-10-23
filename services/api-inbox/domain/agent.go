@@ -36,8 +36,17 @@ type GeminiConfig struct {
 	Temperature float64 `json:"temperature"`
 	TopP        float64 `json:"topP"`
 }
+
+type permanentAgentError struct{ cause error }
+
+func (e *permanentAgentError) Error() string { return e.cause.Error() }
+func (e *permanentAgentError) Unwrap() error { return e.cause }
+
 type agentDynamo interface {
+	GetItem(context.Context, *dynamodb.GetItemInput, ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
+	PutItem(context.Context, *dynamodb.PutItemInput, ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
 	Query(context.Context, *dynamodb.QueryInput, ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
+	TransactWriteItems(context.Context, *dynamodb.TransactWriteItemsInput, ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error)
 }
 type agentS3 interface {
 	GetObject(context.Context, *s3.GetObjectInput, ...func(*s3.Options)) (*s3.GetObjectOutput, error)
@@ -49,6 +58,10 @@ type agentTranscribe interface {
 type AgentSender interface {
 	SendAgentText(context.Context, string, string, string) (SendState, error)
 	SendAgentMedia(context.Context, string, string, string, string, string, []byte) (SendState, error)
+}
+
+type agentPresenceSender interface {
+	MarkAgentReadAndTyping(context.Context, string) error
 }
 
 type AgentService struct {
@@ -63,6 +76,7 @@ type AgentService struct {
 	sleep      func(time.Duration)
 	now        func() time.Time
 	tools      *AgentToolbox
+	mutations  *ConversationMutationService
 }
 
 func NewAgentService(db agentDynamo, storage agentS3, transcriber agentTranscribe, sender AgentSender, tools *AgentToolbox, table string, cfg AgentConfig, gemini GeminiConfig) (*AgentService, error) {
@@ -72,11 +86,23 @@ func NewAgentService(db agentDynamo, storage agentS3, transcriber agentTranscrib
 	if cfg.MaxHistoryTurns < 1 || cfg.MaxHistoryTurns > 50 || cfg.RateLimitMax < 1 || cfg.RateLimitWindowSeconds < 1 || cfg.DebounceMS < 0 {
 		return nil, errors.New("agent limits are invalid")
 	}
-	return &AgentService{db: db, s3: storage, transcribe: transcriber, sender: sender, tools: tools, table: table, cfg: cfg, gemini: gemini, http: &http.Client{Timeout: 25 * time.Second}, sleep: time.Sleep, now: time.Now}, nil
+	mutations, err := NewConversationMutationService(db, table, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &AgentService{db: db, s3: storage, transcribe: transcriber, sender: sender, tools: tools, mutations: mutations, table: table, cfg: cfg, gemini: gemini, http: &http.Client{Timeout: 25 * time.Second}, sleep: time.Sleep, now: time.Now}, nil
 }
 
 func (s *AgentService) Process(ctx context.Context, phone, messageID string) error {
 	if !s.cfg.Enabled || !contains(s.cfg.EnabledChannels, "whatsapp") {
+		return nil
+	}
+	summary, err := s.conversationSummary(ctx, phone)
+	if err != nil {
+		return err
+	}
+	recoveringAgentError := summary.Status == ConversationStatusDerived && summary.Reason != nil && *summary.Reason == "agent_error"
+	if summary.Status == ConversationStatusDerived && !recoveringAgentError {
 		return nil
 	}
 	if s.cfg.DebounceMS > 0 {
@@ -103,6 +129,16 @@ func (s *AgentService) Process(ctx context.Context, phone, messageID string) err
 	if count > s.cfg.RateLimitMax {
 		return nil
 	}
+	if err = s.mutations.SetAgentProcessing(ctx, phone, messageID, true); err != nil {
+		return err
+	}
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+		defer cancel()
+		// El lease hace que este indicador sea autocorregible. Una falla al
+		// limpiarlo no debe reejecutar herramientas ni duplicar efectos externos.
+		_ = s.mutations.SetAgentProcessing(cleanupCtx, phone, messageID, false)
+	}()
 	if len(latest.Attachments) > 0 && strings.HasPrefix(latest.Attachments[0].MIMEType, "audio/") {
 		transcript, terr := s.transcribeAudio(ctx, latest.Attachments[0], messageID)
 		if terr != nil {
@@ -111,12 +147,22 @@ func (s *AgentService) Process(ctx context.Context, phone, messageID string) err
 		latest.Content = &transcript
 		messages[len(messages)-1] = latest
 	}
-	reply, silent, err := s.generate(ctx, phone, messageID, messages)
+	reply, derivation, err := s.generate(ctx, phone, messageID, messages)
 	if err != nil {
-		return err
+		var permanent *permanentAgentError
+		if !errors.As(err, &permanent) {
+			return err
+		}
+		_, sendErr := s.sender.SendAgentText(ctx, phone, "agent-"+messageID+"-error", "Tuve un inconveniente al procesar tu solicitud. El equipo de Giras Indómito continuará la atención.")
+		if sendErr != nil {
+			return errors.Join(err, sendErr)
+		}
+		_, deriveErr := s.mutations.Derive(ctx, phone, "agent_error", "Error del agente; requiere revision")
+		return errors.Join(err, deriveErr)
 	}
-	if silent {
-		return nil
+	if derivation != nil {
+		_, err = s.mutations.Derive(ctx, phone, derivation.Reason, derivation.Label)
+		return err
 	}
 	reply = normalizeAgentReply(reply)
 	if reply == "" {
@@ -126,8 +172,34 @@ func (s *AgentService) Process(ctx context.Context, phone, messageID string) err
 	if len(runes) > s.cfg.MaxMessageLength {
 		reply = string(runes[:s.cfg.MaxMessageLength])
 	}
+	if presence, ok := s.sender.(agentPresenceSender); ok {
+		// The response remains the critical path: a read-receipt failure must not
+		// suppress an otherwise valid answer or create an SQS retry duplicate.
+		_ = presence.MarkAgentReadAndTyping(ctx, messageID)
+	}
 	_, err = s.sender.SendAgentText(ctx, phone, "agent-"+messageID, reply)
+	if err != nil {
+		return err
+	}
+	if recoveringAgentError {
+		_, err = s.mutations.ActivateBot(ctx, phone)
+	}
 	return err
+}
+
+func (s *AgentService) conversationSummary(ctx context.Context, phone string) (ConversationSummary, error) {
+	out, err := s.db.GetItem(ctx, &dynamodb.GetItemInput{TableName: &s.table, Key: snapshotKey("CONV#"+phone, "META"), ConsistentRead: aws.Bool(true)})
+	if err != nil {
+		return ConversationSummary{}, fmt.Errorf("read conversation agent status: %w", err)
+	}
+	if len(out.Item) == 0 {
+		return ConversationSummary{Phone: phone, Status: ConversationStatusBot}, nil
+	}
+	var summary ConversationSummary
+	if err = attributevalue.UnmarshalMap(out.Item, &summary); err != nil {
+		return ConversationSummary{}, fmt.Errorf("decode conversation agent status: %w", err)
+	}
+	return summary, nil
 }
 
 func (s *AgentService) history(ctx context.Context, phone string) ([]Message, error) {
@@ -202,23 +274,38 @@ func (s *AgentService) transcribeAudio(ctx context.Context, a MessageAttachment,
 	return "", errors.New("audio transcription timed out")
 }
 
-type geminiPart struct {
-	Text         string `json:"text,omitempty"`
-	FunctionCall *struct {
-		Name string         `json:"name"`
-		Args map[string]any `json:"args"`
-	} `json:"functionCall,omitempty"`
-	FunctionResponse map[string]any `json:"functionResponse,omitempty"`
+type interactionStep struct {
+	Type      string         `json:"type"`
+	ID        string         `json:"id,omitempty"`
+	Name      string         `json:"name,omitempty"`
+	Arguments map[string]any `json:"arguments,omitempty"`
+	Content   []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"content,omitempty"`
 }
 
-type geminiContent struct {
-	Role  string       `json:"role"`
-	Parts []geminiPart `json:"parts"`
+type interactionResponse struct {
+	Status string            `json:"status"`
+	Steps  []json.RawMessage `json:"steps"`
+	Error  *struct {
+		Code    int    `json:"code"`
+		Status  string `json:"status"`
+		Message string `json:"message"`
+	} `json:"error,omitempty"`
 }
 
-func (s *AgentService) generate(ctx context.Context, phone, messageID string, messages []Message) (string, bool, error) {
-	contents := make([]map[string]any, 0, len(messages))
+func (s *AgentService) generate(ctx context.Context, phone, messageID string, messages []Message) (string, *AgentDerivation, error) {
 	state := &agentExecutionState{}
+	if s.db != nil {
+		collected, err := s.agentCollectedData(ctx, phone)
+		if err != nil {
+			return "", nil, err
+		}
+		state.collected = collected
+	}
+	var history strings.Builder
+	history.WriteString("Historial de WhatsApp en orden cronológico:\n")
 	for _, m := range messages {
 		for _, attachment := range m.Attachments {
 			if strings.EqualFold(attachment.FileName, path.Base(s.tools.assets.SernaturCertificateKey)) {
@@ -228,67 +315,144 @@ func (s *AgentService) generate(ctx context.Context, phone, messageID string, me
 		if m.Content == nil || strings.TrimSpace(*m.Content) == "" {
 			continue
 		}
-		role := "user"
+		role := "Cliente"
 		if m.Type != MessageTypeCustomer {
-			role = "model"
+			role = "Susana"
 		}
-		contents = append(contents, map[string]any{"role": role, "parts": []map[string]string{{"text": *m.Content}}})
+		fmt.Fprintf(&history, "%s: %s\n", role, strings.TrimSpace(*m.Content))
 	}
-	endpoint := "https://generativelanguage.googleapis.com/v1beta/models/" + s.gemini.Model + ":generateContent?key=" + s.gemini.APIKey
+	initialStep, err := json.Marshal(map[string]any{"type": "user_input", "content": []map[string]string{{"type": "text", "text": history.String()}}})
+	if err != nil {
+		return "", nil, err
+	}
+	steps := []json.RawMessage{initialStep}
+	endpoint := "https://generativelanguage.googleapis.com/v1beta/interactions"
 	for round := 0; round < 8; round++ {
-		payload := map[string]any{"contents": contents, "systemInstruction": map[string]any{"parts": []map[string]string{{"text": agentSystemPrompt(phone, len(messages) > 1, s.now())}}}, "generationConfig": map[string]any{"temperature": s.gemini.Temperature, "topP": s.gemini.TopP}, "tools": []map[string]any{{"functionDeclarations": agentFunctionDeclarations()}}}
+		payload := map[string]any{"model": s.gemini.Model, "input": steps, "system_instruction": agentSystemPrompt(phone, len(messages) > 1, s.now(), state.collected), "generation_config": map[string]any{"temperature": s.gemini.Temperature, "top_p": s.gemini.TopP}, "tools": agentInteractionTools(), "store": false}
 		raw, err := json.Marshal(payload)
 		if err != nil {
-			return "", false, err
+			return "", nil, err
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(raw))
 		if err != nil {
-			return "", false, err
+			return "", nil, err
 		}
 		req.Header.Set("content-type", "application/json")
+		req.Header.Set("x-goog-api-key", s.gemini.APIKey)
 		resp, err := s.http.Do(req)
 		if err != nil {
-			return "", false, err
+			return "", nil, err
 		}
 		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 		_ = resp.Body.Close()
 		if readErr != nil {
-			return "", false, readErr
+			return "", nil, readErr
 		}
 		if resp.StatusCode/100 != 2 {
-			return "", false, fmt.Errorf("gemini status %d", resp.StatusCode)
+			statusErr := geminiStatusError(resp.StatusCode, body)
+			if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError && resp.StatusCode != http.StatusTooManyRequests {
+				return "", nil, &permanentAgentError{cause: statusErr}
+			}
+			return "", nil, statusErr
 		}
-		var result struct {
-			Candidates []struct {
-				Content geminiContent `json:"content"`
-			} `json:"candidates"`
+		var result interactionResponse
+		if json.Unmarshal(body, &result) != nil || len(result.Steps) == 0 {
+			return "", nil, &permanentAgentError{cause: errors.New("invalid gemini response")}
 		}
-		if json.Unmarshal(body, &result) != nil || len(result.Candidates) == 0 || len(result.Candidates[0].Content.Parts) == 0 {
-			return "", false, errors.New("invalid gemini response")
-		}
-		candidate := result.Candidates[0].Content
 		var reply strings.Builder
-		var responses []geminiPart
-		for index, part := range candidate.Parts {
-			reply.WriteString(part.Text)
-			if part.FunctionCall == nil {
+		var responses []json.RawMessage
+		for index, rawStep := range result.Steps {
+			var step interactionStep
+			if err = json.Unmarshal(rawStep, &step); err != nil {
+				return "", nil, &permanentAgentError{cause: fmt.Errorf("decode gemini step: %w", err)}
+			}
+			if step.Type == "model_output" {
+				for _, content := range step.Content {
+					if content.Type == "text" {
+						reply.WriteString(content.Text)
+					}
+				}
+			}
+			if step.Type != "function_call" || step.Name == "" || step.ID == "" {
 				continue
 			}
-			toolResult, silent, toolErr := s.tools.execute(ctx, phone, fmt.Sprintf("%s-%d-%d", messageID, round, index), part.FunctionCall.Name, part.FunctionCall.Args, state)
+			toolResult, silent, toolErr := s.tools.execute(ctx, phone, fmt.Sprintf("%s-%d-%d", messageID, round, index), step.Name, step.Arguments, state)
+			if state.collectedDirty && s.db != nil {
+				if persistErr := s.saveAgentCollectedData(ctx, phone, state.collected); persistErr != nil {
+					return "", nil, persistErr
+				} else {
+					state.collectedDirty = false
+				}
+			}
 			if toolErr != nil {
 				toolResult = map[string]any{"exito": false, "error": "La herramienta no pudo completar la operación."}
 			}
 			if silent {
-				return "", true, nil
+				return "", state.derivation, nil
 			}
-			responses = append(responses, geminiPart{FunctionResponse: map[string]any{"name": part.FunctionCall.Name, "response": toolResult}})
+			response, marshalErr := json.Marshal(map[string]any{"type": "function_result", "name": step.Name, "call_id": step.ID, "result": toolResult, "is_error": toolErr != nil})
+			if marshalErr != nil {
+				return "", nil, marshalErr
+			}
+			responses = append(responses, response)
 		}
 		if len(responses) == 0 {
-			return reply.String(), false, nil
+			if strings.TrimSpace(reply.String()) == "" {
+				return "", nil, &permanentAgentError{cause: fmt.Errorf("gemini completed without output: %s", result.Status)}
+			}
+			return reply.String(), nil, nil
 		}
-		contents = append(contents, map[string]any{"role": "model", "parts": candidate.Parts}, map[string]any{"role": "function", "parts": responses})
+		steps = append(steps, result.Steps...)
+		steps = append(steps, responses...)
 	}
-	return "", false, errors.New("gemini tool loop exceeded")
+	return "", nil, &permanentAgentError{cause: errors.New("gemini tool loop exceeded")}
+}
+
+type agentStateRecord struct {
+	PK            string             `dynamodbav:"pk"`
+	SK            string             `dynamodbav:"sk"`
+	CollectedData AgentCollectedData `dynamodbav:"collectedData"`
+	UpdatedAt     time.Time          `dynamodbav:"updatedAt"`
+	ExpiresAt     int64              `dynamodbav:"expiresAt"`
+}
+
+func (s *AgentService) agentCollectedData(ctx context.Context, phone string) (AgentCollectedData, error) {
+	output, err := s.db.GetItem(ctx, &dynamodb.GetItemInput{TableName: &s.table, Key: snapshotKey("CONV#"+phone, "AGENT_STATE"), ConsistentRead: aws.Bool(true)})
+	if err != nil {
+		return AgentCollectedData{}, fmt.Errorf("read agent collected data: %w", err)
+	}
+	if len(output.Item) == 0 {
+		return AgentCollectedData{}, nil
+	}
+	var record agentStateRecord
+	if err = attributevalue.UnmarshalMap(output.Item, &record); err != nil {
+		return AgentCollectedData{}, fmt.Errorf("decode agent collected data: %w", err)
+	}
+	return record.CollectedData, nil
+}
+
+func (s *AgentService) saveAgentCollectedData(ctx context.Context, phone string, collected AgentCollectedData) error {
+	now := s.now().UTC()
+	record, err := attributevalue.MarshalMap(agentStateRecord{PK: "CONV#" + phone, SK: "AGENT_STATE", CollectedData: collected, UpdatedAt: now, ExpiresAt: now.Add(30 * 24 * time.Hour).Unix()})
+	if err != nil {
+		return fmt.Errorf("encode agent collected data: %w", err)
+	}
+	if _, err = s.db.PutItem(ctx, &dynamodb.PutItemInput{TableName: &s.table, Item: record}); err != nil {
+		return fmt.Errorf("persist agent collected data: %w", err)
+	}
+	return nil
+}
+
+func geminiStatusError(status int, body []byte) error {
+	var result interactionResponse
+	if json.Unmarshal(body, &result) == nil && result.Error != nil && strings.TrimSpace(result.Error.Message) != "" {
+		message := []rune(strings.TrimSpace(result.Error.Message))
+		if len(message) > 500 {
+			message = message[:500]
+		}
+		return fmt.Errorf("gemini status %d (%s): %s", status, result.Error.Status, string(message))
+	}
+	return fmt.Errorf("gemini status %d", status)
 }
 
 func contains(values []string, want string) bool {

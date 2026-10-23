@@ -25,7 +25,7 @@ func TestAsyncAPIContractDefinesSequencedRealtimeStreams(t *testing.T) {
 	if document.AsyncAPI != "3.0.0" || document.Operations["receiveInboxEvents"] == nil {
 		t.Fatal("AsyncAPI must define the Inbox receive operation")
 	}
-	for _, name := range []string{"ListEvent", "DetailEvent", "ResyncRequired"} {
+	for _, name := range []string{"ListEvent", "DetailEvent", "AgentProcessingEvent", "ResyncRequired"} {
 		if document.Components.Messages[name] == nil {
 			t.Fatalf("AsyncAPI is missing %s", name)
 		}
@@ -41,7 +41,7 @@ func TestAsyncAPIEventNamesMatchOutboxProducers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, eventType := range []string{"conversation.updated", "conversation.deleted"} {
+	for _, eventType := range []string{"conversation.updated", "conversation.deleted", "agent_processing"} {
 		if !strings.Contains(string(contract), `"`+eventType+`"`) {
 			t.Fatalf("AsyncAPI is missing producer event %s", eventType)
 		}

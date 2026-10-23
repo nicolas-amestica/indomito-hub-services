@@ -69,6 +69,27 @@ type AgentToolbox struct {
 
 type agentExecutionState struct {
 	certificateSent bool
+	derivation      *AgentDerivation
+	collected       AgentCollectedData
+	collectedDirty  bool
+}
+
+// AgentCollectedData is the short-lived structured context required to resume
+// a meeting or quotation flow after a later WhatsApp message.
+type AgentCollectedData struct {
+	Destination string `json:"destino,omitempty" dynamodbav:"destino,omitempty"`
+	Region      string `json:"region,omitempty" dynamodbav:"region,omitempty"`
+	City        string `json:"ciudad,omitempty" dynamodbav:"ciudad,omitempty"`
+	MeetingName string `json:"nombreCliente,omitempty" dynamodbav:"nombreCliente,omitempty"`
+	MeetingMail string `json:"emailCliente,omitempty" dynamodbav:"emailCliente,omitempty"`
+	MeetingDate string `json:"fechaSugerida,omitempty" dynamodbav:"fechaSugerida,omitempty"`
+	MeetingTime string `json:"horaSugerida,omitempty" dynamodbav:"horaSugerida,omitempty"`
+}
+
+// AgentDerivation describes a persistent handoff requested by the model.
+type AgentDerivation struct {
+	Reason string
+	Label  string
 }
 
 // NewAgentToolbox validates and creates the commercial tools used by AgentService.
@@ -85,10 +106,17 @@ func NewAgentToolbox(storage agentAssetStore, sender AgentSender, assets AgentAs
 func (t *AgentToolbox) execute(ctx context.Context, phone, messageID, name string, args map[string]any, state *agentExecutionState) (map[string]any, bool, error) {
 	switch name {
 	case "sin_respuesta", "derivar_equipo":
+		reason := stringArg(args, "motivo")
+		if reason == "" {
+			reason = "agent_handoff"
+		}
+		state.derivation = &AgentDerivation{Reason: reason, Label: "Requiere atencion del equipo"}
 		return map[string]any{"derivado": true}, true, nil
 	case "guardar_datos_reunion":
-		return map[string]any{"guardado": true}, false, nil
+		state.mergeMeeting(args)
+		return map[string]any{"guardado": true, "datos": state.collected}, false, nil
 	case "buscar_presupuestos":
+		state.mergeQuote(args)
 		return t.sendBudgets(ctx, phone, messageID, stringArg(args, "destino"), stringArg(args, "codigoRegion"), stringArg(args, "ciudad"), state)
 	case "enviar_certificado_sernatur":
 		result, err := t.sendCertificate(ctx, phone, messageID, "explicito")
@@ -104,6 +132,9 @@ func (t *AgentToolbox) execute(ctx context.Context, phone, messageID, name strin
 		return result, false, err
 	case "crear_reunion":
 		result, err := t.createMeeting(ctx, phone, args)
+		if err == nil && boolResult(result, "exito") {
+			state.clearMeeting()
+		}
 		return result, false, err
 	case "editar_reunion", "reagendar_reunion":
 		result, err := t.updateMeeting(ctx, phone, args)
@@ -117,6 +148,39 @@ func (t *AgentToolbox) execute(ctx context.Context, phone, messageID, name strin
 	default:
 		return map[string]any{"error": "herramienta no permitida"}, false, nil
 	}
+}
+
+func (s *agentExecutionState) mergeMeeting(args map[string]any) {
+	mergeCollectedString(&s.collected.MeetingName, stringArg(args, "nombreCliente"), &s.collectedDirty)
+	mergeCollectedString(&s.collected.MeetingMail, strings.ToLower(stringArg(args, "emailCliente")), &s.collectedDirty)
+	mergeCollectedString(&s.collected.MeetingDate, stringArg(args, "fechaSugerida"), &s.collectedDirty)
+	mergeCollectedString(&s.collected.MeetingTime, stringArg(args, "horaSugerida"), &s.collectedDirty)
+}
+
+func (s *agentExecutionState) mergeQuote(args map[string]any) {
+	mergeCollectedString(&s.collected.Destination, normalizeSegment(stringArg(args, "destino")), &s.collectedDirty)
+	mergeCollectedString(&s.collected.Region, normalizeSegment(stringArg(args, "codigoRegion")), &s.collectedDirty)
+	mergeCollectedString(&s.collected.City, normalizeSegment(stringArg(args, "ciudad")), &s.collectedDirty)
+}
+
+func (s *agentExecutionState) clearMeeting() {
+	if s.collected.MeetingName != "" || s.collected.MeetingMail != "" || s.collected.MeetingDate != "" || s.collected.MeetingTime != "" {
+		s.collected.MeetingName, s.collected.MeetingMail = "", ""
+		s.collected.MeetingDate, s.collected.MeetingTime = "", ""
+		s.collectedDirty = true
+	}
+}
+
+func mergeCollectedString(target *string, value string, dirty *bool) {
+	if value != "" && *target != value {
+		*target = value
+		*dirty = true
+	}
+}
+
+func boolResult(result map[string]any, key string) bool {
+	value, _ := result[key].(bool)
+	return value
 }
 
 func stringArg(args map[string]any, key string) string {
@@ -479,6 +543,13 @@ func (t *AgentToolbox) createMeeting(ctx context.Context, phone string, args map
 	date, clockValue := stringArg(args, "fechaSugerida"), stringArg(args, "horaSugerida")
 	if name == "" || email == "" || !strings.Contains(email, "@") {
 		return map[string]any{"exito": false, "mensaje": "Nombre y correo válido son obligatorios."}, nil
+	}
+	existing, err := t.customerMeetings(ctx, phone)
+	if err != nil {
+		return nil, err
+	}
+	if len(existing) > 0 {
+		return map[string]any{"exito": false, "mensaje": "Ya existe una reunión futura para este contacto.", "eventos": t.safeEvents(existing)}, nil
 	}
 	slots, valid, err := t.validateSlot(ctx, date, clockValue, "")
 	if err != nil || !valid {

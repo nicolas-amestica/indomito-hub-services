@@ -17,13 +17,14 @@ import (
 	endpoint "ind-hub-api-gox-sls-pri-gh/services/api-inbox/functions/obtener-conversaciones-v1"
 	activeoperation "ind-hub-api-gox-sls-pri-gh/services/api-inbox/functions/obtener-operacion-activa-v1"
 	operation "ind-hub-api-gox-sls-pri-gh/services/api-inbox/functions/obtener-operacion-v1"
+	reactivateagent "ind-hub-api-gox-sls-pri-gh/services/api-inbox/functions/reactivar-agente-v1"
 	receivewebhook "ind-hub-api-gox-sls-pri-gh/services/api-inbox/functions/recibir-webhook-whatsapp-v1"
 	verifywebhook "ind-hub-api-gox-sls-pri-gh/services/api-inbox/functions/verificar-webhook-whatsapp-v1"
 )
 
 func main() {
 	log := logger.New("api-inbox-local", "startup", "local")
-	if err := functions.RunLocal(context.Background(), endpoint.Register, detail.Register, markunread.Register, deleteconversation.Register, markallread.Register, recalculateunread.Register, subscription.Register, activeoperation.Register, operation.Register, verifywebhook.Register, receivewebhook.Register); err != nil {
+	if err := functions.RunLocal(context.Background(), endpoint.Register, detail.Register, markunread.Register, reactivateagent.Register, deleteconversation.Register, markallread.Register, recalculateunread.Register, subscription.Register, activeoperation.Register, operation.Register, verifywebhook.Register, receivewebhook.Register); err != nil {
 		log.Error("localServerError", zap.Error(err))
 		_ = log.Sync()
 		os.Exit(1)

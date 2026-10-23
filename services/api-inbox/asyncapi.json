@@ -8,20 +8,23 @@
       "messages": {
         "listEvent": { "$ref": "#/components/messages/ListEvent" },
         "detailEvent": { "$ref": "#/components/messages/DetailEvent" },
+        "agentProcessingEvent": { "$ref": "#/components/messages/AgentProcessingEvent" },
         "resyncRequired": { "$ref": "#/components/messages/ResyncRequired" }
       }
     }
   },
   "operations": {
-    "receiveInboxEvents": { "action": "receive", "channel": { "$ref": "#/channels/inboxEvents" }, "messages": [{ "$ref": "#/channels/inboxEvents/messages/listEvent" }, { "$ref": "#/channels/inboxEvents/messages/detailEvent" }, { "$ref": "#/channels/inboxEvents/messages/resyncRequired" }] }
+    "receiveInboxEvents": { "action": "receive", "channel": { "$ref": "#/channels/inboxEvents" }, "messages": [{ "$ref": "#/channels/inboxEvents/messages/listEvent" }, { "$ref": "#/channels/inboxEvents/messages/detailEvent" }, { "$ref": "#/channels/inboxEvents/messages/agentProcessingEvent" }, { "$ref": "#/channels/inboxEvents/messages/resyncRequired" }] }
   },
   "components": {
     "schemas": {
-      "Envelope": { "type": "object", "additionalProperties": false, "required": ["eventId", "type", "stream", "sequence", "occurredAt", "payload"], "properties": { "eventId": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" }, "type": { "type": "string" }, "stream": { "type": "string", "pattern": "^(list|detail:[0-9]{8,15})$" }, "sequence": { "type": "integer", "minimum": 1 }, "occurredAt": { "type": "string", "format": "date-time" }, "payload": { "type": "object" } } }
+      "Envelope": { "type": "object", "additionalProperties": false, "required": ["eventId", "type", "stream", "sequence", "occurredAt", "payload"], "properties": { "eventId": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" }, "type": { "type": "string" }, "stream": { "type": "string", "pattern": "^(list|detail:[0-9]{8,15})$" }, "sequence": { "type": "integer", "minimum": 1 }, "occurredAt": { "type": "string", "format": "date-time" }, "payload": { "type": "object" } } },
+      "AgentProcessingPayload": { "type": "object", "additionalProperties": false, "required": ["phone", "active", "expiresAt"], "properties": { "phone": { "type": "string", "pattern": "^[0-9]{8,15}$" }, "active": { "type": "boolean" }, "expiresAt": { "type": ["string", "null"], "format": "date-time" } } }
     },
     "messages": {
       "ListEvent": { "name": "listEvent", "payload": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "properties": { "type": { "enum": ["conversation.updated", "conversation.deleted", "bulk.updated"] }, "stream": { "const": "list" } } }] } },
       "DetailEvent": { "name": "detailEvent", "payload": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "properties": { "type": { "enum": ["message.created", "message.delivery.updated", "conversation.updated"] } } }] } },
+      "AgentProcessingEvent": { "name": "agentProcessingEvent", "payload": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "properties": { "type": { "const": "agent_processing" }, "payload": { "$ref": "#/components/schemas/AgentProcessingPayload" } } }] } },
       "ResyncRequired": { "name": "resyncRequired", "payload": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "properties": { "type": { "const": "resync_required" } } }] } }
     }
   }

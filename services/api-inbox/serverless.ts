@@ -87,6 +87,13 @@ const endpoints: GoHttpEndpoint[] = [
     policies: [dynamodbCrudPolicy(TABLE_ARN), ssmReadPolicy(INBOX_PARAMETER_ARN)],
   },
   {
+    name: "fn-reactivar-agente-v1",
+    method: "PATCH",
+    path: "/conversaciones/{telefono}/estado-agente",
+    public: false, memorySize: 256, timeout: 12, description: "Reactiva explicitamente el agente IA de una conversacion",
+    policies: [dynamodbCrudPolicy(TABLE_ARN), ssmReadPolicy(INBOX_PARAMETER_ARN)],
+  },
+  {
     name: "fn-eliminar-conversacion-v1",
     method: "DELETE",
     path: "/conversaciones/{telefono}",

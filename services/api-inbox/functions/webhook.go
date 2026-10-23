@@ -18,6 +18,7 @@ const maxWebhookBody = 1 << 20
 type WebhookReceiver interface {
 	VerifySignature([]byte, string) bool
 	Reserve(context.Context, domain.InboundMetaMessage) error
+	ApplyStatus(context.Context, domain.InboundMetaStatus) error
 }
 
 func VerifyWhatsAppWebhook(verifyToken string, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -46,15 +47,25 @@ func ReceiveWhatsAppWebhook(ctx context.Context, service WebhookReceiver, reques
 	if signature == "" {
 		signature = request.Headers["X-Hub-Signature-256"]
 	}
-	ignored := func() (events.APIGatewayV2HTTPResponse, error) {
-		return lambdautil.SuccessResponse(http.StatusOK, map[string]string{"status": "ignored"})
-	}
 	if !service.VerifySignature(raw, strings.TrimSpace(signature)) {
-		return ignored()
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusUnauthorized,
+			Body:       "unauthorized",
+			Headers:    map[string]string{"content-type": "text/plain; charset=utf-8", "cache-control": "no-store"},
+		}, nil
 	}
 	messages, err := domain.DecodeInboundMetaMessages(raw)
-	if err != nil || len(messages) == 0 {
-		return ignored()
+	if err != nil {
+		return lambdautil.SuccessResponse(http.StatusOK, map[string]string{"status": "ignored"})
+	}
+	statuses, err := domain.DecodeInboundMetaStatuses(raw)
+	if err != nil || len(messages)+len(statuses) == 0 {
+		return lambdautil.SuccessResponse(http.StatusOK, map[string]string{"status": "ignored"})
+	}
+	for _, status := range statuses {
+		if err := service.ApplyStatus(ctx, status); err != nil {
+			return lambdautil.ErrorResponse(request, apperr.New(apperr.CodeInboxCapacityUnavailable, "No fue posible procesar el estado de entrega"))
+		}
 	}
 	for _, message := range messages {
 		if err := service.Reserve(ctx, message); err != nil {

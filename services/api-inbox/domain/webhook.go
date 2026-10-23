@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/oklog/ulid/v2"
@@ -32,8 +33,190 @@ type InboundMetaMessage struct {
 	FileName  string
 }
 
+// InboundMetaStatus is a delivery receipt emitted by WhatsApp Cloud API.
+type InboundMetaStatus struct {
+	WhatsAppMessageID string
+	Status            DeliveryStatus
+	Timestamp         string
+	Error             string
+}
+
 type webhookDynamo interface {
+	GetItem(context.Context, *dynamodb.GetItemInput, ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
 	TransactWriteItems(context.Context, *dynamodb.TransactWriteItemsInput, ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error)
+}
+
+// DecodeInboundMetaStatuses extracts supported delivery receipts from a verified webhook body.
+func DecodeInboundMetaStatuses(raw []byte) ([]InboundMetaStatus, error) {
+	var envelope struct {
+		Entry []struct {
+			Changes []struct {
+				Value struct {
+					Statuses []struct {
+						ID        string `json:"id"`
+						Status    string `json:"status"`
+						Timestamp string `json:"timestamp"`
+						Errors    []struct {
+							Code    int    `json:"code"`
+							Title   string `json:"title"`
+							Message string `json:"message"`
+						} `json:"errors"`
+					} `json:"statuses"`
+				} `json:"value"`
+			} `json:"changes"`
+		} `json:"entry"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return nil, err
+	}
+	result := make([]InboundMetaStatus, 0)
+	for _, entry := range envelope.Entry {
+		for _, change := range entry.Changes {
+			for _, status := range change.Value.Statuses {
+				mapped := DeliveryStatus(status.Status)
+				if status.ID == "" || (mapped != DeliveryStatusSent && mapped != DeliveryStatusDelivered && mapped != DeliveryStatusRead && mapped != DeliveryStatusFailed) {
+					continue
+				}
+				errorText := ""
+				if len(status.Errors) > 0 {
+					errorText = strings.TrimSpace(status.Errors[0].Message)
+					if errorText == "" {
+						errorText = strings.TrimSpace(status.Errors[0].Title)
+					}
+					if status.Errors[0].Code != 0 {
+						errorText = fmt.Sprintf("%d: %s", status.Errors[0].Code, errorText)
+					}
+				}
+				result = append(result, InboundMetaStatus{WhatsAppMessageID: status.ID, Status: mapped, Timestamp: status.Timestamp, Error: normalizeDerivationText(errorText, 500)})
+			}
+		}
+	}
+	return result, nil
+}
+
+// ApplyStatus updates a known outbound message monotonically and publishes the change.
+func (s *WebhookService) ApplyStatus(ctx context.Context, status InboundMetaStatus) error {
+	if status.Status == DeliveryStatusSent || status.WhatsAppMessageID == "" {
+		return nil
+	}
+	phone, msgSK := "", ""
+	for attempt := 0; attempt < 2; attempt++ {
+		index, err := s.db.GetItem(ctx, &dynamodb.GetItemInput{TableName: &s.table, Key: snapshotKey("WAMID#"+status.WhatsAppMessageID, "META"), ConsistentRead: aws.Bool(true)})
+		if err != nil {
+			return fmt.Errorf("read WhatsApp delivery index: %w", err)
+		}
+		phone, msgSK = attributeString(index.Item, "phone"), attributeString(index.Item, "msgSk")
+		if phone != "" && msgSK != "" {
+			break
+		}
+		if attempt == 0 {
+			s.sleep(400 * time.Millisecond)
+		}
+	}
+	if phone == "" || msgSK == "" {
+		// Receipts for legacy or otherwise unknown messages are acknowledged deliberately.
+		return nil
+	}
+	for attempt := 0; attempt < mutationMaxAttempts; attempt++ {
+		messageOut, readErr := s.db.GetItem(ctx, &dynamodb.GetItemInput{TableName: &s.table, Key: snapshotKey("CONV#"+phone, msgSK), ConsistentRead: aws.Bool(true)})
+		if readErr != nil {
+			return fmt.Errorf("read WhatsApp delivery message: %w", readErr)
+		}
+		if len(messageOut.Item) == 0 {
+			return nil
+		}
+		var message Message
+		if readErr = attributevalue.UnmarshalMap(messageOut.Item, &message); readErr != nil {
+			return fmt.Errorf("decode WhatsApp delivery message: %w", readErr)
+		}
+		if !shouldApplyDeliveryStatus(message.DeliveryStatus, status.Status) {
+			return nil
+		}
+		sequence, sequenceErr := readSequenceItem(ctx, s.db, s.table, "SEQ#DETAIL#"+phone)
+		if sequenceErr != nil {
+			return sequenceErr
+		}
+		now := s.now().UTC()
+		eventID := ulid.Make().String()
+		nextSequence := sequence + 1
+		values := map[string]types.AttributeValue{
+			":nextStatus": &types.AttributeValueMemberS{Value: string(status.Status)},
+		}
+		condition := deliveryCondition(status.Status)
+		switch status.Status {
+		case DeliveryStatusDelivered:
+			values[":sent"] = &types.AttributeValueMemberS{Value: string(DeliveryStatusSent)}
+		case DeliveryStatusRead:
+			values[":sent"] = &types.AttributeValueMemberS{Value: string(DeliveryStatusSent)}
+			values[":delivered"] = &types.AttributeValueMemberS{Value: string(DeliveryStatusDelivered)}
+		case DeliveryStatusFailed:
+			values[":read"] = &types.AttributeValueMemberS{Value: string(DeliveryStatusRead)}
+			values[":failed"] = &types.AttributeValueMemberS{Value: string(DeliveryStatusFailed)}
+		}
+		updateExpression := "SET #deliveryStatus=:nextStatus REMOVE deliveryError"
+		if status.Status == DeliveryStatusFailed && status.Error != "" {
+			values[":deliveryError"] = &types.AttributeValueMemberS{Value: status.Error}
+			updateExpression = "SET #deliveryStatus=:nextStatus, deliveryError=:deliveryError"
+		}
+		payload, _ := attributevalue.MarshalMap(map[string]any{"phone": phone, "msgSk": msgSK, "whatsappMessageId": status.WhatsAppMessageID, "deliveryStatus": status.Status, "deliveryError": nullableString(status.Error)})
+		outbox := map[string]types.AttributeValue{
+			"pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("WORK_DUE#OUTBOX#%02X", conversationShard(phone))}, "sk": &types.AttributeValueMemberS{Value: now.Format(time.RFC3339Nano) + "#" + eventID},
+			"eventId": &types.AttributeValueMemberS{Value: eventID}, "eventType": &types.AttributeValueMemberS{Value: "message.delivery.updated"}, "phone": &types.AttributeValueMemberS{Value: phone},
+			"stream": &types.AttributeValueMemberS{Value: "detail:" + phone}, "sequence": &types.AttributeValueMemberN{Value: fmt.Sprint(nextSequence)}, "payload": &types.AttributeValueMemberM{Value: payload},
+			"state": &types.AttributeValueMemberS{Value: "pending"}, "nextAttemptAt": &types.AttributeValueMemberS{Value: now.Format(time.RFC3339Nano)}, "expiresAt": &types.AttributeValueMemberN{Value: fmt.Sprint(now.Add(14 * 24 * time.Hour).Unix())},
+		}
+		_, err := s.db.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{
+			sequenceUpdate(s.table, "SEQ#DETAIL#"+phone, sequence, nextSequence),
+			{Update: &types.Update{TableName: &s.table, Key: snapshotKey("CONV#"+phone, msgSK), UpdateExpression: aws.String(updateExpression), ConditionExpression: aws.String(condition), ExpressionAttributeNames: map[string]string{"#deliveryStatus": "deliveryStatus"}, ExpressionAttributeValues: values}},
+			{Put: &types.Put{TableName: &s.table, Item: outbox, ConditionExpression: aws.String("attribute_not_exists(pk)")}},
+		}})
+		if err == nil {
+			return nil
+		}
+		if !isTransactionConflict(err) {
+			return fmt.Errorf("apply WhatsApp delivery status: %w", err)
+		}
+	}
+	return ErrWebhookCapacity
+}
+
+func attributeString(item map[string]types.AttributeValue, key string) string {
+	value, _ := item[key].(*types.AttributeValueMemberS)
+	if value == nil {
+		return ""
+	}
+	return value.Value
+}
+
+func shouldApplyDeliveryStatus(current *DeliveryStatus, next DeliveryStatus) bool {
+	if current == nil {
+		return true
+	}
+	if *current == DeliveryStatusFailed || *current == DeliveryStatusRead {
+		return false
+	}
+	if next == DeliveryStatusFailed {
+		return true
+	}
+	rank := map[DeliveryStatus]int{DeliveryStatusSent: 0, DeliveryStatusDelivered: 1, DeliveryStatusRead: 2}
+	return rank[next] > rank[*current]
+}
+
+func deliveryCondition(next DeliveryStatus) string {
+	if next == DeliveryStatusDelivered {
+		return "attribute_not_exists(#deliveryStatus) OR #deliveryStatus=:sent"
+	}
+	if next == DeliveryStatusRead {
+		return "attribute_not_exists(#deliveryStatus) OR #deliveryStatus=:sent OR #deliveryStatus=:delivered"
+	}
+	return "attribute_not_exists(#deliveryStatus) OR (#deliveryStatus<>:failed AND #deliveryStatus<>:read)"
+}
+
+func nullableString(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
 }
 
 // WebhookService authenticates and durably reserves inbound Meta messages.
@@ -41,6 +224,7 @@ type WebhookService struct {
 	db               webhookDynamo
 	table, appSecret string
 	now              func() time.Time
+	sleep            func(time.Duration)
 }
 
 func NewWebhookService(db webhookDynamo, table, appSecret string, now func() time.Time) (*WebhookService, error) {
@@ -50,7 +234,7 @@ func NewWebhookService(db webhookDynamo, table, appSecret string, now func() tim
 	if now == nil {
 		now = time.Now
 	}
-	return &WebhookService{db: db, table: table, appSecret: appSecret, now: now}, nil
+	return &WebhookService{db: db, table: table, appSecret: appSecret, now: now, sleep: time.Sleep}, nil
 }
 
 func (s *WebhookService) VerifySignature(raw []byte, signature string) bool {

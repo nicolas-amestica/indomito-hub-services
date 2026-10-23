@@ -35,6 +35,7 @@
     { "name": "fn-enviar-adjunto-v1", "entrypoint": "./cmd/fn-enviar-adjunto-v1" },
     { "name": "fn-actualizar-contacto-v1", "entrypoint": "./cmd/fn-actualizar-contacto-v1" },
     { "name": "fn-marcar-no-leida-v1", "entrypoint": "./cmd/fn-marcar-no-leida-v1" },
+    { "name": "fn-reactivar-agente-v1", "entrypoint": "./cmd/fn-reactivar-agente-v1" },
     { "name": "fn-eliminar-conversacion-v1", "entrypoint": "./cmd/fn-eliminar-conversacion-v1" },
     { "name": "fn-iniciar-marcar-leidas-v1", "entrypoint": "./cmd/fn-iniciar-marcar-leidas-v1" },
     { "name": "fn-iniciar-recalcular-no-leidas-v1", "entrypoint": "./cmd/fn-iniciar-recalcular-no-leidas-v1" },

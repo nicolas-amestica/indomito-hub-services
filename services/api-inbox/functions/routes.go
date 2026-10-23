@@ -27,6 +27,7 @@ var Routes = []Route{
 	{Method: http.MethodPost, Path: "/conversaciones/:telefono/adjuntos"},
 	{Method: http.MethodPatch, Path: "/conversaciones/:telefono/contacto"},
 	{Method: http.MethodPatch, Path: "/conversaciones/:telefono/estado-lectura"},
+	{Method: http.MethodPatch, Path: "/conversaciones/:telefono/estado-agente"},
 	{Method: http.MethodDelete, Path: "/conversaciones/:telefono"},
 	{Method: http.MethodPatch, Path: "/conversaciones/acciones/marcar-leidas"},
 	{Method: http.MethodPatch, Path: "/conversaciones/acciones/recalcular-no-leidas"},
@@ -51,6 +52,7 @@ var RetrySendRoute = Route{Method: http.MethodPost, Path: "/envios-inbox/:client
 var ResolveSendRoute = Route{Method: http.MethodPatch, Path: "/envios-inbox/:clientMessageId/resolucion"}
 var UpdateContactRoute = Route{Method: http.MethodPatch, Path: "/conversaciones/:telefono/contacto"}
 var MarkUnreadRoute = Route{Method: http.MethodPatch, Path: "/conversaciones/:telefono/estado-lectura"}
+var ReactivateAgentRoute = Route{Method: http.MethodPatch, Path: "/conversaciones/:telefono/estado-agente"}
 var DeleteConversationRoute = Route{Method: http.MethodDelete, Path: "/conversaciones/:telefono"}
 var StartMarkAllReadRoute = Route{Method: http.MethodPatch, Path: "/conversaciones/acciones/marcar-leidas"}
 var StartRecalculateUnreadRoute = Route{Method: http.MethodPatch, Path: "/conversaciones/acciones/recalcular-no-leidas"}
@@ -61,4 +63,4 @@ var VerifyWhatsAppWebhookRoute = Route{Method: http.MethodGet, Path: "/webhooks/
 var ReceiveWhatsAppWebhookRoute = Route{Method: http.MethodPost, Path: "/webhooks/whatsapp"}
 
 // ImplementedRoutes contiene sólo endpoints con handler y binario desplegable.
-var ImplementedRoutes = []Route{ListConversationsRoute, GetConversationRoute, SendReplyRoute, PrepareAttachmentsRoute, SendAttachmentRoute, UpdateContactRoute, MarkUnreadRoute, DeleteConversationRoute, StartMarkAllReadRoute, StartRecalculateUnreadRoute, CreateSubscriptionRoute, GetSendRoute, RetrySendRoute, ResolveSendRoute, GetActiveBulkRoute, GetBulkRoute, VerifyWhatsAppWebhookRoute, ReceiveWhatsAppWebhookRoute}
+var ImplementedRoutes = []Route{ListConversationsRoute, GetConversationRoute, SendReplyRoute, PrepareAttachmentsRoute, SendAttachmentRoute, UpdateContactRoute, MarkUnreadRoute, ReactivateAgentRoute, DeleteConversationRoute, StartMarkAllReadRoute, StartRecalculateUnreadRoute, CreateSubscriptionRoute, GetSendRoute, RetrySendRoute, ResolveSendRoute, GetActiveBulkRoute, GetBulkRoute, VerifyWhatsAppWebhookRoute, ReceiveWhatsAppWebhookRoute}
