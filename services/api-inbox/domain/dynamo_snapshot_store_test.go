@@ -92,6 +92,22 @@ func TestDynamoListSnapshotStoreCreateEnforcesThreeSlots(t *testing.T) {
 	}
 }
 
+func TestDynamoListSnapshotStoreCreateReleasesSinglePageSlot(t *testing.T) {
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	fake := newFakeSnapshotDynamo()
+	store, _ := NewDynamoListSnapshotStore(fake, "table", func() time.Time { return now })
+	store.newSessionID = func() (string, error) { return "session-1", nil }
+	items := []ConversationSummary{{Phone: "56912345678", UnreadCount: 1}}
+
+	page, err := store.Create(context.Background(), ListSnapshotCreate{OwnerID: "owner", QueryHash: "query", Cutoff: 9, Items: items})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if page.HasMore || len(page.Items) != 1 || fake.deletes != 1 {
+		t.Fatalf("page = %#v, deletes = %d", page, fake.deletes)
+	}
+}
+
 func TestDynamoListSnapshotStoreReadPageUsesFrozenChunks(t *testing.T) {
 	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
 	fake := newFakeSnapshotDynamo()

@@ -62,7 +62,13 @@ func (store *DynamoListSnapshotStore) Create(ctx context.Context, input ListSnap
 		}
 		if claimed {
 			end := min(ConversationListPageSize, len(input.Items))
-			return snapshotPage(sessionID, documents.meta, 1, input.Items[:end]), nil
+			page := snapshotPage(sessionID, documents.meta, 1, input.Items[:end])
+			if !page.HasMore {
+				if err := store.releaseSlot(ctx, sessionID, documents.meta); err != nil {
+					return ListSnapshotPage{}, err
+				}
+			}
+			return page, nil
 		}
 	}
 	return ListSnapshotPage{}, ErrSnapshotLimitReached
