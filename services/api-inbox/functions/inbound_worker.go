@@ -2,7 +2,9 @@ package functions
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"log"
 
 	"github.com/aws/aws-lambda-go/events"
 )
@@ -22,6 +24,8 @@ func ProcessInboundQueue(ctx context.Context, processor InboundMessageProcessor,
 			err = processor.Process(ctx, work.MessageID)
 		}
 		if err != nil || work.MessageID == "" {
+			fingerprint := sha256.Sum256([]byte(work.MessageID))
+			log.Printf("inbound processing failed messageFingerprint=%x: %v", fingerprint[:6], err)
 			result.BatchItemFailures = append(result.BatchItemFailures, events.SQSBatchItemFailure{ItemIdentifier: record.MessageId})
 		}
 	}
