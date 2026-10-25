@@ -231,6 +231,12 @@ func TestMetaProviderSendsLocationAndContacts(t *testing.T) {
 			}
 		} else if payload["type"] != "contacts" || len(payload["contacts"].([]any)) != 1 {
 			t.Fatalf("unexpected contacts payload %#v", payload)
+		} else {
+			contact := payload["contacts"].([]any)[0].(map[string]any)
+			name := contact["name"].(map[string]any)
+			if name["formatted_name"] != "Ana" || name["first_name"] != "Ana" {
+				t.Fatalf("unexpected contact name payload %#v", name)
+			}
 		}
 		return jsonHTTPResponse(http.StatusOK, `{"messages":[{"id":"wamid.rich"}]}`), nil
 	})}
@@ -240,6 +246,38 @@ func TestMetaProviderSendsLocationAndContacts(t *testing.T) {
 	}
 	if _, err := provider.SendRichMessage(context.Background(), "56912345678", MessageRichContent{Kind: "contacts", Contacts: []MessageContact{{Name: "Ana", Phone: "+56911111111", Email: "ana@example.com", Company: "Indomito"}}}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestMetaContactName(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		value     string
+		wantFirst string
+		wantError bool
+	}{
+		{name: "single name", value: "Ana", wantFirst: "Ana"},
+		{name: "full name", value: "  Ana Maria Perez  ", wantFirst: "Ana"},
+		{name: "empty name", value: "   ", wantError: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := metaContactName(test.value)
+			if test.wantError {
+				if err == nil {
+					t.Fatal("expected validation error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("metaContactName() error = %v", err)
+			}
+			if got["first_name"] != test.wantFirst || got["formatted_name"] != strings.TrimSpace(test.value) {
+				t.Fatalf("metaContactName() = %#v", got)
+			}
+		})
 	}
 }
 

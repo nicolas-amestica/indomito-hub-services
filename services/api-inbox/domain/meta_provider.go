@@ -194,8 +194,12 @@ func (p *MetaTextProvider) SendRichMessage(ctx context.Context, phone string, ri
 		}
 		contacts := make([]map[string]any, 0, len(rich.Contacts))
 		for _, contact := range rich.Contacts {
+			name, err := metaContactName(contact.Name)
+			if err != nil {
+				return "", err
+			}
 			item := map[string]any{
-				"name":   map[string]string{"formatted_name": contact.Name},
+				"name":   name,
 				"phones": []map[string]string{{"phone": contact.Phone, "type": "WORK"}},
 			}
 			if contact.Email != "" {
@@ -235,6 +239,18 @@ func (p *MetaTextProvider) SendRichMessage(ctx context.Context, phone string, ri
 		return "", errors.New("unsupported rich message type")
 	}
 	return p.sendMessagePayload(ctx, payload)
+}
+
+func metaContactName(value string) (map[string]string, error) {
+	formattedName := strings.TrimSpace(value)
+	parts := strings.Fields(formattedName)
+	if len(parts) == 0 {
+		return nil, errors.New("contact name is required")
+	}
+	return map[string]string{
+		"formatted_name": formattedName,
+		"first_name":     parts[0],
+	}, nil
 }
 
 func (p *MetaTextProvider) SendTextWithContext(ctx context.Context, phone, content, messageID string) (string, error) {
