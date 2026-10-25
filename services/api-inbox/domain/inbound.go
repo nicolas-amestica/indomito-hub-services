@@ -72,6 +72,7 @@ func (p *InboundProcessor) Process(ctx context.Context, messageID string) error 
 	if strings.TrimSpace(messageID) == "" {
 		return errors.New("inbound message id is required")
 	}
+	var lastConflict error
 	for attempt := 0; attempt < mutationMaxAttempts; attempt++ {
 		record, processed, err := p.readRecord(ctx, messageID)
 		if err != nil || processed {
@@ -140,8 +141,9 @@ func (p *InboundProcessor) Process(ctx context.Context, messageID string) error 
 		if !isTransactionConflict(err) {
 			return fmt.Errorf("materialize inbound message: %w", err)
 		}
+		lastConflict = err
 	}
-	return errors.New("materialize inbound message: concurrent update limit reached")
+	return fmt.Errorf("materialize inbound message: concurrent update limit reached: %w", lastConflict)
 }
 
 func (p *InboundProcessor) readRecord(ctx context.Context, messageID string) (inboundRecord, bool, error) {
