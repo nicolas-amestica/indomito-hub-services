@@ -28,16 +28,34 @@ type MessageAttachment struct {
 	Key         string  `json:"-" dynamodbav:"key,omitempty"`
 }
 
+// MessageReference preserves the message quoted by a contextual reply.
+type MessageReference struct {
+	ID                string      `json:"id" dynamodbav:"id"`
+	Type              MessageType `json:"type" dynamodbav:"type"`
+	Content           *string     `json:"content" dynamodbav:"content"`
+	WhatsAppMessageID string      `json:"whatsappMessageId" dynamodbav:"whatsappMessageId"`
+}
+
+type MessageReaction struct {
+	Emoji     string      `json:"emoji" dynamodbav:"emoji"`
+	Actor     MessageType `json:"actor" dynamodbav:"actor"`
+	UpdatedAt time.Time   `json:"updatedAt" dynamodbav:"updatedAt"`
+}
+
 // Message representa un mensaje persistido de una conversación.
 type Message struct {
-	ID                string              `json:"id" dynamodbav:"id"`
-	MessageSK         string              `json:"msgSk" dynamodbav:"sk"`
-	Phone             string              `json:"phone" dynamodbav:"phone"`
-	Type              MessageType         `json:"type" dynamodbav:"type"`
-	Content           *string             `json:"content" dynamodbav:"content"`
-	CreatedAt         time.Time           `json:"createdAt" dynamodbav:"createdAt"`
-	WhatsAppMessageID *string             `json:"whatsappMessageId" dynamodbav:"whatsappMessageId"`
-	DeliveryStatus    *DeliveryStatus     `json:"deliveryStatus" dynamodbav:"deliveryStatus"`
-	DeliveryError     *string             `json:"deliveryError" dynamodbav:"deliveryError"`
-	Attachments       []MessageAttachment `json:"attachments" dynamodbav:"attachments"`
+	ID                string               `json:"id" dynamodbav:"id"`
+	MessageSK         string               `json:"msgSk" dynamodbav:"sk"`
+	Phone             string               `json:"phone" dynamodbav:"phone"`
+	Type              MessageType          `json:"type" dynamodbav:"type"`
+	Content           *string              `json:"content" dynamodbav:"content"`
+	CreatedAt         time.Time            `json:"createdAt" dynamodbav:"createdAt"`
+	WhatsAppMessageID *string              `json:"whatsappMessageId" dynamodbav:"whatsappMessageId"`
+	DeliveryStatus    *DeliveryStatus      `json:"deliveryStatus" dynamodbav:"deliveryStatus"`
+	DeliveryError     *string              `json:"deliveryError" dynamodbav:"deliveryError"`
+	Attachments       []MessageAttachment  `json:"attachments" dynamodbav:"attachments"`
+	ReplyTo           *MessageReference    `json:"replyTo" dynamodbav:"replyTo,omitempty"`
+	Reactions         []MessageReaction    `json:"reactions" dynamodbav:"reactions"`
+	ReactionUpdatedAt map[string]time.Time `json:"-" dynamodbav:"reactionUpdatedAt,omitempty"`
+	Rich              *MessageRichContent  `json:"rich,omitempty" dynamodbav:"rich,omitempty"`
 }

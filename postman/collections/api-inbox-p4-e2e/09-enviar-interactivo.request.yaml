@@ -1,0 +1,38 @@
+$kind: http-request
+name: Enviar mensaje interactivo
+method: POST
+url: '{{base_url}}/conversaciones/:telefono/mensajes-enriquecidos'
+order: 9000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "clientMessageId": "{{rich_client_message_id}}",
+      "kind": "interactive",
+      "interactive": {
+        "kind": "button",
+        "body": "Selecciona una opción de prueba",
+        "footer": "Validación P4",
+        "button": "",
+        "options": [
+          {"id": "p4_yes", "title": "Confirmar", "description": ""},
+          {"id": "p4_no", "title": "Cancelar", "description": ""}
+        ]
+      }
+    }
+scripts:
+  - type: beforeRequest
+    language: text/javascript
+    code: |-
+      pm.collectionVariables.set("rich_client_message_id", pm.variables.replaceIn("{{$guid}}"));
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Interactivo aceptado o confirmado", () => pm.expect(pm.response.code).to.be.oneOf([200, 202]));
+      pm.test("Interactivo conserva idempotencia", () => pm.expect(pm.response.json().data.clientMessageId).to.eql(pm.collectionVariables.get("rich_client_message_id")));

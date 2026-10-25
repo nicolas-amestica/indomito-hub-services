@@ -31,6 +31,7 @@ type InboundMetaMessage struct {
 	MIMEType  string
 	SHA256    string
 	FileName  string
+	Rich      *MessageRichContent
 }
 
 // InboundMetaStatus is a delivery receipt emitted by WhatsApp Cloud API.
@@ -264,6 +265,32 @@ func DecodeInboundMetaMessages(raw []byte) ([]InboundMetaMessage, error) {
 						Image    struct{ ID, MIMEType, SHA256, Caption string }           `json:"image"`
 						Video    struct{ ID, MIMEType, SHA256, Caption string }           `json:"video"`
 						Document struct{ ID, MIMEType, SHA256, Filename, Caption string } `json:"document"`
+						Sticker  struct{ ID, MIMEType, SHA256 string }                    `json:"sticker"`
+						Location struct {
+							Latitude  float64 `json:"latitude"`
+							Longitude float64 `json:"longitude"`
+							Name      string  `json:"name"`
+							Address   string  `json:"address"`
+						} `json:"location"`
+						Contacts []struct {
+							Name struct {
+								FormattedName string `json:"formatted_name"`
+							} `json:"name"`
+							Phones []struct {
+								Phone string `json:"phone"`
+							} `json:"phones"`
+							Emails []struct {
+								Email string `json:"email"`
+							} `json:"emails"`
+							Org struct {
+								Company string `json:"company"`
+							} `json:"org"`
+						} `json:"contacts"`
+						Interactive struct {
+							Type        string                                  `json:"type"`
+							ButtonReply struct{ ID, Title string }              `json:"button_reply"`
+							ListReply   struct{ ID, Title, Description string } `json:"list_reply"`
+						} `json:"interactive"`
 					} `json:"messages"`
 				} `json:"value"`
 			} `json:"changes"`
@@ -279,7 +306,11 @@ func DecodeInboundMetaMessages(raw []byte) ([]InboundMetaMessage, error) {
 				if message.ID == "" || message.From == "" {
 					continue
 				}
+				if message.Type == "reaction" {
+					continue
+				}
 				mediaID, mimeType, checksum, fileName, text := "", "", "", "", message.Text.Body
+				var rich *MessageRichContent
 				switch message.Type {
 				case "audio":
 					mediaID, mimeType, checksum = message.Audio.ID, message.Audio.MIMEType, message.Audio.SHA256
@@ -289,8 +320,67 @@ func DecodeInboundMetaMessages(raw []byte) ([]InboundMetaMessage, error) {
 					mediaID, mimeType, checksum, text = message.Video.ID, message.Video.MIMEType, message.Video.SHA256, message.Video.Caption
 				case "document":
 					mediaID, mimeType, checksum, fileName, text = message.Document.ID, message.Document.MIMEType, message.Document.SHA256, message.Document.Filename, message.Document.Caption
+				case "sticker":
+					mediaID, mimeType, checksum = message.Sticker.ID, message.Sticker.MIMEType, message.Sticker.SHA256
+					rich = &MessageRichContent{Kind: "sticker"}
+				case "location":
+					rich = &MessageRichContent{Kind: "location", Location: &MessageLocation{Latitude: message.Location.Latitude, Longitude: message.Location.Longitude, Name: message.Location.Name, Address: message.Location.Address}}
+				case "contacts":
+					contacts := make([]MessageContact, 0, len(message.Contacts))
+					for _, contact := range message.Contacts {
+						phone, email := "", ""
+						if len(contact.Phones) > 0 {
+							phone = contact.Phones[0].Phone
+						}
+						if len(contact.Emails) > 0 {
+							email = contact.Emails[0].Email
+						}
+						contacts = append(contacts, MessageContact{Name: contact.Name.FormattedName, Phone: phone, Email: email, Company: contact.Org.Company})
+					}
+					rich = &MessageRichContent{Kind: "contacts", Contacts: contacts}
+				case "interactive":
+					reply := MessageInteractiveReply{Kind: message.Interactive.Type}
+					if message.Interactive.Type == "button_reply" {
+						reply.ID, reply.Title = message.Interactive.ButtonReply.ID, message.Interactive.ButtonReply.Title
+					} else {
+						reply.ID, reply.Title, reply.Description = message.Interactive.ListReply.ID, message.Interactive.ListReply.Title, message.Interactive.ListReply.Description
+					}
+					text = reply.Title
+					rich = &MessageRichContent{Kind: "interactive_reply", InteractiveReply: &reply}
 				}
-				result = append(result, InboundMetaMessage{MessageID: message.ID, Phone: message.From, Type: message.Type, Timestamp: message.Timestamp, Text: text, MediaID: mediaID, MIMEType: mimeType, SHA256: checksum, FileName: fileName})
+				result = append(result, InboundMetaMessage{MessageID: message.ID, Phone: message.From, Type: message.Type, Timestamp: message.Timestamp, Text: text, MediaID: mediaID, MIMEType: mimeType, SHA256: checksum, FileName: fileName, Rich: rich})
+			}
+		}
+	}
+	return result, nil
+}
+
+func DecodeInboundMetaReactions(raw []byte) ([]InboundMetaReaction, error) {
+	var envelope struct {
+		Entry []struct {
+			Changes []struct {
+				Value struct {
+					Messages []struct {
+						ID, From, Type, Timestamp string
+						Reaction                  struct {
+							MessageID string `json:"message_id"`
+							Emoji     string `json:"emoji"`
+						} `json:"reaction"`
+					} `json:"messages"`
+				} `json:"value"`
+			} `json:"changes"`
+		} `json:"entry"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return nil, err
+	}
+	result := []InboundMetaReaction{}
+	for _, entry := range envelope.Entry {
+		for _, change := range entry.Changes {
+			for _, message := range change.Value.Messages {
+				if message.Type == "reaction" && message.From != "" && message.Reaction.MessageID != "" {
+					result = append(result, InboundMetaReaction{Phone: message.From, MessageID: message.Reaction.MessageID, Emoji: message.Reaction.Emoji, EventID: message.ID, Timestamp: message.Timestamp})
+				}
 			}
 		}
 	}
@@ -311,6 +401,13 @@ func (s *WebhookService) Reserve(ctx context.Context, message InboundMetaMessage
 		if value != "" {
 			meta[key] = &types.AttributeValueMemberS{Value: value}
 		}
+	}
+	if message.Rich != nil {
+		encoded, marshalErr := attributevalue.Marshal(message.Rich)
+		if marshalErr != nil {
+			return fmt.Errorf("encode rich inbound message: %w", marshalErr)
+		}
+		meta["rich"] = encoded
 	}
 	shard := conversationShard(message.MessageID)
 	outbox := map[string]types.AttributeValue{

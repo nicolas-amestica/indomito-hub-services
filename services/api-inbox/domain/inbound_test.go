@@ -39,8 +39,8 @@ func TestInboundProcessorMaterializesNewConversationAtomically(t *testing.T) {
 	if err = processor.Process(context.Background(), "wamid.1"); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.writes) != 1 || len(fake.writes[0]) != 11 {
-		t.Fatalf("expected one eleven-item transaction, got %#v", fake.writes)
+	if len(fake.writes) != 1 || len(fake.writes[0]) != 12 {
+		t.Fatalf("expected one twelve-item transaction, got %#v", fake.writes)
 	}
 	for _, prefix := range []string{"CONV#56912345678", "LIST_VERSION#", "SEARCH_VERSION#", "WORK_DUE#OUTBOX#", "WORK_DUE#AGENT#"} {
 		assertMutationPutPK(t, fake.writes[0], prefix)
@@ -48,6 +48,23 @@ func TestInboundProcessorMaterializesNewConversationAtomically(t *testing.T) {
 	if !hasInboundMessage(fake.writes[0], "wamid.1") || !hasProcessedReservation(fake.writes[0]) || !hasActiveCountUpdate(fake.writes[0]) {
 		t.Fatal("transaction must include message, reservation completion and active counter")
 	}
+	expiresAt := time.Unix(1791980000, 0).UTC().Add(24 * time.Hour)
+	if !hasServiceWindowExpiry(fake.writes[0], expiresAt) {
+		t.Fatalf("conversation must expose service window expiry %s", expiresAt)
+	}
+}
+
+func hasServiceWindowExpiry(writes []types.TransactWriteItem, expected time.Time) bool {
+	for _, write := range writes {
+		if write.Put == nil {
+			continue
+		}
+		value, ok := write.Put.Item["serviceWindowExpiresAt"].(*types.AttributeValueMemberS)
+		if ok && value.Value == expected.Format(time.RFC3339Nano) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestInboundProcessorSkipsProcessedReservation(t *testing.T) {

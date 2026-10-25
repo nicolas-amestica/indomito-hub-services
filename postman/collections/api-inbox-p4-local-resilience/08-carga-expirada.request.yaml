@@ -1,0 +1,22 @@
+$kind: http-request
+name: Rechazar URL expirada
+method: PUT
+url: '{{expired_upload_url}}'
+order: 8000
+auth:
+  type: noauth
+headers:
+  - key: Content-Type
+    value: application/pdf
+  - key: x-amz-checksum-sha256
+    value: expected-checksum
+body:
+  type: file
+  content:
+    src: postman/fixtures/p4-media-fixture.bin
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("HTTP 410", () => pm.response.to.have.status(410));
+      pm.test("Expiracion explicita", () => pm.expect(pm.response.json().code).to.eql("INBOX_UPLOAD_EXPIRED"));

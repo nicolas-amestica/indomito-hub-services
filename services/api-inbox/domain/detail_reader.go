@@ -137,6 +137,7 @@ func readMessages(ctx context.Context, reader detailReader, tableName, phone, be
 	if err := attributevalue.UnmarshalListOfMaps(output.Items, &messages); err != nil {
 		return nil, false, "", fmt.Errorf("decode conversation messages: %w", err)
 	}
+	normalizeMessages(messages)
 	hasMore := len(messages) > pageSize
 	if hasMore {
 		messages = messages[:pageSize]
@@ -180,10 +181,22 @@ func readMessagesSince(ctx context.Context, reader detailReader, tableName, phon
 		if err := attributevalue.UnmarshalListOfMaps(output.Items, &page); err != nil {
 			return nil, fmt.Errorf("decode conversation delta: %w", err)
 		}
+		normalizeMessages(page)
 		messages = append(messages, page...)
 		if len(output.LastEvaluatedKey) == 0 {
 			return messages, nil
 		}
 		startKey = output.LastEvaluatedKey
+	}
+}
+
+func normalizeMessages(messages []Message) {
+	for index := range messages {
+		if messages[index].Attachments == nil {
+			messages[index].Attachments = []MessageAttachment{}
+		}
+		if messages[index].Reactions == nil {
+			messages[index].Reactions = []MessageReaction{}
+		}
 	}
 }

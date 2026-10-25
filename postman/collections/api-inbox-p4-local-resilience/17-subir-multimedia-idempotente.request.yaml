@@ -1,0 +1,21 @@
+$kind: http-request
+name: Subir multimedia idempotente
+method: PUT
+url: '{{idempotent_upload_url}}'
+order: 17000
+auth:
+  type: noauth
+headers:
+  - key: Content-Type
+    value: application/pdf
+  - key: x-amz-checksum-sha256
+    value: expected-checksum
+body:
+  type: file
+  content:
+    src: postman/fixtures/p4-media-fixture.bin
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Carga aceptada", () => pm.response.to.have.status(200));

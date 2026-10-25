@@ -1,0 +1,106 @@
+[
+  {
+    "media_path": "/absolute/path/image.jpg",
+    "media_name": "image.jpg",
+    "media_mime": "image/jpeg",
+    "media_size": "REPLACE_WITH_BYTES",
+    "media_checksum_sha256": "REPLACE_WITH_BASE64_SHA256",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "/absolute/path/image.png",
+    "media_name": "image.png",
+    "media_mime": "image/png",
+    "media_size": "REPLACE_WITH_BYTES",
+    "media_checksum_sha256": "REPLACE_WITH_BASE64_SHA256",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "/absolute/path/image.gif",
+    "media_name": "image.gif",
+    "media_mime": "image/gif",
+    "media_size": "REPLACE_WITH_BYTES",
+    "media_checksum_sha256": "REPLACE_WITH_BASE64_SHA256",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "/absolute/path/image.webp",
+    "media_name": "image.webp",
+    "media_mime": "image/webp",
+    "media_size": "REPLACE_WITH_BYTES",
+    "media_checksum_sha256": "REPLACE_WITH_BASE64_SHA256",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "/absolute/path/document.pdf",
+    "media_name": "document.pdf",
+    "media_mime": "application/pdf",
+    "media_size": "REPLACE_WITH_BYTES",
+    "media_checksum_sha256": "REPLACE_WITH_BASE64_SHA256",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "/absolute/path/audio.ogg",
+    "media_name": "audio.ogg",
+    "media_mime": "audio/ogg",
+    "media_size": "REPLACE_WITH_BYTES",
+    "media_checksum_sha256": "REPLACE_WITH_BASE64_SHA256",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "/absolute/path/audio.aac",
+    "media_name": "audio.aac",
+    "media_mime": "audio/aac",
+    "media_size": "REPLACE_WITH_BYTES",
+    "media_checksum_sha256": "REPLACE_WITH_BASE64_SHA256",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "/absolute/path/audio.m4a",
+    "media_name": "audio.m4a",
+    "media_mime": "audio/mp4",
+    "media_size": "REPLACE_WITH_BYTES",
+    "media_checksum_sha256": "REPLACE_WITH_BASE64_SHA256",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "/absolute/path/audio.mp3",
+    "media_name": "audio.mp3",
+    "media_mime": "audio/mpeg",
+    "media_size": "REPLACE_WITH_BYTES",
+    "media_checksum_sha256": "REPLACE_WITH_BASE64_SHA256",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "/absolute/path/audio.amr",
+    "media_name": "audio.amr",
+    "media_mime": "audio/amr",
+    "media_size": "REPLACE_WITH_BYTES",
+    "media_checksum_sha256": "REPLACE_WITH_BASE64_SHA256",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "/absolute/path/video.mp4",
+    "media_name": "video.mp4",
+    "media_mime": "video/mp4",
+    "media_size": "REPLACE_WITH_BYTES",
+    "media_checksum_sha256": "REPLACE_WITH_BASE64_SHA256",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "/absolute/path/sticker-static.webp",
+    "media_name": "sticker-static.webp",
+    "media_mime": "image/webp",
+    "media_size": "REPLACE_WITH_BYTES",
+    "media_checksum_sha256": "REPLACE_WITH_BASE64_SHA256",
+    "attachment_kind_property": ",\"kind\":\"sticker\""
+  },
+  {
+    "media_path": "/absolute/path/sticker-animated.webp",
+    "media_name": "sticker-animated.webp",
+    "media_mime": "image/webp",
+    "media_size": "REPLACE_WITH_BYTES",
+    "media_checksum_sha256": "REPLACE_WITH_BASE64_SHA256",
+    "attachment_kind_property": ",\"kind\":\"sticker\""
+  }
+]

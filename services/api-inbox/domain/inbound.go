@@ -23,16 +23,17 @@ type inboundDynamo interface {
 }
 
 type inboundRecord struct {
-	MessageID         string `dynamodbav:"messageId"`
-	Phone             string `dynamodbav:"phone"`
-	MessageType       string `dynamodbav:"messageType"`
-	ProviderTimestamp string `dynamodbav:"providerTimestamp"`
-	Text              string `dynamodbav:"text"`
-	State             string `dynamodbav:"state"`
-	MediaID           string `dynamodbav:"mediaId"`
-	MIMEType          string `dynamodbav:"mimeType"`
-	MediaSHA256       string `dynamodbav:"mediaSha256"`
-	FileName          string `dynamodbav:"fileName"`
+	MessageID         string              `dynamodbav:"messageId"`
+	Phone             string              `dynamodbav:"phone"`
+	MessageType       string              `dynamodbav:"messageType"`
+	ProviderTimestamp string              `dynamodbav:"providerTimestamp"`
+	Text              string              `dynamodbav:"text"`
+	State             string              `dynamodbav:"state"`
+	MediaID           string              `dynamodbav:"mediaId"`
+	MIMEType          string              `dynamodbav:"mimeType"`
+	MediaSHA256       string              `dynamodbav:"mediaSha256"`
+	FileName          string              `dynamodbav:"fileName"`
+	Rich              *MessageRichContent `dynamodbav:"rich,omitempty"`
 }
 
 type InboundMediaStore interface {
@@ -101,6 +102,8 @@ func (p *InboundProcessor) Process(ctx context.Context, messageID string) error 
 		}
 		summary.UnreadCount++
 		summary.LastMessageAt, summary.UpdatedAt, summary.LastMessagePreview = &occurredAt, &occurredAt, &preview
+		serviceWindowExpiresAt := occurredAt.Add(24 * time.Hour)
+		summary.ServiceWindowExpiresAt = &serviceWindowExpiresAt
 		summary.Generation++
 		mutation := &ConversationMutationService{client: p.client, tableName: p.tableName, now: p.now, newID: func(at time.Time) (string, error) { return ulid.Make().String(), nil }}
 		writes, err := mutation.visibleWrites(summary, "upsert", listSequence, detailSequence, "message.created", occurredAt)
@@ -117,7 +120,7 @@ func (p *InboundProcessor) Process(ctx context.Context, messageID string) error 
 			return fmt.Errorf("create inbound message id: %w", err)
 		}
 		content := record.Text
-		message := Message{ID: messageULID.String(), MessageSK: "MSG#" + messageULID.String(), Phone: record.Phone, Type: MessageTypeCustomer, Content: &content, CreatedAt: occurredAt, WhatsAppMessageID: &record.MessageID, Attachments: attachments}
+		message := Message{ID: messageULID.String(), MessageSK: "MSG#" + messageULID.String(), Phone: record.Phone, Type: MessageTypeCustomer, Content: &content, CreatedAt: occurredAt, WhatsAppMessageID: &record.MessageID, Attachments: attachments, Reactions: []MessageReaction{}, Rich: record.Rich}
 		messageItem, err := attributevalue.MarshalMap(message)
 		if err != nil {
 			return fmt.Errorf("encode inbound message: %w", err)
@@ -126,6 +129,7 @@ func (p *InboundProcessor) Process(ctx context.Context, messageID string) error 
 		messageItem["expiresAt"] = &types.AttributeValueMemberN{Value: fmt.Sprint(p.now().UTC().Add(90 * 24 * time.Hour).Unix())}
 		writes = append(writes,
 			types.TransactWriteItem{Put: &types.Put{TableName: &p.tableName, Item: messageItem, ConditionExpression: aws.String("attribute_not_exists(pk)")}},
+			types.TransactWriteItem{Put: &types.Put{TableName: &p.tableName, Item: map[string]types.AttributeValue{"pk": &types.AttributeValueMemberS{Value: "WAMID#" + record.MessageID}, "sk": &types.AttributeValueMemberS{Value: "META"}, "phone": &types.AttributeValueMemberS{Value: record.Phone}, "msgSk": &types.AttributeValueMemberS{Value: message.MessageSK}, "expiresAt": &types.AttributeValueMemberN{Value: fmt.Sprint(p.now().UTC().Add(90 * 24 * time.Hour).Unix())}}, ConditionExpression: aws.String("attribute_not_exists(pk)")}},
 			types.TransactWriteItem{Update: &types.Update{TableName: &p.tableName, Key: snapshotKey("META_MSG#"+messageID, "META"), UpdateExpression: aws.String("SET #state=:processed, processedAt=:now"), ConditionExpression: aws.String("#state=:reserved"), ExpressionAttributeNames: map[string]string{"#state": "state"}, ExpressionAttributeValues: map[string]types.AttributeValue{":processed": &types.AttributeValueMemberS{Value: "processed"}, ":reserved": &types.AttributeValueMemberS{Value: "reserved"}, ":now": &types.AttributeValueMemberS{Value: p.now().UTC().Format(time.RFC3339Nano)}}}},
 			types.TransactWriteItem{Put: &types.Put{TableName: &p.tableName, Item: map[string]types.AttributeValue{"pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("WORK_DUE#AGENT#%02X", conversationShard(record.Phone))}, "sk": &types.AttributeValueMemberS{Value: p.now().UTC().Format(time.RFC3339Nano) + "#" + messageID}, "eventId": &types.AttributeValueMemberS{Value: "agent-" + messageID}, "eventType": &types.AttributeValueMemberS{Value: "agent.requested"}, "messageId": &types.AttributeValueMemberS{Value: messageID}, "phone": &types.AttributeValueMemberS{Value: record.Phone}, "state": &types.AttributeValueMemberS{Value: "pending"}, "nextAttemptAt": &types.AttributeValueMemberS{Value: p.now().UTC().Format(time.RFC3339Nano)}, "expiresAt": &types.AttributeValueMemberN{Value: fmt.Sprint(p.now().UTC().Add(14 * 24 * time.Hour).Unix())}}, ConditionExpression: aws.String("attribute_not_exists(pk)")}},
 		)

@@ -1,0 +1,23 @@
+$kind: http-request
+name: Deduplicar envio repetido
+method: POST
+url: '{{base_url}}/conversaciones/:telefono/respuestas'
+order: 10000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {"clientMessageId":"{{duplicate_client_id}}","text":"idempotencia local"}
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Duplicado confirmado", () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      pm.test("Mismo WAMID", () => pm.expect(body.data.whatsappMessageId).to.eql(pm.collectionVariables.get("first_wamid")));
+      pm.test("Deduplicacion explicita", () => pm.expect(body.deduplicated).to.eql(true));

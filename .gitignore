@@ -66,3 +66,7 @@ infra/aws/*_env.auto.tfvars
 **/**/.serverless
 
 .history
+
+# Postman local con secretos o rutas de fixtures
+postman/environments/*.local.environment.yaml
+postman/data/*.local.json

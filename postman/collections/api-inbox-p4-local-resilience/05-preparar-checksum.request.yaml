@@ -1,0 +1,21 @@
+$kind: http-request
+name: Preparar carga para checksum
+method: POST
+url: '{{base_url}}/conversaciones/:telefono/adjuntos/preparar'
+order: 5000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {"batchId":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","files":[{"clientMessageId":"{{media_client_id}}","fileName":"checksum.pdf","mimeType":"application/pdf","size":23,"checksumSha256":"expected-checksum"}]}
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Reserva creada", () => pm.response.to.have.status(200));
+      pm.collectionVariables.set("checksum_upload_url", pm.response.json().data.uploads[0].uploadUrl);

@@ -50,10 +50,11 @@ type runtimeConfig struct {
 }
 
 type whatsAppConfig struct {
-	AccessToken   string `json:"accessToken"`
-	PhoneNumberID string `json:"phoneNumberId"`
-	VerifyToken   string `json:"verifyToken"`
-	AppSecret     string `json:"appSecret"`
+	AccessToken       string `json:"accessToken"`
+	PhoneNumberID     string `json:"phoneNumberId"`
+	VerifyToken       string `json:"verifyToken"`
+	AppSecret         string `json:"appSecret"`
+	BusinessAccountID string `json:"businessAccountId"`
 }
 
 type cursorSecrets struct {
@@ -75,12 +76,17 @@ type App struct {
 	Bulk         BulkOperator
 	Subscription SubscriptionCreator
 	Webhook      WebhookReceiver
+	Templates    TemplateLister
+	TemplateSend TemplateSender
+	Reaction     ReactionSender
 	VerifyToken  string
 	Port         string
 }
 
 type InboxSender interface {
 	TextSender
+	TemplateSender
+	RichMessageSender
 	SendManager
 }
 
@@ -185,7 +191,18 @@ func GetApp(ctx context.Context) (*App, error) {
 			appError = err
 			return
 		}
-		appInstance = &App{List: service, Detail: detail, Send: sender, Contact: contact, Attachment: attachments, Mutation: mutation, Bulk: bulk, Subscription: subscription, Webhook: webhook, VerifyToken: whatsApp.VerifyToken, Port: base.Port}
+		reaction, err := domain.NewReactionService(client, tableName, provider, nil)
+		if err != nil {
+			appError = err
+			return
+		}
+		catalog := domain.NewMetaTemplateCatalog(nil, whatsApp.BusinessAccountID, whatsApp.AccessToken)
+		templateSend, err := domain.NewTemplateService(catalog, sender)
+		if err != nil {
+			appError = err
+			return
+		}
+		appInstance = &App{List: service, Detail: detail, Send: sender, Contact: contact, Attachment: attachments, Mutation: mutation, Bulk: bulk, Subscription: subscription, Webhook: webhook, Templates: catalog, TemplateSend: templateSend, Reaction: reaction, VerifyToken: whatsApp.VerifyToken, Port: base.Port}
 	})
 	if appError != nil {
 		// El detalle se registra solo en CloudWatch; la respuesta HTTP conserva el

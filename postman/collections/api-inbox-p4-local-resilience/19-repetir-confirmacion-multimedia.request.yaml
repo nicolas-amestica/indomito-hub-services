@@ -1,0 +1,23 @@
+$kind: http-request
+name: Deduplicar confirmacion multimedia
+method: POST
+url: '{{base_url}}/conversaciones/:telefono/adjuntos'
+order: 19000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {"clientMessageId":"66666666-6666-4666-8666-666666666666","uploadId":"{{idempotent_upload_id}}","key":"mock/idempotent.pdf","fileName":"idempotent.pdf","mimeType":"application/pdf","size":23,"checksumSha256":"expected-checksum"}
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Confirmacion repetida aceptada", () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      pm.test("WAMID multimedia estable", () => pm.expect(body.data.whatsappMessageId).to.eql(pm.collectionVariables.get("idempotent_media_wamid")));
+      pm.test("Multimedia deduplicada", () => pm.expect(body.deduplicated).to.eql(true));

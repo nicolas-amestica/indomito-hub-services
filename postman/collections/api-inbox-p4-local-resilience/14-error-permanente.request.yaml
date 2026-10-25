@@ -1,0 +1,23 @@
+$kind: http-request
+name: Distinguir error permanente de Meta
+method: POST
+url: '{{base_url}}/conversaciones/:telefono/respuestas'
+order: 14000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: X-P4-Scenario
+    value: permanent-meta
+body:
+  type: json
+  content: |-
+    {"clientMessageId":"55555555-5555-4555-8555-555555555555","text":"fallo permanente local"}
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("HTTP 502", () => pm.response.to.have.status(502));
+      pm.test("Fallo no reintentable", () => pm.expect(pm.response.json().retryable).to.eql(false));

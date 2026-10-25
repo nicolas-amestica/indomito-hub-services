@@ -1,0 +1,23 @@
+$kind: http-request
+name: Crear reserva multimedia idempotente
+method: POST
+url: '{{base_url}}/conversaciones/:telefono/adjuntos/preparar'
+order: 15000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {"batchId":"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee","files":[{"clientMessageId":"66666666-6666-4666-8666-666666666666","fileName":"idempotent.pdf","mimeType":"application/pdf","size":23,"checksumSha256":"expected-checksum"}]}
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Reserva multimedia creada", () => pm.response.to.have.status(200));
+      const upload = pm.response.json().data.uploads[0];
+      pm.collectionVariables.set("idempotent_upload_id", upload.uploadId);
+      pm.collectionVariables.set("idempotent_upload_url", upload.uploadUrl);

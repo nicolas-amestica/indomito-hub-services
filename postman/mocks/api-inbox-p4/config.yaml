@@ -1,0 +1,10 @@
+version: 1
+name: API Inbox P4 local harness
+slug: api-inbox-p4-local
+protocol: http
+port: 4517
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

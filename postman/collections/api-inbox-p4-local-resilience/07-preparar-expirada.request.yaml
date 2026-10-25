@@ -1,0 +1,23 @@
+$kind: http-request
+name: Preparar carga expirada
+method: POST
+url: '{{base_url}}/conversaciones/:telefono/adjuntos/preparar'
+order: 7000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: X-P4-Scenario
+    value: expired-upload
+body:
+  type: json
+  content: |-
+    {"batchId":"dddddddd-dddd-4ddd-8ddd-dddddddddddd","files":[{"clientMessageId":"44444444-4444-4444-8444-444444444444","fileName":"expired.pdf","mimeType":"application/pdf","size":23,"checksumSha256":"expected-checksum"}]}
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Reserva creada", () => pm.response.to.have.status(200));
+      pm.collectionVariables.set("expired_upload_url", pm.response.json().data.uploads[0].uploadUrl);

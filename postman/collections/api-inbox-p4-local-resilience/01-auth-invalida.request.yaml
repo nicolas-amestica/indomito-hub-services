@@ -1,0 +1,13 @@
+$kind: http-request
+name: Rechazar autenticacion invalida
+method: GET
+url: '{{base_url}}/conversaciones'
+order: 1000
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("HTTP 401", () => pm.response.to.have.status(401));
+      pm.test("Error no filtra credenciales", () => pm.expect(pm.response.text()).not.to.include("local-test-token"));

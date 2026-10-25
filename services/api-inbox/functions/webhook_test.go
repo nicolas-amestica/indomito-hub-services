@@ -13,6 +13,12 @@ type webhookReceiverFake struct {
 	validSignature bool
 	reserved       []domain.InboundMetaMessage
 	statuses       []domain.InboundMetaStatus
+	reactions      []domain.InboundMetaReaction
+}
+
+func (f *webhookReceiverFake) ApplyReaction(_ context.Context, reaction domain.InboundMetaReaction) error {
+	f.reactions = append(f.reactions, reaction)
+	return nil
 }
 
 func (f *webhookReceiverFake) ApplyStatus(_ context.Context, status domain.InboundMetaStatus) error {

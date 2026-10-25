@@ -25,7 +25,7 @@ type prepareAttachmentsRequest struct {
 	Files   []domain.AttachmentPreparationItem `json:"files"`
 }
 
-var outgoingMIMEs = map[string]bool{"application/pdf": true, "image/jpeg": true, "image/png": true, "image/gif": true, "image/webp": true, "audio/ogg": true, "audio/webm": true}
+var outgoingMIMEs = map[string]bool{"application/pdf": true, "image/jpeg": true, "image/png": true, "image/gif": true, "image/webp": true, "audio/ogg": true, "audio/aac": true, "audio/mp4": true, "audio/mpeg": true, "audio/amr": true, "video/mp4": true}
 
 func PrepareAttachments(ctx context.Context, service AttachmentPreparer, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	identity, err := lambdautil.IdentityFromContext(request)

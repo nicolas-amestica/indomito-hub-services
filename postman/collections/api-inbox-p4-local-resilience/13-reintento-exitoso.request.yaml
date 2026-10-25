@@ -1,0 +1,25 @@
+$kind: http-request
+name: Confirmar reintento exitoso
+method: POST
+url: '{{base_url}}/conversaciones/:telefono/respuestas'
+order: 13000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: X-P4-Scenario
+    value: transient-meta
+body:
+  type: json
+  content: |-
+    {"clientMessageId":"{{transient_client_id}}","text":"reintento local"}
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Tercer intento confirmado", () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      pm.test("Idempotencia conservada", () => pm.expect(body.data.clientMessageId).to.eql(pm.collectionVariables.get("transient_client_id")));
+      pm.test("Reintentos registrados", () => pm.expect(body.data.retryCount).to.eql(3));

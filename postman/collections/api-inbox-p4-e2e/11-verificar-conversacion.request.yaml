@@ -1,0 +1,17 @@
+$kind: http-request
+name: Verificar conversación
+method: GET
+url: '{{base_url}}/conversaciones/:telefono'
+order: 11000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Conversación legible después de los envíos", () => pm.response.to.have.status(200));
+      pm.test("Historial contiene mensajes", () => {
+        const data = pm.response.json().data;
+        pm.expect(data.messages).to.be.an("array").and.not.empty;
+      });

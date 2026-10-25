@@ -1,0 +1,21 @@
+$kind: http-request
+name: Rechazar MIME no soportado
+method: POST
+url: '{{base_url}}/conversaciones/:telefono/adjuntos/preparar'
+order: 3000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {"batchId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","files":[{"clientMessageId":"{{media_client_id}}","fileName":"payload.exe","mimeType":"application/x-msdownload","size":23,"checksumSha256":"invalid"}]}
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("HTTP 415", () => pm.response.to.have.status(415));
+      pm.test("MIME rechazado", () => pm.expect(pm.response.json().code).to.eql("INBOX_UNSUPPORTED_MEDIA_TYPE"));

@@ -1,0 +1,47 @@
+$kind: http-request
+name: Preparar multimedia
+method: POST
+url: '{{base_url}}/conversaciones/:telefono/adjuntos/preparar'
+order: 3000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "batchId": "{{media_batch_id}}",
+      "files": [{
+        "clientMessageId": "{{media_client_message_id}}",
+        "fileName": "{{media_name}}",
+        "mimeType": "{{media_mime}}",
+        "size": {{media_size}},
+        "checksumSha256": "{{media_checksum_sha256}}"
+      }]
+    }
+scripts:
+  - type: beforeRequest
+    language: text/javascript
+    code: |-
+      pm.collectionVariables.set("media_batch_id", pm.variables.replaceIn("{{$guid}}"));
+      pm.collectionVariables.set("media_client_message_id", pm.variables.replaceIn("{{$guid}}"));
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Reserva multimedia creada", () => pm.response.to.have.status(200));
+      const upload = pm.response.json().data.uploads[0];
+      pm.test("Reserva corresponde al archivo", () => {
+        pm.expect(upload.clientMessageId).to.eql(pm.collectionVariables.get("media_client_message_id"));
+        pm.expect(upload.method).to.eql("PUT");
+        const localHarness = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(pm.variables.get("base_url"));
+        pm.expect(upload.uploadUrl).to.match(localHarness ? /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\// : /^https:\/\//);
+      });
+      pm.collectionVariables.set("media_upload_id", upload.uploadId);
+      pm.collectionVariables.set("media_key", upload.key);
+      pm.collectionVariables.set("media_upload_url", upload.uploadUrl);
+      pm.collectionVariables.set("media_upload_content_type", upload.requiredHeaders["Content-Type"]);
+      pm.collectionVariables.set("media_upload_checksum", upload.requiredHeaders["x-amz-checksum-sha256"]);
+      pm.collectionVariables.set("media_upload_meta_id", upload.requiredHeaders["x-amz-meta-upload-id"]);

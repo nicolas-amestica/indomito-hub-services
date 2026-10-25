@@ -30,6 +30,7 @@ var (
 	ErrSendNotRetryable   = errors.New("send is not retryable")
 	ErrSendRetryExhausted = errors.New("send retry is exhausted")
 	ErrSendNotResolvable  = errors.New("send is not resolvable")
+	ErrReplyTargetInvalid = errors.New("contextual reply target is invalid")
 )
 
 type SendAttachment struct {
@@ -37,6 +38,12 @@ type SendAttachment struct {
 	MIMEType string `json:"mimeType" dynamodbav:"mimeType"`
 	Size     int64  `json:"size" dynamodbav:"size"`
 	Key      string `json:"-" dynamodbav:"key,omitempty"`
+}
+
+type SendTemplate struct {
+	Name       string   `json:"name" dynamodbav:"name"`
+	Language   string   `json:"language" dynamodbav:"language"`
+	Parameters []string `json:"parameters" dynamodbav:"parameters"`
 }
 
 type SendResult struct {
@@ -71,20 +78,32 @@ type SendReservation struct {
 	Attachment      *SendAttachment
 	Now             time.Time
 	Actor           MessageType
+	ReplyTo         *MessageReference
+	Template        *SendTemplate
+	Rich            *MessageRichContent
 }
 
 type SendRepository interface {
 	LastCustomerMessageAt(context.Context, string) (*time.Time, error)
+	MessageReference(context.Context, string, string) (*MessageReference, error)
 	Reserve(context.Context, SendReservation) (SendState, bool, error)
 	MarkProviderPending(context.Context, string, string, time.Time) (SendState, error)
 	Commit(context.Context, string, string, string, time.Time) (SendState, error)
 	Fail(context.Context, string, string, SendStateName, string, time.Time) (SendState, error)
 	Owned(context.Context, string, string) (SendState, error)
-	ClaimRetry(context.Context, string, string, time.Time) (SendState, string, error)
+	ClaimRetry(context.Context, string, string, time.Time) (SendState, string, *MessageReference, *SendTemplate, *MessageRichContent, error)
 }
 
 type TextProvider interface {
 	SendText(context.Context, string, string) (string, error)
+}
+
+type contextualTextProvider interface {
+	SendTextWithContext(context.Context, string, string, string) (string, error)
+}
+
+type templateProvider interface {
+	SendTemplate(context.Context, string, SendTemplate) (string, error)
 }
 
 type mediaProvider interface {
@@ -120,11 +139,49 @@ func NewSendService(repository SendRepository, provider TextProvider, now func()
 }
 
 func (s *SendService) SendText(ctx context.Context, ownerID, phone, clientMessageID, content string) (SendState, error) {
-	return s.sendText(ctx, ownerID, phone, clientMessageID, content, MessageTypeTeam)
+	return s.SendTeamText(ctx, ownerID, phone, clientMessageID, content, "")
+}
+
+func (s *SendService) SendTeamText(ctx context.Context, ownerID, phone, clientMessageID, content, replyToMessageID string) (SendState, error) {
+	var replyTo *MessageReference
+	var err error
+	if replyToMessageID != "" {
+		replyTo, err = s.repository.MessageReference(ctx, phone, replyToMessageID)
+		if err != nil || replyTo == nil || replyTo.WhatsAppMessageID == "" {
+			return SendState{}, ErrReplyTargetInvalid
+		}
+	}
+	return s.sendText(ctx, ownerID, phone, clientMessageID, content, MessageTypeTeam, replyTo)
 }
 
 func (s *SendService) SendAgentText(ctx context.Context, phone, clientMessageID, content string) (SendState, error) {
-	return s.sendText(ctx, "agent", phone, clientMessageID, content, MessageTypeAIAgent)
+	return s.sendText(ctx, "agent", phone, clientMessageID, content, MessageTypeAIAgent, nil)
+}
+
+func (s *SendService) SendTemplate(ctx context.Context, ownerID, phone, clientMessageID string, template SendTemplate) (SendState, error) {
+	provider, ok := s.provider.(templateProvider)
+	if !ok {
+		return SendState{}, errors.New("template provider is unavailable")
+	}
+	now := s.now().UTC()
+	digest := sha256.Sum256([]byte(phone + "\x00template\x00" + template.Name + "\x00" + template.Language + "\x00" + strings.Join(template.Parameters, "\x00")))
+	preview := "[Plantilla] " + template.Name
+	state, created, err := s.repository.Reserve(ctx, SendReservation{OwnerID: ownerID, Phone: phone, ClientMessageID: clientMessageID, RequestHash: hex.EncodeToString(digest[:]), Content: preview, Now: now, Actor: MessageTypeTeam, Template: &template})
+	if err != nil || !created {
+		return state, err
+	}
+	state, err = s.repository.MarkProviderPending(ctx, ownerID, clientMessageID, now)
+	if err != nil {
+		return state, err
+	}
+	wamid, providerErr := provider.SendTemplate(ctx, phone, template)
+	if providerErr != nil {
+		return s.failProviderSend(ctx, ownerID, clientMessageID, state, providerErr)
+	}
+	if wamid == "" {
+		return s.repository.Fail(ctx, ownerID, clientMessageID, SendUncertain, "El proveedor no confirmo el identificador", s.now().UTC())
+	}
+	return s.repository.Commit(ctx, ownerID, clientMessageID, wamid, s.now().UTC())
 }
 
 // MarkAgentReadAndTyping delegates the inbound read receipt and typing signal to
@@ -175,7 +232,7 @@ func (s *SendService) SendAgentMedia(ctx context.Context, phone, clientMessageID
 	return s.repository.Commit(ctx, "agent", clientMessageID, wamid, s.now().UTC())
 }
 
-func (s *SendService) sendText(ctx context.Context, ownerID, phone, clientMessageID, content string, actor MessageType) (SendState, error) {
+func (s *SendService) sendText(ctx context.Context, ownerID, phone, clientMessageID, content string, actor MessageType, replyTo *MessageReference) (SendState, error) {
 	content = strings.TrimSpace(content)
 	now := s.now().UTC()
 	last, err := s.repository.LastCustomerMessageAt(ctx, phone)
@@ -185,8 +242,12 @@ func (s *SendService) sendText(ctx context.Context, ownerID, phone, clientMessag
 	if last == nil || now.Sub(last.UTC()) < 0 || now.Sub(last.UTC()) >= 24*time.Hour {
 		return SendState{}, ErrServiceWindow
 	}
-	hash := sha256.Sum256([]byte(phone + "\x00text\x00" + content))
-	state, created, err := s.repository.Reserve(ctx, SendReservation{OwnerID: ownerID, Phone: phone, ClientMessageID: clientMessageID, RequestHash: hex.EncodeToString(hash[:]), Content: content, Now: now, Actor: actor})
+	replyWAMID := ""
+	if replyTo != nil {
+		replyWAMID = replyTo.WhatsAppMessageID
+	}
+	hash := sha256.Sum256([]byte(phone + "\x00text\x00" + content + "\x00reply\x00" + replyWAMID))
+	state, created, err := s.repository.Reserve(ctx, SendReservation{OwnerID: ownerID, Phone: phone, ClientMessageID: clientMessageID, RequestHash: hex.EncodeToString(hash[:]), Content: content, Now: now, Actor: actor, ReplyTo: replyTo})
 	if err != nil || !created {
 		return state, err
 	}
@@ -194,7 +255,7 @@ func (s *SendService) sendText(ctx context.Context, ownerID, phone, clientMessag
 	if err != nil {
 		return state, err
 	}
-	wamid, providerErr := s.provider.SendText(ctx, phone, content)
+	wamid, providerErr := s.sendProviderText(ctx, phone, content, replyTo)
 	if providerErr != nil {
 		name, message := SendFailed, "El proveedor rechazo el envio"
 		var classified *ProviderError
@@ -221,16 +282,63 @@ func (s *SendService) sendText(ctx context.Context, ownerID, phone, clientMessag
 	return s.repository.Commit(ctx, ownerID, clientMessageID, wamid, s.now().UTC())
 }
 
+func (s *SendService) sendProviderText(ctx context.Context, phone, content string, replyTo *MessageReference) (string, error) {
+	if replyTo == nil {
+		return s.provider.SendText(ctx, phone, content)
+	}
+	provider, ok := s.provider.(contextualTextProvider)
+	if !ok {
+		return "", errors.New("contextual text provider is unavailable")
+	}
+	return provider.SendTextWithContext(ctx, phone, content, replyTo.WhatsAppMessageID)
+}
+
+func (s *SendService) failProviderSend(ctx context.Context, ownerID, clientMessageID string, state SendState, providerErr error) (SendState, error) {
+	name, message := SendFailed, "El proveedor rechazo el envio"
+	var classified *ProviderError
+	if errors.As(providerErr, &classified) {
+		if classified.TransmissionPossible {
+			name, message = SendUncertain, "No fue posible confirmar la entrega"
+		} else if classified.Retryable {
+			name, message = SendFailedRetryable, "El envio puede reintentarse"
+		}
+	}
+	failed, persistErr := s.repository.Fail(ctx, ownerID, clientMessageID, name, message, s.now().UTC())
+	if persistErr != nil {
+		return state, persistErr
+	}
+	if name == SendUncertain {
+		return failed, nil
+	}
+	return failed, ErrProviderRejected
+}
+
 func (s *SendService) Get(ctx context.Context, ownerID, id string) (SendState, error) {
 	return s.repository.Owned(ctx, ownerID, id)
 }
 
 func (s *SendService) Retry(ctx context.Context, ownerID, id string) (SendState, error) {
-	state, content, err := s.repository.ClaimRetry(ctx, ownerID, id, s.now().UTC())
+	state, content, replyTo, template, rich, err := s.repository.ClaimRetry(ctx, ownerID, id, s.now().UTC())
 	if err != nil {
 		return SendState{}, err
 	}
-	wamid, providerErr := s.provider.SendText(ctx, state.Phone, content)
+	var wamid string
+	var providerErr error
+	if rich != nil {
+		provider, ok := s.provider.(richMessageProvider)
+		if !ok {
+			return state, errors.New("rich message provider is unavailable")
+		}
+		wamid, providerErr = provider.SendRichMessage(ctx, state.Phone, *rich)
+	} else if template != nil {
+		provider, ok := s.provider.(templateProvider)
+		if !ok {
+			return state, errors.New("template provider is unavailable")
+		}
+		wamid, providerErr = provider.SendTemplate(ctx, state.Phone, *template)
+	} else {
+		wamid, providerErr = s.sendProviderText(ctx, state.Phone, content, replyTo)
+	}
 	if providerErr != nil {
 		name, message := SendFailed, "El proveedor rechazo el envio"
 		var classified *ProviderError

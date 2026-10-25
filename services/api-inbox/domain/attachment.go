@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -72,6 +73,9 @@ type attachmentStorage interface {
 type MediaProvider interface {
 	SendMedia(context.Context, string, string, string, string, []byte) (string, error)
 }
+type StickerProvider interface {
+	SendSticker(context.Context, string, string, string, []byte) (string, error)
+}
 type AttachmentService struct {
 	db            attachmentDynamo
 	presigner     attachmentPresigner
@@ -94,6 +98,14 @@ func NewAttachmentService(db attachmentDynamo, presigner attachmentPresigner, st
 }
 
 func (s *AttachmentService) Send(ctx context.Context, owner, phone, clientMessageID, uploadID, key, caption string) (SendState, error) {
+	return s.send(ctx, owner, phone, clientMessageID, uploadID, key, caption, false)
+}
+
+func (s *AttachmentService) SendSticker(ctx context.Context, owner, phone, clientMessageID, uploadID, key string) (SendState, error) {
+	return s.send(ctx, owner, phone, clientMessageID, uploadID, key, "", true)
+}
+
+func (s *AttachmentService) send(ctx context.Context, owner, phone, clientMessageID, uploadID, key, caption string, sticker bool) (SendState, error) {
 	now := s.now().UTC()
 	last, err := s.repository.LastCustomerMessageAt(ctx, phone)
 	if err != nil {
@@ -108,6 +120,9 @@ func (s *AttachmentService) Send(ctx context.Context, owner, phone, clientMessag
 	}
 	var record uploadRecord
 	if attributevalue.UnmarshalMap(out.Item, &record) != nil || record.OwnerID != owner || record.Phone != phone || record.UploadID != uploadID || record.Key != key || record.State != "reserved" || !now.Before(record.ValidUntil) {
+		return SendState{}, ErrUploadInvalid
+	}
+	if sticker && (record.MIMEType != "image/webp" || record.Size > 500*1024) {
 		return SendState{}, ErrUploadInvalid
 	}
 	head, err := s.storage.HeadObject(ctx, &s3.HeadObjectInput{Bucket: &s.bucket, Key: &key})
@@ -127,13 +142,21 @@ func (s *AttachmentService) Send(ctx context.Context, owner, phone, clientMessag
 	if base64.StdEncoding.EncodeToString(digest[:]) != record.ChecksumSHA256 {
 		return SendState{}, ErrUploadInvalid
 	}
+	if sticker && record.Size > stickerMaximumSize(data) {
+		return SendState{}, ErrUploadInvalid
+	}
 	preview := caption
 	if preview == "" {
 		preview = record.FileName
 	}
-	hash := sha256.Sum256([]byte(phone + "\x00attachment\x00" + uploadID + "\x00" + record.ChecksumSHA256 + "\x00" + caption))
+	kind := "attachment"
+	var rich *MessageRichContent
+	if sticker {
+		kind, rich = "sticker", &MessageRichContent{Kind: "sticker"}
+	}
+	hash := sha256.Sum256([]byte(phone + "\x00" + kind + "\x00" + uploadID + "\x00" + record.ChecksumSHA256 + "\x00" + caption))
 	attachment := &SendAttachment{FileName: record.FileName, MIMEType: record.MIMEType, Size: record.Size, Key: key}
-	state, created, err := s.repository.Reserve(ctx, SendReservation{OwnerID: owner, Phone: phone, ClientMessageID: clientMessageID, RequestHash: fmt.Sprintf("%x", hash[:]), Content: preview, Attachment: attachment, Now: now})
+	state, created, err := s.repository.Reserve(ctx, SendReservation{OwnerID: owner, Phone: phone, ClientMessageID: clientMessageID, RequestHash: fmt.Sprintf("%x", hash[:]), Content: preview, Attachment: attachment, Now: now, Rich: rich})
 	if err != nil || !created {
 		return state, err
 	}
@@ -141,7 +164,17 @@ func (s *AttachmentService) Send(ctx context.Context, owner, phone, clientMessag
 	if err != nil {
 		return state, err
 	}
-	wamid, providerErr := s.provider.SendMedia(ctx, phone, record.FileName, record.MIMEType, caption, data)
+	var wamid string
+	var providerErr error
+	if sticker {
+		provider, ok := s.provider.(StickerProvider)
+		if !ok {
+			return state, errors.New("sticker provider is unavailable")
+		}
+		wamid, providerErr = provider.SendSticker(ctx, phone, record.FileName, record.MIMEType, data)
+	} else {
+		wamid, providerErr = s.provider.SendMedia(ctx, phone, record.FileName, record.MIMEType, caption, data)
+	}
 	if providerErr != nil {
 		name, message := SendFailed, "El proveedor rechazo el adjunto"
 		var classified *ProviderError
@@ -164,6 +197,13 @@ func (s *AttachmentService) Send(ctx context.Context, owner, phone, clientMessag
 	_, _ = s.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{TableName: &s.table, Key: snapshotKey("UPLOAD#"+clientMessageID, "META"), UpdateExpression: aws.String("SET #state=:sent, updatedAt=:now"), ConditionExpression: aws.String("#state=:reserved"), ExpressionAttributeNames: map[string]string{"#state": "state"}, ExpressionAttributeValues: map[string]types.AttributeValue{":sent": &types.AttributeValueMemberS{Value: "sent"}, ":reserved": &types.AttributeValueMemberS{Value: "reserved"}, ":now": &types.AttributeValueMemberS{Value: now.Format(time.RFC3339Nano)}}})
 	_, _ = s.storage.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &s.bucket, Key: &key})
 	return state, nil
+}
+
+func stickerMaximumSize(content []byte) int64 {
+	if bytes.Contains(content, []byte("ANIM")) {
+		return 500 * 1024
+	}
+	return 100 * 1024
 }
 func (s *AttachmentService) Prepare(ctx context.Context, owner, phone, batchID string, files []AttachmentPreparationItem) (PrepareAttachmentsResponse, error) {
 	now := s.now().UTC()

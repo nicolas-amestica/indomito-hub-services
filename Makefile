@@ -2,7 +2,7 @@ service ?=
 stage ?= dev
 region ?= us-east-1
 
-.PHONY: help install dev build validate deploy package clean remove check-service
+.PHONY: help install dev build validate deploy package clean remove check-service test-inbox-p4-harness validate-inbox-contracts test-inbox-local-readiness
 
 help:
 	@echo ""
@@ -17,12 +17,24 @@ help:
 	@echo "  make package service=services/<nombre> stage=dev region=us-east-1"
 	@echo "  make clean service=services/<nombre>"
 	@echo "  make remove service=services/<nombre> stage=dev region=us-east-1"
+	@echo "  make test-inbox-p4-harness"
+	@echo "  make validate-inbox-contracts"
+	@echo "  make test-inbox-local-readiness"
 	@echo ""
 	@echo "  Ver README.md para crear un servicio nuevo desde cero."
 	@echo ""
 
 install:
 	npm install
+
+test-inbox-p4-harness:
+	bash scripts/test-api-inbox-p4-harness.sh
+
+validate-inbox-contracts:
+	bash scripts/validate-api-inbox-contracts.sh
+
+test-inbox-local-readiness:
+	bash scripts/test-api-inbox-local-readiness.sh
 
 check-service:
 	@if [ -z "$(service)" ]; then \

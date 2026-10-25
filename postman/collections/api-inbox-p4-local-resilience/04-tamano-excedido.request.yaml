@@ -1,0 +1,21 @@
+$kind: http-request
+name: Rechazar adjunto sobredimensionado
+method: POST
+url: '{{base_url}}/conversaciones/:telefono/adjuntos/preparar'
+order: 4000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {"batchId":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","files":[{"clientMessageId":"{{media_client_id}}","fileName":"large.pdf","mimeType":"application/pdf","size":7340033,"checksumSha256":"invalid"}]}
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("HTTP 413", () => pm.response.to.have.status(413));
+      pm.test("Tamano rechazado", () => pm.expect(pm.response.json().code).to.eql("INBOX_ATTACHMENT_TOO_LARGE"));

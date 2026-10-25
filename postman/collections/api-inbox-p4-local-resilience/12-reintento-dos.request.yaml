@@ -1,0 +1,23 @@
+$kind: http-request
+name: Simular segundo fallo transitorio
+method: POST
+url: '{{base_url}}/conversaciones/:telefono/respuestas'
+order: 12000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: X-P4-Scenario
+    value: transient-meta
+body:
+  type: json
+  content: |-
+    {"clientMessageId":"{{transient_client_id}}","text":"reintento local"}
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Segundo intento reintentable", () => pm.response.to.have.status(503));
+      pm.test("Intento dos", () => pm.expect(pm.response.json().attempt).to.eql(2));

@@ -31,6 +31,10 @@
       "name": "fn-enviar-respuesta-v1",
       "entrypoint": "./cmd/fn-enviar-respuesta-v1"
     },
+    { "name": "fn-listar-plantillas-v1", "entrypoint": "./cmd/fn-listar-plantillas-v1" },
+    { "name": "fn-enviar-plantilla-v1", "entrypoint": "./cmd/fn-enviar-plantilla-v1" },
+    { "name": "fn-enviar-reaccion-v1", "entrypoint": "./cmd/fn-enviar-reaccion-v1" },
+    { "name": "fn-enviar-mensaje-enriquecido-v1", "entrypoint": "./cmd/fn-enviar-mensaje-enriquecido-v1" },
     { "name": "fn-preparar-adjuntos-v1", "entrypoint": "./cmd/fn-preparar-adjuntos-v1" },
     { "name": "fn-enviar-adjunto-v1", "entrypoint": "./cmd/fn-enviar-adjunto-v1" },
     { "name": "fn-actualizar-contacto-v1", "entrypoint": "./cmd/fn-actualizar-contacto-v1" },

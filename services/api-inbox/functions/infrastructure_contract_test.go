@@ -23,6 +23,12 @@ func TestServerlessDefinesEncryptedQueuesDlqsAndAlarms(t *testing.T) {
 		"fn-procesar-agente-inbox-v1", "InboxAgentQueue", "InboxAgentDeadLetterQueue",
 		"fn-conectar-websocket-v1", "fn-desconectar-websocket-v1", "$connect", "$disconnect",
 		"fn-publicar-evento-inbox-v1", "execute-api:ManageConnections", "WebSocketManagementEndpoint",
+		"InboxWebhookErrorsAlarm", "InboxWebhookLatencyAlarm", "InboxOutboundSendErrorsAlarm", "InboxRealtimeErrorsAlarm",
+		"InboxGraphApiFailuresAlarm", "Indomito/Inbox", "GraphApiFailures",
+		"InboxInboundQueueAgeAlarm", "InboxAgentQueueAgeAlarm", "InboxWorkflowQueueAgeAlarm", "InboxRealtimeQueueAgeAlarm",
+		"ApproximateAgeOfOldestMessage", "DatapointsToAlarm: 2",
+		"InboxOperationalAlerts", "AWS::SNS::Topic", "AWS::SNS::TopicPolicy",
+		"cloudwatch.amazonaws.com", "AlarmActions", "OKActions", "InboxOperationalAlertsTopicArn",
 	} {
 		if !strings.Contains(source, fragment) {
 			t.Fatalf("serverless infrastructure is missing %q", fragment)

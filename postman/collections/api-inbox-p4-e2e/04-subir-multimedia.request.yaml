@@ -1,0 +1,23 @@
+$kind: http-request
+name: Subir multimedia a URL firmada
+method: PUT
+url: '{{media_upload_url}}'
+order: 4000
+auth:
+  type: noauth
+headers:
+  - key: Content-Type
+    value: '{{media_upload_content_type}}'
+  - key: x-amz-checksum-sha256
+    value: '{{media_upload_checksum}}'
+  - key: x-amz-meta-upload-id
+    value: '{{media_upload_meta_id}}'
+body:
+  type: file
+  content:
+    src: '{{media_path}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("S3 aceptó el archivo completo", () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));

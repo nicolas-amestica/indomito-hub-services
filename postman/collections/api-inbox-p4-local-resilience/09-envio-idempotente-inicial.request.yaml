@@ -1,0 +1,21 @@
+$kind: http-request
+name: Crear envio idempotente
+method: POST
+url: '{{base_url}}/conversaciones/:telefono/respuestas'
+order: 9000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {"clientMessageId":"{{duplicate_client_id}}","text":"idempotencia local"}
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Envio confirmado", () => pm.response.to.have.status(200));
+      pm.collectionVariables.set("first_wamid", pm.response.json().data.whatsappMessageId);

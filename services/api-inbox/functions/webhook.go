@@ -19,6 +19,7 @@ type WebhookReceiver interface {
 	VerifySignature([]byte, string) bool
 	Reserve(context.Context, domain.InboundMetaMessage) error
 	ApplyStatus(context.Context, domain.InboundMetaStatus) error
+	ApplyReaction(context.Context, domain.InboundMetaReaction) error
 }
 
 func VerifyWhatsAppWebhook(verifyToken string, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -59,8 +60,14 @@ func ReceiveWhatsAppWebhook(ctx context.Context, service WebhookReceiver, reques
 		return lambdautil.SuccessResponse(http.StatusOK, map[string]string{"status": "ignored"})
 	}
 	statuses, err := domain.DecodeInboundMetaStatuses(raw)
-	if err != nil || len(messages)+len(statuses) == 0 {
+	reactions, reactionErr := domain.DecodeInboundMetaReactions(raw)
+	if err != nil || reactionErr != nil || len(messages)+len(statuses)+len(reactions) == 0 {
 		return lambdautil.SuccessResponse(http.StatusOK, map[string]string{"status": "ignored"})
+	}
+	for _, reaction := range reactions {
+		if err := service.ApplyReaction(ctx, reaction); err != nil {
+			return lambdautil.ErrorResponse(request, apperr.New(apperr.CodeInboxCapacityUnavailable, "No fue posible procesar la reaccion"))
+		}
 	}
 	for _, status := range statuses {
 		if err := service.ApplyStatus(ctx, status); err != nil {

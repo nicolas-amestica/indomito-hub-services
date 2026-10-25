@@ -1,0 +1,106 @@
+[
+  {
+    "media_path": "postman/fixtures/p4-media-fixture.bin",
+    "media_name": "image.jpg",
+    "media_mime": "image/jpeg",
+    "media_size": "23",
+    "media_checksum_sha256": "sdBj5RXUI17LWD14nZ0CzdHZ/+qaklDnUlUK/9mph9Y=",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "postman/fixtures/p4-media-fixture.bin",
+    "media_name": "image.png",
+    "media_mime": "image/png",
+    "media_size": "23",
+    "media_checksum_sha256": "sdBj5RXUI17LWD14nZ0CzdHZ/+qaklDnUlUK/9mph9Y=",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "postman/fixtures/p4-media-fixture.bin",
+    "media_name": "image.gif",
+    "media_mime": "image/gif",
+    "media_size": "23",
+    "media_checksum_sha256": "sdBj5RXUI17LWD14nZ0CzdHZ/+qaklDnUlUK/9mph9Y=",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "postman/fixtures/p4-media-fixture.bin",
+    "media_name": "image.webp",
+    "media_mime": "image/webp",
+    "media_size": "23",
+    "media_checksum_sha256": "sdBj5RXUI17LWD14nZ0CzdHZ/+qaklDnUlUK/9mph9Y=",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "postman/fixtures/p4-media-fixture.bin",
+    "media_name": "document.pdf",
+    "media_mime": "application/pdf",
+    "media_size": "23",
+    "media_checksum_sha256": "sdBj5RXUI17LWD14nZ0CzdHZ/+qaklDnUlUK/9mph9Y=",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "postman/fixtures/p4-media-fixture.bin",
+    "media_name": "audio.ogg",
+    "media_mime": "audio/ogg",
+    "media_size": "23",
+    "media_checksum_sha256": "sdBj5RXUI17LWD14nZ0CzdHZ/+qaklDnUlUK/9mph9Y=",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "postman/fixtures/p4-media-fixture.bin",
+    "media_name": "audio.aac",
+    "media_mime": "audio/aac",
+    "media_size": "23",
+    "media_checksum_sha256": "sdBj5RXUI17LWD14nZ0CzdHZ/+qaklDnUlUK/9mph9Y=",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "postman/fixtures/p4-media-fixture.bin",
+    "media_name": "audio.m4a",
+    "media_mime": "audio/mp4",
+    "media_size": "23",
+    "media_checksum_sha256": "sdBj5RXUI17LWD14nZ0CzdHZ/+qaklDnUlUK/9mph9Y=",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "postman/fixtures/p4-media-fixture.bin",
+    "media_name": "audio.mp3",
+    "media_mime": "audio/mpeg",
+    "media_size": "23",
+    "media_checksum_sha256": "sdBj5RXUI17LWD14nZ0CzdHZ/+qaklDnUlUK/9mph9Y=",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "postman/fixtures/p4-media-fixture.bin",
+    "media_name": "audio.amr",
+    "media_mime": "audio/amr",
+    "media_size": "23",
+    "media_checksum_sha256": "sdBj5RXUI17LWD14nZ0CzdHZ/+qaklDnUlUK/9mph9Y=",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "postman/fixtures/p4-media-fixture.bin",
+    "media_name": "video.mp4",
+    "media_mime": "video/mp4",
+    "media_size": "23",
+    "media_checksum_sha256": "sdBj5RXUI17LWD14nZ0CzdHZ/+qaklDnUlUK/9mph9Y=",
+    "attachment_kind_property": ""
+  },
+  {
+    "media_path": "postman/fixtures/p4-media-fixture.bin",
+    "media_name": "sticker-static.webp",
+    "media_mime": "image/webp",
+    "media_size": "23",
+    "media_checksum_sha256": "sdBj5RXUI17LWD14nZ0CzdHZ/+qaklDnUlUK/9mph9Y=",
+    "attachment_kind_property": ",\"kind\":\"sticker\""
+  },
+  {
+    "media_path": "postman/fixtures/p4-media-fixture.bin",
+    "media_name": "sticker-animated.webp",
+    "media_mime": "image/webp",
+    "media_size": "23",
+    "media_checksum_sha256": "sdBj5RXUI17LWD14nZ0CzdHZ/+qaklDnUlUK/9mph9Y=",
+    "attachment_kind_property": ",\"kind\":\"sticker\""
+  }
+]

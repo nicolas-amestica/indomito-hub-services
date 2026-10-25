@@ -1,0 +1,22 @@
+name: Inbox DEV
+values:
+  - key: base_url
+    value: ''
+    enabled: false
+    type: default
+    description: URL HTTPS de api-inbox DEV, sin slash final
+  - key: access_token
+    value: ''
+    enabled: false
+    type: secret
+    description: Bearer temporal de un operador con permisos INBOX
+  - key: phone
+    value: ''
+    enabled: false
+    type: secret
+    description: Número DEV autorizado a recibir las pruebas
+  - key: reaction_message_id
+    value: ''
+    enabled: false
+    type: secret
+    description: ULID de un mensaje WhatsApp de la conversación DEV

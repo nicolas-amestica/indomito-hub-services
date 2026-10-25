@@ -76,3 +76,223 @@ func TestMetaProviderRejectsEmptyReadReceiptMessageID(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 }
+
+func TestMetaProviderSendsContextualTextReply(t *testing.T) {
+	t.Parallel()
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		var payload struct {
+			Type string `json:"type"`
+			Text struct {
+				Body       string `json:"body"`
+				PreviewURL bool   `json:"preview_url"`
+			} `json:"text"`
+			Context map[string]string `json:"context"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.Type != "text" || payload.Text.Body != "Respuesta" || !payload.Text.PreviewURL || payload.Context["message_id"] != "wamid.original" {
+			t.Fatalf("unexpected contextual payload %#v", payload)
+		}
+		return jsonHTTPResponse(http.StatusOK, `{"messages":[{"id":"wamid.reply"}]}`), nil
+	})}
+	provider, err := NewMetaTextProvider(client, "phone-id", "access-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wamid, err := provider.SendTextWithContext(context.Background(), "56912345678", "Respuesta", "wamid.original")
+	if err != nil || wamid != "wamid.reply" {
+		t.Fatalf("unexpected result wamid=%q err=%v", wamid, err)
+	}
+}
+
+func TestMetaProviderSendsMP4AsVideo(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		calls++
+		switch calls {
+		case 1:
+			if request.URL.String() != metaGraphResourceURL("phone-id")+"/media" {
+				t.Fatalf("unexpected upload URL %s", request.URL)
+			}
+			if !strings.HasPrefix(request.Header.Get("content-type"), "multipart/form-data;") {
+				t.Fatalf("unexpected upload content type %q", request.Header.Get("content-type"))
+			}
+			return jsonHTTPResponse(http.StatusOK, `{"id":"media-1"}`), nil
+		case 2:
+			var payload struct {
+				Type  string            `json:"type"`
+				Video map[string]string `json:"video"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Type != "video" || payload.Video["id"] != "media-1" || payload.Video["caption"] != "Recorrido" {
+				t.Fatalf("unexpected video payload %#v", payload)
+			}
+			return jsonHTTPResponse(http.StatusOK, `{"messages":[{"id":"wamid.video"}]}`), nil
+		default:
+			t.Fatalf("unexpected request %d", calls)
+			return nil, nil
+		}
+	})}
+	provider, err := NewMetaTextProvider(client, "phone-id", "access-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wamid, err := provider.SendMedia(context.Background(), "56912345678", "recorrido.mp4", "video/mp4", "Recorrido", []byte("video"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wamid != "wamid.video" || calls != 2 {
+		t.Fatalf("unexpected result wamid=%q calls=%d", wamid, calls)
+	}
+}
+
+func TestMetaProviderSendsOGGAsVoiceMessage(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		calls++
+		if calls == 1 {
+			return jsonHTTPResponse(http.StatusOK, `{"id":"media-voice"}`), nil
+		}
+		var payload struct {
+			Type  string `json:"type"`
+			Audio struct {
+				ID    string `json:"id"`
+				Voice bool   `json:"voice"`
+			} `json:"audio"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.Type != "audio" || payload.Audio.ID != "media-voice" || !payload.Audio.Voice {
+			t.Fatalf("unexpected voice payload %#v", payload)
+		}
+		return jsonHTTPResponse(http.StatusOK, `{"messages":[{"id":"wamid.voice"}]}`), nil
+	})}
+	provider, err := NewMetaTextProvider(client, "phone-id", "access-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wamid, err := provider.SendMedia(context.Background(), "56912345678", "audio.ogg", "audio/ogg", "", []byte("opus"))
+	if err != nil || wamid != "wamid.voice" || calls != 2 {
+		t.Fatalf("unexpected result wamid=%q calls=%d err=%v", wamid, calls, err)
+	}
+}
+
+func TestMetaProviderSendsTemplateAndReactionPayloads(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		calls++
+		var payload map[string]any
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if calls == 1 {
+			if payload["type"] != "template" {
+				t.Fatalf("unexpected template payload %#v", payload)
+			}
+			template := payload["template"].(map[string]any)
+			if template["name"] != "recordatorio_viaje" {
+				t.Fatalf("unexpected template %#v", template)
+			}
+			return jsonHTTPResponse(http.StatusOK, `{"messages":[{"id":"wamid.template"}]}`), nil
+		}
+		if payload["type"] != "reaction" || payload["reaction"].(map[string]any)["emoji"] != "👍" {
+			t.Fatalf("unexpected reaction payload %#v", payload)
+		}
+		return jsonHTTPResponse(http.StatusOK, `{"messages":[{"id":"wamid.reaction"}]}`), nil
+	})}
+	provider, _ := NewMetaTextProvider(client, "phone-id", "access-token")
+	if _, err := provider.SendTemplate(context.Background(), "56912345678", SendTemplate{Name: "recordatorio_viaje", Language: "es_CL", Parameters: []string{"Nico"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SendReaction(context.Background(), "56912345678", "wamid.original", "👍"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMetaProviderSendsLocationAndContacts(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		calls++
+		var payload map[string]any
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if calls == 1 {
+			if payload["type"] != "location" || payload["location"].(map[string]any)["name"] != "Oficina" {
+				t.Fatalf("unexpected location payload %#v", payload)
+			}
+		} else if payload["type"] != "contacts" || len(payload["contacts"].([]any)) != 1 {
+			t.Fatalf("unexpected contacts payload %#v", payload)
+		}
+		return jsonHTTPResponse(http.StatusOK, `{"messages":[{"id":"wamid.rich"}]}`), nil
+	})}
+	provider, _ := NewMetaTextProvider(client, "phone-id", "access-token")
+	if _, err := provider.SendRichMessage(context.Background(), "56912345678", MessageRichContent{Kind: "location", Location: &MessageLocation{Latitude: -33.4, Longitude: -70.6, Name: "Oficina"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.SendRichMessage(context.Background(), "56912345678", MessageRichContent{Kind: "contacts", Contacts: []MessageContact{{Name: "Ana", Phone: "+56911111111", Email: "ana@example.com", Company: "Indomito"}}}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMetaProviderSendsInteractiveButtons(t *testing.T) {
+	t.Parallel()
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		var payload struct {
+			Type        string `json:"type"`
+			Interactive struct {
+				Type   string `json:"type"`
+				Action struct {
+					Buttons []map[string]any `json:"buttons"`
+				} `json:"action"`
+			} `json:"interactive"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.Type != "interactive" || payload.Interactive.Type != "button" || len(payload.Interactive.Action.Buttons) != 2 {
+			t.Fatalf("unexpected interactive payload %#v", payload)
+		}
+		return jsonHTTPResponse(http.StatusOK, `{"messages":[{"id":"wamid.interactive"}]}`), nil
+	})}
+	provider, _ := NewMetaTextProvider(client, "phone-id", "access-token")
+	_, err := provider.SendRichMessage(context.Background(), "56912345678", MessageRichContent{Kind: "interactive", Interactive: &MessageInteractive{Kind: "button", Body: "Elige", Options: []MessageInteractiveOption{{ID: "one", Title: "Uno"}, {ID: "two", Title: "Dos"}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMetaProviderSendsStickerByUploadedMediaID(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		calls++
+		if calls == 1 {
+			return jsonHTTPResponse(http.StatusOK, `{"id":"media-sticker"}`), nil
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["type"] != "sticker" || payload["sticker"].(map[string]any)["id"] != "media-sticker" {
+			t.Fatalf("unexpected sticker payload %#v", payload)
+		}
+		return jsonHTTPResponse(http.StatusOK, `{"messages":[{"id":"wamid.sticker"}]}`), nil
+	})}
+	provider, _ := NewMetaTextProvider(client, "phone-id", "access-token")
+	if _, err := provider.SendSticker(context.Background(), "56912345678", "sticker.webp", "image/webp", []byte("RIFFWEBP")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func jsonHTTPResponse(status int, body string) *http.Response {
+	return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}
+}

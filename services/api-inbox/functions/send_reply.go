@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/oklog/ulid/v2"
 
 	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
 	"ind-hub-api-gox-sls-pri-gh/libs/shared/apperr"
@@ -19,11 +20,12 @@ import (
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
 
 type TextSender interface {
-	SendText(context.Context, string, string, string, string) (domain.SendState, error)
+	SendTeamText(context.Context, string, string, string, string, string) (domain.SendState, error)
 }
 type sendReplyRequest struct {
-	Content         string `json:"content"`
-	ClientMessageID string `json:"clientMessageId"`
+	Content          string `json:"content"`
+	ClientMessageID  string `json:"clientMessageId"`
+	ReplyToMessageID string `json:"replyToMessageId,omitempty"`
 }
 
 func SendReply(ctx context.Context, service TextSender, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -51,7 +53,12 @@ func SendReply(ctx context.Context, service TextSender, request events.APIGatewa
 	if !uuidPattern.MatchString(input.ClientMessageID) {
 		return lambdautil.ErrorResponse(request, invalidListQuery("clientMessageId", "must be a UUID"))
 	}
-	state, err := service.SendText(ctx, identity.UserID, phone, input.ClientMessageID, input.Content)
+	if input.ReplyToMessageID != "" {
+		if _, err = ulid.ParseStrict(input.ReplyToMessageID); err != nil {
+			return lambdautil.ErrorResponse(request, invalidListQuery("replyToMessageId", "must be a ULID"))
+		}
+	}
+	state, err := service.SendTeamText(ctx, identity.UserID, phone, input.ClientMessageID, input.Content, input.ReplyToMessageID)
 	if err != nil {
 		var mapped error
 		switch {
@@ -61,6 +68,8 @@ func SendReply(ctx context.Context, service TextSender, request events.APIGatewa
 			mapped = apperr.New(apperr.CodeInboxServiceWindowClosed, "La ventana de atencion de WhatsApp esta cerrada")
 		case errors.Is(err, domain.ErrProviderRejected):
 			mapped = apperr.New(apperr.CodeInboxProviderRejected, "WhatsApp rechazo el envio").WithDetails(map[string]any{"sendState": state})
+		case errors.Is(err, domain.ErrReplyTargetInvalid):
+			mapped = invalidListQuery("replyToMessageId", "must reference a WhatsApp message in this conversation")
 		default:
 			mapped = apperr.Internal(err)
 		}

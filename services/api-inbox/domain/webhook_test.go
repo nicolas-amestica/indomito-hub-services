@@ -13,6 +13,39 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
+func TestDecodeInboundMetaReactionsSeparatesReactionFromMessages(t *testing.T) {
+	raw := []byte(`{"entry":[{"changes":[{"value":{"messages":[{"id":"wamid.event","from":"56912345678","type":"reaction","reaction":{"message_id":"wamid.target","emoji":"❤️"}}]}}]}]}`)
+	reactions, err := DecodeInboundMetaReactions(raw)
+	if err != nil || len(reactions) != 1 || reactions[0].MessageID != "wamid.target" || reactions[0].Emoji != "❤️" {
+		t.Fatalf("unexpected reactions %#v err=%v", reactions, err)
+	}
+	messages, err := DecodeInboundMetaMessages(raw)
+	if err != nil || len(messages) != 0 {
+		t.Fatalf("reaction must not become inbound message: %#v err=%v", messages, err)
+	}
+}
+
+func TestDecodeInboundMetaMessagesPreservesRichContent(t *testing.T) {
+	t.Parallel()
+	raw := []byte(`{"entry":[{"changes":[{"value":{"messages":[{"id":"wamid.location","from":"56912345678","type":"location","timestamp":"1","location":{"latitude":-33.4,"longitude":-70.6,"name":"Oficina","address":"Santiago"}},{"id":"wamid.contact","from":"56912345678","type":"contacts","timestamp":"2","contacts":[{"name":{"formatted_name":"Ana"},"phones":[{"phone":"+56911111111"}],"emails":[{"email":"ana@example.com"}],"org":{"company":"Indomito"}}]},{"id":"wamid.interactive","from":"56912345678","type":"interactive","timestamp":"3","interactive":{"type":"list_reply","list_reply":{"id":"tour-1","title":"Tour 1","description":"Seleccionado"}}},{"id":"wamid.sticker","from":"56912345678","type":"sticker","timestamp":"4","sticker":{"id":"media-1","mime_type":"image/webp","sha256":"digest"}}]}}]}]}`)
+	messages, err := DecodeInboundMetaMessages(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 4 || messages[0].Rich == nil || messages[0].Rich.Location == nil || messages[0].Rich.Location.Name != "Oficina" {
+		t.Fatalf("unexpected location %#v", messages)
+	}
+	if messages[1].Rich == nil || len(messages[1].Rich.Contacts) != 1 || messages[1].Rich.Contacts[0].Email != "ana@example.com" {
+		t.Fatalf("unexpected contacts %#v", messages[1])
+	}
+	if messages[2].Text != "Tour 1" || messages[2].Rich == nil || messages[2].Rich.InteractiveReply.ID != "tour-1" {
+		t.Fatalf("unexpected interactive reply %#v", messages[2])
+	}
+	if messages[3].MediaID != "media-1" || messages[3].Rich == nil || messages[3].Rich.Kind != "sticker" {
+		t.Fatalf("unexpected sticker %#v", messages[3])
+	}
+}
+
 type webhookFakeDynamo struct {
 	items  map[string]map[string]types.AttributeValue
 	writes []*dynamodb.TransactWriteItemsInput

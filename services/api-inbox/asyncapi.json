@@ -23,7 +23,7 @@
     },
     "messages": {
       "ListEvent": { "name": "listEvent", "payload": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "properties": { "type": { "enum": ["conversation.updated", "conversation.deleted", "bulk.updated"] }, "stream": { "const": "list" } } }] } },
-      "DetailEvent": { "name": "detailEvent", "payload": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "properties": { "type": { "enum": ["message.created", "message.delivery.updated", "conversation.updated"] } } }] } },
+      "DetailEvent": { "name": "detailEvent", "payload": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "properties": { "type": { "enum": ["message.created", "message.delivery.updated", "message.reactions.updated", "conversation.updated"] } } }] } },
       "AgentProcessingEvent": { "name": "agentProcessingEvent", "payload": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "properties": { "type": { "const": "agent_processing" }, "payload": { "$ref": "#/components/schemas/AgentProcessingPayload" } } }] } },
       "ResyncRequired": { "name": "resyncRequired", "payload": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "properties": { "type": { "const": "resync_required" } } }] } }
     }

@@ -1,0 +1,28 @@
+$kind: http-request
+name: Enviar reacción
+method: PUT
+url: '{{base_url}}/conversaciones/:telefono/reacciones'
+order: 10000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "messageId": "{{reaction_message_id}}",
+      "emoji": "👍"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Reacción confirmada", () => pm.response.to.have.status(200));
+      pm.test("Reacción conserva mensaje y emoji", () => {
+        const data = pm.response.json().data;
+        pm.expect(data.messageId).to.eql(pm.variables.get("reaction_message_id"));
+        pm.expect(data.emoji).to.eql("👍");
+      });

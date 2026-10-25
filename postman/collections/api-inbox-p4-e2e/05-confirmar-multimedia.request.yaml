@@ -1,0 +1,30 @@
+$kind: http-request
+name: Confirmar envío multimedia
+method: POST
+url: '{{base_url}}/conversaciones/:telefono/adjuntos'
+order: 5000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "uploadId": "{{media_upload_id}}",
+      "key": "{{media_key}}",
+      "caption": "Prueba E2E P4 {{media_mime}}",
+      "clientMessageId": "{{media_client_message_id}}"{{attachment_kind_property}}
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Multimedia aceptada o confirmada", () => pm.expect(pm.response.code).to.be.oneOf([200, 202]));
+      pm.test("Estado durable corresponde al archivo", () => {
+        const data = pm.response.json().data;
+        pm.expect(data.clientMessageId).to.eql(pm.collectionVariables.get("media_client_message_id"));
+        pm.expect(data.attachment.fileName).to.eql(pm.variables.get("media_name"));
+      });

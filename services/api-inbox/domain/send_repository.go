@@ -55,20 +55,41 @@ func (r *DynamoSendRepository) LastCustomerMessageAt(ctx context.Context, phone 
 }
 
 type sendRecord struct {
-	PK          string      `dynamodbav:"pk"`
-	SK          string      `dynamodbav:"sk"`
-	OwnerID     string      `dynamodbav:"ownerUserId"`
-	RequestHash string      `dynamodbav:"requestHash"`
-	Content     string      `dynamodbav:"content"`
-	Actor       MessageType `dynamodbav:"actor,omitempty"`
+	PK          string              `dynamodbav:"pk"`
+	SK          string              `dynamodbav:"sk"`
+	OwnerID     string              `dynamodbav:"ownerUserId"`
+	RequestHash string              `dynamodbav:"requestHash"`
+	Content     string              `dynamodbav:"content"`
+	Actor       MessageType         `dynamodbav:"actor,omitempty"`
+	ReplyTo     *MessageReference   `dynamodbav:"replyTo,omitempty"`
+	Template    *SendTemplate       `dynamodbav:"template,omitempty"`
+	Rich        *MessageRichContent `dynamodbav:"rich,omitempty"`
 	SendState
 	ExpiresAt int64 `dynamodbav:"expiresAt"`
+}
+
+func (r *DynamoSendRepository) MessageReference(ctx context.Context, phone, id string) (*MessageReference, error) {
+	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{TableName: &r.tableName, Key: snapshotKey("CONV#"+phone, "MSG#"+id), ConsistentRead: aws.Bool(true)})
+	if err != nil {
+		return nil, fmt.Errorf("read reply target: %w", err)
+	}
+	if len(out.Item) == 0 {
+		return nil, ErrReplyTargetInvalid
+	}
+	var message Message
+	if err = attributevalue.UnmarshalMap(out.Item, &message); err != nil {
+		return nil, fmt.Errorf("decode reply target: %w", err)
+	}
+	if message.WhatsAppMessageID == nil || strings.TrimSpace(*message.WhatsAppMessageID) == "" {
+		return nil, ErrReplyTargetInvalid
+	}
+	return &MessageReference{ID: message.ID, Type: message.Type, Content: message.Content, WhatsAppMessageID: *message.WhatsAppMessageID}, nil
 }
 
 func (r *DynamoSendRepository) Reserve(ctx context.Context, reservation SendReservation) (SendState, bool, error) {
 	preview := sanitizeSendText(reservation.Content)
 	state := SendState{ClientMessageID: reservation.ClientMessageID, Phone: reservation.Phone, State: SendReserved, CreatedAt: reservation.Now, UpdatedAt: reservation.Now, RetryCount: 0, Preview: &preview, Attachment: reservation.Attachment}
-	record := sendRecord{PK: "SEND#" + reservation.ClientMessageID, SK: "META", OwnerID: reservation.OwnerID, RequestHash: reservation.RequestHash, Content: reservation.Content, Actor: reservation.Actor, SendState: state, ExpiresAt: reservation.Now.Add(90 * 24 * time.Hour).Unix()}
+	record := sendRecord{PK: "SEND#" + reservation.ClientMessageID, SK: "META", OwnerID: reservation.OwnerID, RequestHash: reservation.RequestHash, Content: reservation.Content, Actor: reservation.Actor, ReplyTo: reservation.ReplyTo, Template: reservation.Template, Rich: reservation.Rich, SendState: state, ExpiresAt: reservation.Now.Add(90 * 24 * time.Hour).Unix()}
 	item, err := attributevalue.MarshalMap(record)
 	if err != nil {
 		return SendState{}, false, fmt.Errorf("encode send reservation: %w", err)
@@ -109,19 +130,19 @@ func (r *DynamoSendRepository) Owned(ctx context.Context, ownerID, id string) (S
 	return state, nil
 }
 
-func (r *DynamoSendRepository) ClaimRetry(ctx context.Context, ownerID, id string, now time.Time) (SendState, string, error) {
+func (r *DynamoSendRepository) ClaimRetry(ctx context.Context, ownerID, id string, now time.Time) (SendState, string, *MessageReference, *SendTemplate, *MessageRichContent, error) {
 	state, record, err := r.read(ctx, id)
 	if err != nil {
-		return SendState{}, "", err
+		return SendState{}, "", nil, nil, nil, err
 	}
 	if record.OwnerID != ownerID {
-		return SendState{}, "", ErrSendNotFound
+		return SendState{}, "", nil, nil, nil, ErrSendNotFound
 	}
 	if state.RetryCount >= 1 {
-		return SendState{}, "", ErrSendRetryExhausted
+		return SendState{}, "", nil, nil, nil, ErrSendRetryExhausted
 	}
 	if state.State != SendFailedRetryable {
-		return SendState{}, "", ErrSendNotRetryable
+		return SendState{}, "", nil, nil, nil, ErrSendNotRetryable
 	}
 	state.State, state.RetryCount, state.UpdatedAt = SendProviderPending, 1, now
 	state.Error, state.RetryAvailable = nil, nil
@@ -129,14 +150,14 @@ func (r *DynamoSendRepository) ClaimRetry(ctx context.Context, ownerID, id strin
 	if err != nil {
 		var conditional *types.ConditionalCheckFailedException
 		if errors.As(err, &conditional) {
-			return SendState{}, "", ErrSendNotRetryable
+			return SendState{}, "", nil, nil, nil, ErrSendNotRetryable
 		}
-		return SendState{}, "", fmt.Errorf("claim send retry: %w", err)
+		return SendState{}, "", nil, nil, nil, fmt.Errorf("claim send retry: %w", err)
 	}
 	if err = r.putView(ctx, ownerID, state); err != nil {
-		return SendState{}, "", err
+		return SendState{}, "", nil, nil, nil, err
 	}
-	return state, record.Content, nil
+	return state, record.Content, record.ReplyTo, record.Template, record.Rich, nil
 }
 func (r *DynamoSendRepository) Fail(ctx context.Context, ownerID, id string, name SendStateName, message string, now time.Time) (SendState, error) {
 	return r.transition(ctx, ownerID, id, name, message, now)
@@ -213,7 +234,7 @@ func (r *DynamoSendRepository) Commit(ctx context.Context, ownerID, id, wamid st
 	if actor == "" {
 		actor = MessageTypeTeam
 	}
-	message := Message{ID: messageID.String(), MessageSK: msgSK, Phone: state.Phone, Type: actor, Content: state.Preview, CreatedAt: now, WhatsAppMessageID: &wamid, DeliveryStatus: deliveryPointer(DeliveryStatusSent), Attachments: attachments}
+	message := Message{ID: messageID.String(), MessageSK: msgSK, Phone: state.Phone, Type: actor, Content: state.Preview, CreatedAt: now, WhatsAppMessageID: &wamid, DeliveryStatus: deliveryPointer(DeliveryStatusSent), Attachments: attachments, ReplyTo: record.ReplyTo, Reactions: []MessageReaction{}, Rich: record.Rich}
 	messageItem, _ := attributevalue.MarshalMap(message)
 	messageItem["pk"] = &types.AttributeValueMemberS{Value: "CONV#" + state.Phone}
 	messageItem["sk"] = &types.AttributeValueMemberS{Value: msgSK}

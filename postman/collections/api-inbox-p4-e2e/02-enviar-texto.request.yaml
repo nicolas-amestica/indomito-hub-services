@@ -1,0 +1,33 @@
+$kind: http-request
+name: Enviar texto
+method: POST
+url: '{{base_url}}/conversaciones/:telefono/respuestas'
+order: 2000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "content": "Prueba E2E P4 de texto",
+      "clientMessageId": "{{text_client_message_id}}"
+    }
+scripts:
+  - type: beforeRequest
+    language: text/javascript
+    code: |-
+      pm.collectionVariables.set("text_client_message_id", pm.variables.replaceIn("{{$guid}}"));
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Texto aceptado o confirmado", () => pm.expect(pm.response.code).to.be.oneOf([200, 202]));
+      pm.test("Estado durable conserva idempotencia", () => {
+        const data = pm.response.json().data;
+        pm.expect(data.clientMessageId).to.eql(pm.collectionVariables.get("text_client_message_id"));
+        pm.expect(data.phone).to.eql(pm.variables.get("phone"));
+        pm.expect(data.state).to.be.a("string");
+      });

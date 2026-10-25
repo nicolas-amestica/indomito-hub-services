@@ -1,0 +1,31 @@
+$kind: collection
+name: API Inbox P4 E2E
+description: Colección destructiva para aceptación autorizada en DEV con WhatsApp y Meta reales.
+variables:
+  - key: base_url
+    value: 'https://replace-with-dev-api.example'
+  - key: phone
+    value: ''
+  - key: template_name
+    value: hello_world
+  - key: template_language
+    value: en_US
+  - key: reaction_message_id
+    value: ''
+  - key: media_path
+    value: ''
+  - key: media_name
+    value: ''
+  - key: media_mime
+    value: ''
+  - key: media_size
+    value: ''
+  - key: media_checksum_sha256
+    value: ''
+  - key: attachment_kind_property
+    value: ''
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{access_token}}'

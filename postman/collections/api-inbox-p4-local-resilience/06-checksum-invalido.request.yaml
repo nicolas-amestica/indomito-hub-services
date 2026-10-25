@@ -1,0 +1,22 @@
+$kind: http-request
+name: Rechazar checksum incorrecto
+method: PUT
+url: '{{checksum_upload_url}}'
+order: 6000
+auth:
+  type: noauth
+headers:
+  - key: Content-Type
+    value: application/pdf
+  - key: x-amz-checksum-sha256
+    value: wrong-checksum
+body:
+  type: file
+  content:
+    src: postman/fixtures/p4-media-fixture.bin
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("HTTP 422", () => pm.response.to.have.status(422));
+      pm.test("Checksum rechazado", () => pm.expect(pm.response.json().code).to.eql("INBOX_CHECKSUM_MISMATCH"));

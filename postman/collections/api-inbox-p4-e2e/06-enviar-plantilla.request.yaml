@@ -1,0 +1,32 @@
+$kind: http-request
+name: Enviar plantilla aprobada
+method: POST
+url: '{{base_url}}/conversaciones/:telefono/plantillas'
+order: 6000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "clientMessageId": "{{template_client_message_id}}",
+      "name": "{{template_name}}",
+      "language": "{{template_language}}",
+      "parameters": []
+    }
+scripts:
+  - type: beforeRequest
+    language: text/javascript
+    code: |-
+      pm.collectionVariables.set("template_client_message_id", pm.variables.replaceIn("{{$guid}}"));
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Plantilla aceptada o confirmada", () => pm.expect(pm.response.code).to.be.oneOf([200, 202]));
+      pm.test("Plantilla conserva idempotencia", () => {
+        pm.expect(pm.response.json().data.clientMessageId).to.eql(pm.collectionVariables.get("template_client_message_id"));
+      });

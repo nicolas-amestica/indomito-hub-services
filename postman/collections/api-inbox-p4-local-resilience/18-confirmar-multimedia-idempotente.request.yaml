@@ -1,0 +1,21 @@
+$kind: http-request
+name: Confirmar multimedia idempotente
+method: POST
+url: '{{base_url}}/conversaciones/:telefono/adjuntos'
+order: 18000
+pathVariables:
+  - key: telefono
+    value: '{{phone}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {"clientMessageId":"66666666-6666-4666-8666-666666666666","uploadId":"{{idempotent_upload_id}}","key":"mock/idempotent.pdf","fileName":"idempotent.pdf","mimeType":"application/pdf","size":23,"checksumSha256":"expected-checksum"}
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Multimedia confirmada", () => pm.response.to.have.status(200));
+      pm.collectionVariables.set("idempotent_media_wamid", pm.response.json().data.whatsappMessageId);
