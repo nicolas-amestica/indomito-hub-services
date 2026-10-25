@@ -51,6 +51,24 @@ func TestConversationMutationServiceMarkUnreadWritesAtomicProjections(t *testing
 	assertMutationPutPK(t, fake.writes[0], "WORK_DUE#OUTBOX#")
 }
 
+func TestConversationMutationServiceReadStateKeepsSequencesForNewConversation(t *testing.T) {
+	listSequenceItem, _ := attributevalue.MarshalMap(listSequence{Sequence: 12})
+	detailSequence, _ := attributevalue.MarshalMap(listSequence{Sequence: 7})
+	fake := &mutationDynamoFake{items: map[string]map[string]types.AttributeValue{
+		listSequencePK:           listSequenceItem,
+		"SEQ#DETAIL#56912345678": detailSequence,
+	}}
+	service := &ConversationMutationService{client: fake, tableName: "table"}
+
+	_, listSequence, detailSequenceValue, found, err := service.readState(context.Background(), "56912345678")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found || listSequence != 12 || detailSequenceValue != 7 {
+		t.Fatalf("found=%t list=%d detail=%d", found, listSequence, detailSequenceValue)
+	}
+}
+
 func TestConversationMutationServiceDerivePersistsAndPublishes(t *testing.T) {
 	fixed := time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC)
 	fake := &mutationDynamoFake{items: mutationItems(t)}

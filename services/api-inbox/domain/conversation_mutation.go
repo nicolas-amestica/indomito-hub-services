@@ -294,11 +294,12 @@ func (s *ConversationMutationService) readState(ctx context.Context, phone strin
 	if err != nil {
 		return ConversationSummary{}, 0, 0, false, fmt.Errorf("read conversation mutation target: %w", err)
 	}
-	if len(conversation.Item) == 0 {
-		return ConversationSummary{}, 0, 0, false, nil
-	}
 	var summary ConversationSummary
-	if err = attributevalue.UnmarshalMap(conversation.Item, &summary); err != nil {
+	found := len(conversation.Item) > 0
+	if found {
+		err = attributevalue.UnmarshalMap(conversation.Item, &summary)
+	}
+	if err != nil {
 		return ConversationSummary{}, 0, 0, false, fmt.Errorf("decode conversation mutation target: %w", err)
 	}
 	listSeq, err := readSequenceItem(ctx, s.client, s.tableName, listSequencePK)
@@ -309,7 +310,7 @@ func (s *ConversationMutationService) readState(ctx context.Context, phone strin
 	if err != nil {
 		return ConversationSummary{}, 0, 0, false, err
 	}
-	return summary, listSeq, detailSeq, true, nil
+	return summary, listSeq, detailSeq, found, nil
 }
 func readSequenceItem(ctx context.Context, client conversationMutationDynamo, table, pk string) (uint64, error) {
 	out, err := client.GetItem(ctx, &dynamodb.GetItemInput{TableName: &table, Key: snapshotKey(pk, "META"), ConsistentRead: aws.Bool(true)})
