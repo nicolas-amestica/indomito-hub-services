@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"path"
 	"strings"
@@ -77,6 +78,12 @@ type AgentService struct {
 	now        func() time.Time
 	tools      *AgentToolbox
 	mutations  *ConversationMutationService
+	notifier   DerivationNotifier
+}
+
+// SetDerivationNotifier enables the optional internal WhatsApp alert.
+func (s *AgentService) SetDerivationNotifier(notifier DerivationNotifier) {
+	s.notifier = notifier
 }
 
 func NewAgentService(db agentDynamo, storage agentS3, transcriber agentTranscribe, sender AgentSender, tools *AgentToolbox, table string, cfg AgentConfig, gemini GeminiConfig) (*AgentService, error) {
@@ -157,11 +164,16 @@ func (s *AgentService) Process(ctx context.Context, phone, messageID string) err
 		if sendErr != nil {
 			return errors.Join(err, sendErr)
 		}
-		_, deriveErr := s.mutations.Derive(ctx, phone, "agent_error", "Error del agente; requiere revision")
+		label := "Error del agente; requiere revision"
+		_, deriveErr := s.mutations.Derive(ctx, phone, "agent_error", label)
+		s.notifyDerivation(ctx, phone, messageID, latest, label)
 		return errors.Join(err, deriveErr)
 	}
 	if derivation != nil {
 		_, err = s.mutations.Derive(ctx, phone, derivation.Reason, derivation.Label)
+		if err == nil {
+			s.notifyDerivation(ctx, phone, messageID, latest, derivation.Label)
+		}
 		return err
 	}
 	reply = normalizeAgentReply(reply)
@@ -185,6 +197,22 @@ func (s *AgentService) Process(ctx context.Context, phone, messageID string) err
 		_, err = s.mutations.ActivateBot(ctx, phone)
 	}
 	return err
+}
+
+func (s *AgentService) notifyDerivation(ctx context.Context, phone, messageID string, latest Message, label string) {
+	if s.notifier == nil {
+		return
+	}
+	detail := ""
+	if latest.Content != nil {
+		detail = *latest.Content
+	}
+	if detail == "" && len(latest.Attachments) > 0 {
+		detail = "Adjunto: " + latest.Attachments[0].FileName
+	}
+	if err := s.notifier.NotifyDerivation(ctx, DerivationNotification{SourcePhone: phone, MessageID: messageID, Detail: detail, ReasonLabel: label}); err != nil {
+		log.Printf("derivation notification failed messageId=%s: %v", messageID, err)
+	}
 }
 
 func (s *AgentService) conversationSummary(ctx context.Context, phone string) (ConversationSummary, error) {

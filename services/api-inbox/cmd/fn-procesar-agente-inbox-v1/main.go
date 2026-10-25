@@ -21,7 +21,8 @@ import (
 func handle(ctx context.Context, event events.SQSEvent) (events.SQSEventResponse, error) {
 	table, agentPath, geminiPath, whatsAppPath := os.Getenv("CONVERSATIONS_TABLE_NAME"), os.Getenv("INBOX_AGENT_CONFIG_PARAM"), os.Getenv("INBOX_GEMINI_CONFIG_PARAM"), os.Getenv("INBOX_WHATSAPP_CONFIG_PARAM")
 	assetPath, meetingPath := os.Getenv("INBOX_ASSET_CONFIG_PARAM"), os.Getenv("INBOX_MEETING_CONFIG_PARAM")
-	if table == "" || agentPath == "" || geminiPath == "" || whatsAppPath == "" || assetPath == "" || meetingPath == "" {
+	derivationNotificationPath := os.Getenv("INBOX_DERIVATION_NOTIFICATION_CONFIG_PARAM")
+	if table == "" || agentPath == "" || geminiPath == "" || whatsAppPath == "" || assetPath == "" || meetingPath == "" || derivationNotificationPath == "" {
 		return events.SQSEventResponse{}, errors.New("agent environment is incomplete")
 	}
 	cfg, err := bootstrap.LoadAWSConfig(ctx, bootstrap.LoadConfig())
@@ -43,6 +44,7 @@ func handle(ctx context.Context, event events.SQSEvent) (events.SQSEventResponse
 	var gemini domain.GeminiConfig
 	var assets domain.AgentAssetConfig
 	var meeting domain.AgentMeetingConfig
+	var derivationNotification domain.DerivationNotificationConfig
 	var whatsApp struct {
 		AccessToken   string `json:"accessToken"`
 		PhoneNumberID string `json:"phoneNumberId"`
@@ -60,6 +62,9 @@ func handle(ctx context.Context, event events.SQSEvent) (events.SQSEventResponse
 		return events.SQSEventResponse{}, err
 	}
 	if err = read(meetingPath, &meeting); err != nil {
+		return events.SQSEventResponse{}, err
+	}
+	if err = read(derivationNotificationPath, &derivationNotification); err != nil {
 		return events.SQSEventResponse{}, err
 	}
 	var oauth domain.GoogleOAuthConfig
@@ -87,6 +92,13 @@ func handle(ctx context.Context, event events.SQSEvent) (events.SQSEventResponse
 	processor, err := domain.NewAgentService(db, storage, transcribe.NewFromConfig(cfg), sender, toolbox, table, agent, gemini)
 	if err != nil {
 		return events.SQSEventResponse{}, err
+	}
+	if derivationNotification.Enabled {
+		notifier, notifierErr := domain.NewWhatsAppDerivationNotifier(sender, derivationNotification)
+		if notifierErr != nil {
+			return events.SQSEventResponse{}, notifierErr
+		}
+		processor.SetDerivationNotifier(notifier)
 	}
 	return functions.ProcessAgentQueue(ctx, processor, event), nil
 }

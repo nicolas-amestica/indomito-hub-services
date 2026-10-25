@@ -305,6 +305,7 @@ const serverlessConfiguration = buildGoServiceServerless(ApiServices.Inbox, endp
     INBOX_AGENT_CONFIG_PARAM: `/indomito/${STAGE}/inbox/agent-config`,
     INBOX_ASSET_CONFIG_PARAM: `/indomito/${STAGE}/inbox/asset-config`,
     INBOX_MEETING_CONFIG_PARAM: `/indomito/${STAGE}/inbox/meeting-config`,
+    INBOX_DERIVATION_NOTIFICATION_CONFIG_PARAM: `/indomito/${STAGE}/inbox/derivation-notification-config`,
     INBOX_TEMPORARY_BUCKET_NAME: INBOX_BUCKET_NAME,
     INBOX_WEBSOCKET_URL,
   },
