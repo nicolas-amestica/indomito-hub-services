@@ -285,7 +285,7 @@ export function buildGoServiceServerless(service: string, endpoints: GoHttpEndpo
 
   return {
     service,
-    frameworkVersion: '4.6.2',
+    frameworkVersion: '4.45.0',
     useDotenv: true,
 
     package: {
