@@ -234,7 +234,7 @@ func (r *DynamoSendRepository) Commit(ctx context.Context, ownerID, id, wamid st
 	if actor == "" {
 		actor = MessageTypeTeam
 	}
-	message := Message{ID: messageID.String(), MessageSK: msgSK, Phone: state.Phone, Type: actor, Content: state.Preview, CreatedAt: now, WhatsAppMessageID: &wamid, DeliveryStatus: deliveryPointer(DeliveryStatusSent), Attachments: attachments, ReplyTo: record.ReplyTo, Reactions: []MessageReaction{}, Rich: record.Rich}
+	message := Message{ID: messageID.String(), MessageSK: msgSK, Phone: state.Phone, Type: actor, Content: &record.Content, CreatedAt: now, WhatsAppMessageID: &wamid, DeliveryStatus: deliveryPointer(DeliveryStatusSent), Attachments: attachments, ReplyTo: record.ReplyTo, Reactions: []MessageReaction{}, Rich: record.Rich}
 	messageItem, _ := attributevalue.MarshalMap(message)
 	messageItem["pk"] = &types.AttributeValueMemberS{Value: "CONV#" + state.Phone}
 	messageItem["sk"] = &types.AttributeValueMemberS{Value: msgSK}
