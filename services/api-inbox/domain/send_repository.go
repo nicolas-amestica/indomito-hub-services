@@ -200,6 +200,16 @@ func (r *DynamoSendRepository) transition(ctx context.Context, ownerID, id strin
 		values[":required"] = &types.AttributeValueMemberBOOL{Value: true}
 		expression = "SET #state=:state, updatedAt=:updated, reason=:reason, resolutionRequired=:required REMOVE #error, retryAvailable"
 	}
+	if stateName == SendFailed {
+		_, err = r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{
+			{Update: &types.Update{TableName: &r.tableName, Key: snapshotKey("SEND#"+id, "META"), UpdateExpression: &expression, ExpressionAttributeNames: names, ExpressionAttributeValues: values}},
+			{Delete: &types.Delete{TableName: &r.tableName, Key: snapshotKey("SEND_VIEW#"+ownerID+"#"+state.Phone, state.CreatedAt.Format(time.RFC3339Nano)+"#"+id)}},
+		}})
+		if err != nil {
+			return SendState{}, fmt.Errorf("complete failed send: %w", err)
+		}
+		return state, nil
+	}
 	_, err = r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{TableName: &r.tableName, Key: snapshotKey("SEND#"+id, "META"), UpdateExpression: &expression, ExpressionAttributeNames: names, ExpressionAttributeValues: values})
 	if err != nil {
 		return SendState{}, fmt.Errorf("transition send: %w", err)

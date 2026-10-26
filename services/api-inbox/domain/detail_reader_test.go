@@ -53,7 +53,8 @@ func TestReadConversationDetailCapturesSequenceBeforeData(t *testing.T) {
 		messages = append(messages, item)
 	}
 	send, _ := attributevalue.MarshalMap(NonTerminalSend{ClientMessageID: "client-1", Phone: "56912345678", State: "provider_pending", CreatedAt: time.Now(), UpdatedAt: time.Now()})
-	fake := &fakeDetailReader{conversation: conversation, messages: messages, sends: []map[string]types.AttributeValue{send}}
+	terminal, _ := attributevalue.MarshalMap(NonTerminalSend{ClientMessageID: "client-terminal", Phone: "56912345678", State: "failed", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+	fake := &fakeDetailReader{conversation: conversation, messages: messages, sends: []map[string]types.AttributeValue{send, terminal}}
 
 	detail, err := ReadConversationDetail(context.Background(), fake, "table", "owner", "56912345678", "", 3)
 	if err != nil {

@@ -160,6 +160,14 @@ func readNonTerminalSends(ctx context.Context, reader detailReader, tableName, o
 	if err := attributevalue.UnmarshalListOfMaps(output.Items, &sends); err != nil {
 		return nil, fmt.Errorf("decode non-terminal sends: %w", err)
 	}
+	sends = slices.DeleteFunc(sends, func(send NonTerminalSend) bool {
+		switch SendStateName(send.State) {
+		case SendReserved, SendProviderPending, SendRecovering, SendUncertain, SendFailedRetryable:
+			return false
+		default:
+			return true
+		}
+	})
 	return sends, nil
 }
 
