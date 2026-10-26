@@ -7,11 +7,15 @@ import (
 	"ind-hub-api-gox-sls-pri-gh/services/api-inbox/domain"
 )
 
-type conversationMutatorFake struct{ marked, activated, deleted string }
+type conversationMutatorFake struct{ marked, read, activated, deleted string }
 
 func (f *conversationMutatorFake) MarkUnread(_ context.Context, phone string) (domain.ConversationSummary, error) {
 	f.marked = phone
 	return domain.ConversationSummary{ID: phone, Phone: phone, Alias: "Cliente", Channel: "whatsapp", Status: domain.ConversationStatusBot, UnreadCount: 1}, nil
+}
+func (f *conversationMutatorFake) MarkRead(_ context.Context, phone string) (domain.ConversationSummary, error) {
+	f.read = phone
+	return domain.ConversationSummary{ID: phone, Phone: phone, Alias: "Cliente", Channel: "whatsapp", Status: domain.ConversationStatusBot, UnreadCount: 0}, nil
 }
 func (f *conversationMutatorFake) ActivateBot(_ context.Context, phone string) (domain.ConversationSummary, error) {
 	f.activated = phone
@@ -44,11 +48,11 @@ func TestReactivateConversationAgentRequiresExactBotStatus(t *testing.T) {
 	}
 }
 
-func TestMarkConversationUnreadRequiresExactTrue(t *testing.T) {
+func TestMarkConversationUnreadRequiresBoolean(t *testing.T) {
 	tests := []struct {
 		name, body string
 		want       int
-	}{{name: "valid", body: `{"unread":true}`, want: 200}, {name: "false", body: `{"unread":false}`, want: 400}, {name: "extra field", body: `{"unread":true,"other":1}`, want: 400}}
+	}{{name: "unread", body: `{"unread":true}`, want: 200}, {name: "read", body: `{"unread":false}`, want: 200}, {name: "missing", body: `{}`, want: 400}, {name: "extra field", body: `{"unread":true,"other":1}`, want: 400}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			request := listRequest(nil)
@@ -59,8 +63,11 @@ func TestMarkConversationUnreadRequiresExactTrue(t *testing.T) {
 			if err != nil || response.StatusCode != test.want {
 				t.Fatalf("status=%d err=%v body=%s", response.StatusCode, err, response.Body)
 			}
-			if test.want == 200 && fake.marked != "56912345678" {
+			if test.name == "unread" && fake.marked != "56912345678" {
 				t.Fatalf("marked=%q", fake.marked)
+			}
+			if test.name == "read" && fake.read != "56912345678" {
+				t.Fatalf("read=%q", fake.read)
 			}
 		})
 	}

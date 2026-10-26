@@ -68,10 +68,11 @@ type AgentToolbox struct {
 }
 
 type agentExecutionState struct {
-	certificateSent bool
-	derivation      *AgentDerivation
-	collected       AgentCollectedData
-	collectedDirty  bool
+	certificateSent       bool
+	derivation            *AgentDerivation
+	latestCustomerMessage string
+	collected             AgentCollectedData
+	collectedDirty        bool
 }
 
 // AgentCollectedData is the short-lived structured context required to resume
@@ -109,6 +110,9 @@ func (t *AgentToolbox) execute(ctx context.Context, phone, messageID, name strin
 		reason := stringArg(args, "motivo")
 		if reason == "" {
 			reason = "agent_handoff"
+		}
+		if isHumanHandoffReason(reason) && !isExplicitHumanHandoff(state.latestCustomerMessage) {
+			return map[string]any{"derivado": false, "motivo": "La solicitud de atención humana no está en el mensaje más reciente. Responde la consulta actual sin derivar."}, false, nil
 		}
 		state.derivation = &AgentDerivation{Reason: reason, Label: "Requiere atencion del equipo"}
 		return map[string]any{"derivado": true}, true, nil
@@ -148,6 +152,16 @@ func (t *AgentToolbox) execute(ctx context.Context, phone, messageID, name strin
 	default:
 		return map[string]any{"error": "herramienta no permitida"}, false, nil
 	}
+}
+
+func isHumanHandoffReason(reason string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(reason))
+	for _, phrase := range []string{"atencion humana", "atención humana", "persona", "agente real", "agente humano", "ejecutivo", "humano"} {
+		if strings.Contains(normalized, phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *agentExecutionState) mergeMeeting(args map[string]any) {

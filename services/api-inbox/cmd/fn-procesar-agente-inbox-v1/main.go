@@ -94,11 +94,25 @@ func handle(ctx context.Context, event events.SQSEvent) (events.SQSEventResponse
 		return events.SQSEventResponse{}, err
 	}
 	if derivationNotification.Enabled {
+		notifiers := domain.MultiDerivationNotifier{}
 		notifier, notifierErr := domain.NewWhatsAppDerivationNotifier(sender, derivationNotification)
 		if notifierErr != nil {
 			return events.SQSEventResponse{}, notifierErr
 		}
-		processor.SetDerivationNotifier(notifier)
+		notifiers = append(notifiers, notifier)
+		if derivationNotification.EmailEnabled {
+			var smtp domain.DerivationSMTPConfig
+			if err = read(derivationNotification.SMTPParameterPath, &smtp); err != nil {
+				return events.SQSEventResponse{}, err
+			}
+			emailNotifier, emailErr := domain.NewEmailDerivationNotifier(smtp, derivationNotification.EmailRecipient)
+			if emailErr != nil {
+				return events.SQSEventResponse{}, emailErr
+			}
+			notifiers = append(notifiers, emailNotifier)
+			processor.SetAgentQuotaNotifier(emailNotifier)
+		}
+		processor.SetDerivationNotifier(notifiers)
 	}
 	return functions.ProcessAgentQueue(ctx, processor, event), nil
 }

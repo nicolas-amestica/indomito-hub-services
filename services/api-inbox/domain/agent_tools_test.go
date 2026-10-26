@@ -154,3 +154,17 @@ func TestAgentSystemPromptIncludesPersistedStructuredData(t *testing.T) {
 		}
 	}
 }
+
+func TestHandoffToolRejectsStaleHumanRequest(t *testing.T) {
+	toolbox := &AgentToolbox{}
+	state := &agentExecutionState{latestCustomerMessage: "Hola"}
+	result, silent, err := toolbox.execute(context.Background(), "56911112222", "wamid-1", "sin_respuesta", map[string]any{"motivo": "Cliente solicita nuevamente atención humana."}, state)
+	if err != nil || silent || state.derivation != nil || result["derivado"] != false {
+		t.Fatalf("expected stale handoff to be rejected: result=%v silent=%v derivation=%v err=%v", result, silent, state.derivation, err)
+	}
+	state.latestCustomerMessage = "Quiero hablar con una persona"
+	result, silent, err = toolbox.execute(context.Background(), "56911112222", "wamid-2", "sin_respuesta", map[string]any{"motivo": "Cliente solicita atención humana."}, state)
+	if err != nil || !silent || state.derivation == nil || result["derivado"] != true {
+		t.Fatalf("expected current handoff to be accepted: result=%v silent=%v derivation=%v err=%v", result, silent, state.derivation, err)
+	}
+}

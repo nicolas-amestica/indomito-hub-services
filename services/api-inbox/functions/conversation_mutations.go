@@ -16,12 +16,13 @@ import (
 
 type ConversationMutator interface {
 	MarkUnread(context.Context, string) (domain.ConversationSummary, error)
+	MarkRead(context.Context, string) (domain.ConversationSummary, error)
 	ActivateBot(context.Context, string) (domain.ConversationSummary, error)
 	DeleteConversation(context.Context, string) (domain.DeleteConversationResult, error)
 }
 
 type markUnreadRequest struct {
-	Unread bool `json:"unread"`
+	Unread *bool `json:"unread"`
 }
 
 type reactivateAgentRequest struct {
@@ -40,13 +41,19 @@ func MarkConversationUnread(ctx context.Context, service ConversationMutator, re
 	var input markUnreadRequest
 	decoder := json.NewDecoder(strings.NewReader(request.Body))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&input); err != nil || !input.Unread {
-		return lambdautil.ErrorResponse(request, invalidListQuery("unread", "must be exactly true"))
+	if err := decoder.Decode(&input); err != nil || input.Unread == nil {
+		return lambdautil.ErrorResponse(request, invalidListQuery("unread", "must be a boolean"))
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return lambdautil.ErrorResponse(request, invalidListQuery("body", "must contain one JSON object"))
 	}
-	result, err := service.MarkUnread(ctx, phone)
+	var result domain.ConversationSummary
+	var err error
+	if *input.Unread {
+		result, err = service.MarkUnread(ctx, phone)
+	} else {
+		result, err = service.MarkRead(ctx, phone)
+	}
 	if errors.Is(err, domain.ErrConversationNotFound) {
 		return lambdautil.ErrorResponse(request, apperr.New(apperr.CodeResourceNotFound, "La conversacion no existe"))
 	}

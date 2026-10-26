@@ -55,6 +55,11 @@ func (s *ConversationMutationService) MarkUnread(ctx context.Context, phone stri
 	return s.SetUnreadCount(ctx, phone, 1)
 }
 
+// MarkRead clears the unread counter and publishes updated projections.
+func (s *ConversationMutationService) MarkRead(ctx context.Context, phone string) (ConversationSummary, error) {
+	return s.SetUnreadCount(ctx, phone, 0)
+}
+
 // Derive transfers a conversation to the human team and publishes both list and detail updates.
 func (s *ConversationMutationService) Derive(ctx context.Context, phone, reason, reasonLabel string) (ConversationSummary, error) {
 	reason = normalizeDerivationText(reason, 500)

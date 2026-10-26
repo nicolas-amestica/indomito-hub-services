@@ -149,3 +149,31 @@ func TestGeminiStatusErrorIncludesSafeProviderDetail(t *testing.T) {
 		})
 	}
 }
+
+func TestGeminiQuotaExhaustedRecognizesOnlyResourceExhausted429(t *testing.T) {
+	t.Parallel()
+	quotaError := geminiStatusError(http.StatusTooManyRequests, []byte(`{"error":{"status":"RESOURCE_EXHAUSTED","message":"free tier quota exhausted"}}`))
+	if !isGeminiQuotaExhausted(quotaError) {
+		t.Fatal("expected RESOURCE_EXHAUSTED 429 to be recognized as quota exhaustion")
+	}
+	if isGeminiQuotaExhausted(geminiStatusError(http.StatusServiceUnavailable, []byte(`{"error":{"status":"RESOURCE_EXHAUSTED"}}`))) {
+		t.Fatal("unexpected quota exhaustion for non-429 status")
+	}
+	if isGeminiQuotaExhausted(geminiStatusError(http.StatusTooManyRequests, []byte(`{"error":{"status":"RATE_LIMITED","message":"try later"}}`))) {
+		t.Fatal("unexpected quota exhaustion for another provider code")
+	}
+}
+
+func TestExplicitHumanHandoffDetection(t *testing.T) {
+	t.Parallel()
+	for _, message := range []string{"Quiero hablar con una persona", "Necesito un agente real", "Quiero atención humana", "Puedo hablar con un ejecutivo?"} {
+		if !isExplicitHumanHandoff(message) {
+			t.Fatalf("expected handoff request for %q", message)
+		}
+	}
+	for _, message := range []string{"Quiero una cotización", "Una persona paga cuánto?", "Gracias"} {
+		if isExplicitHumanHandoff(message) {
+			t.Fatalf("unexpected handoff request for %q", message)
+		}
+	}
+}

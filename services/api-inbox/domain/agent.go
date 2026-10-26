@@ -43,6 +43,19 @@ type permanentAgentError struct{ cause error }
 func (e *permanentAgentError) Error() string { return e.cause.Error() }
 func (e *permanentAgentError) Unwrap() error { return e.cause }
 
+type geminiProviderError struct {
+	status  int
+	code    string
+	message string
+}
+
+func (e *geminiProviderError) Error() string {
+	if e.message == "" {
+		return fmt.Sprintf("gemini status %d", e.status)
+	}
+	return fmt.Sprintf("gemini status %d (%s): %s", e.status, e.code, e.message)
+}
+
 type agentDynamo interface {
 	GetItem(context.Context, *dynamodb.GetItemInput, ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
 	PutItem(context.Context, *dynamodb.PutItemInput, ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
@@ -65,25 +78,34 @@ type agentPresenceSender interface {
 	MarkAgentReadAndTyping(context.Context, string) error
 }
 
+type AgentQuotaNotifier interface {
+	NotifyAgentQuota(context.Context, string, string) error
+}
+
 type AgentService struct {
-	db         agentDynamo
-	s3         agentS3
-	transcribe agentTranscribe
-	sender     AgentSender
-	table      string
-	cfg        AgentConfig
-	gemini     GeminiConfig
-	http       *http.Client
-	sleep      func(time.Duration)
-	now        func() time.Time
-	tools      *AgentToolbox
-	mutations  *ConversationMutationService
-	notifier   DerivationNotifier
+	db            agentDynamo
+	s3            agentS3
+	transcribe    agentTranscribe
+	sender        AgentSender
+	table         string
+	cfg           AgentConfig
+	gemini        GeminiConfig
+	http          *http.Client
+	sleep         func(time.Duration)
+	now           func() time.Time
+	tools         *AgentToolbox
+	mutations     *ConversationMutationService
+	notifier      DerivationNotifier
+	quotaNotifier AgentQuotaNotifier
 }
 
 // SetDerivationNotifier enables the optional internal WhatsApp alert.
 func (s *AgentService) SetDerivationNotifier(notifier DerivationNotifier) {
 	s.notifier = notifier
+}
+
+func (s *AgentService) SetAgentQuotaNotifier(notifier AgentQuotaNotifier) {
+	s.quotaNotifier = notifier
 }
 
 func NewAgentService(db agentDynamo, storage agentS3, transcriber agentTranscribe, sender AgentSender, tools *AgentToolbox, table string, cfg AgentConfig, gemini GeminiConfig) (*AgentService, error) {
@@ -110,7 +132,7 @@ func (s *AgentService) Process(ctx context.Context, phone, messageID string) err
 	}
 	recoveringAgentError := summary.Status == ConversationStatusDerived && summary.Reason != nil && *summary.Reason == "agent_error"
 	if summary.Status == ConversationStatusDerived && !recoveringAgentError {
-		return nil
+		return s.confirmExistingDerivation(ctx, phone, messageID)
 	}
 	if s.cfg.DebounceMS > 0 {
 		s.sleep(time.Duration(s.cfg.DebounceMS) * time.Millisecond)
@@ -156,6 +178,14 @@ func (s *AgentService) Process(ctx context.Context, phone, messageID string) err
 	}
 	reply, derivation, err := s.generate(ctx, phone, messageID, messages)
 	if err != nil {
+		if isGeminiQuotaExhausted(err) {
+			if s.quotaNotifier != nil {
+				if notifyErr := s.quotaNotifier.NotifyAgentQuota(ctx, s.gemini.Model, err.Error()); notifyErr != nil {
+					log.Printf("agent quota notification failed messageId=%s: %v", messageID, notifyErr)
+				}
+			}
+			err = &permanentAgentError{cause: err}
+		}
 		var permanent *permanentAgentError
 		if !errors.As(err, &permanent) {
 			return err
@@ -173,6 +203,7 @@ func (s *AgentService) Process(ctx context.Context, phone, messageID string) err
 		_, err = s.mutations.Derive(ctx, phone, derivation.Reason, derivation.Label)
 		if err == nil {
 			s.notifyDerivation(ctx, phone, messageID, latest, derivation.Label)
+			_, err = s.sender.SendAgentText(ctx, phone, "agent-"+messageID+"-derivation", "Te derivé con nuestro equipo para que continúen ayudándote. Te contactarán apenas sea posible.")
 		}
 		return err
 	}
@@ -197,6 +228,34 @@ func (s *AgentService) Process(ctx context.Context, phone, messageID string) err
 		_, err = s.mutations.ActivateBot(ctx, phone)
 	}
 	return err
+}
+
+func isGeminiQuotaExhausted(err error) bool {
+	var provider *geminiProviderError
+	return errors.As(err, &provider) && provider.status == http.StatusTooManyRequests && strings.EqualFold(provider.code, "RESOURCE_EXHAUSTED")
+}
+
+func (s *AgentService) confirmExistingDerivation(ctx context.Context, phone, messageID string) error {
+	messages, err := s.history(ctx, phone)
+	if err != nil || len(messages) == 0 {
+		return err
+	}
+	latest := messages[len(messages)-1]
+	if latest.Type != MessageTypeCustomer || latest.WhatsAppMessageID == nil || *latest.WhatsAppMessageID != messageID || latest.Content == nil || !isExplicitHumanHandoff(*latest.Content) {
+		return nil
+	}
+	_, err = s.sender.SendAgentText(ctx, phone, "agent-"+messageID+"-derivation-confirmation", "Tu conversación ya está derivada con nuestro equipo. Te contactarán apenas sea posible.")
+	return err
+}
+
+func isExplicitHumanHandoff(message string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	for _, phrase := range []string{"hablar con una persona", "hablar con un agente", "agente real", "atencion humana", "atención humana", "hablar con un humano", "hablar con un ejecutivo"} {
+		if strings.Contains(normalized, phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *AgentService) notifyDerivation(ctx context.Context, phone, messageID string, latest Message, label string) {
@@ -325,6 +384,12 @@ type interactionResponse struct {
 
 func (s *AgentService) generate(ctx context.Context, phone, messageID string, messages []Message) (string, *AgentDerivation, error) {
 	state := &agentExecutionState{}
+	if len(messages) > 0 {
+		latest := messages[len(messages)-1]
+		if latest.Type == MessageTypeCustomer && latest.Content != nil {
+			state.latestCustomerMessage = strings.TrimSpace(*latest.Content)
+		}
+	}
 	if s.db != nil {
 		collected, err := s.agentCollectedData(ctx, phone)
 		if err != nil {
@@ -345,7 +410,7 @@ func (s *AgentService) generate(ctx context.Context, phone, messageID string, me
 		}
 		role := "Cliente"
 		if m.Type != MessageTypeCustomer {
-			role = "Susana"
+			role = "Agente IA"
 		}
 		fmt.Fprintf(&history, "%s: %s\n", role, strings.TrimSpace(*m.Content))
 	}
@@ -361,15 +426,9 @@ func (s *AgentService) generate(ctx context.Context, phone, messageID string, me
 		if err != nil {
 			return "", nil, err
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(raw))
+		resp, err := s.doGeminiRequest(ctx, endpoint, raw)
 		if err != nil {
-			return "", nil, err
-		}
-		req.Header.Set("content-type", "application/json")
-		req.Header.Set("x-goog-api-key", s.gemini.APIKey)
-		resp, err := s.http.Do(req)
-		if err != nil {
-			return "", nil, err
+			return "", nil, &permanentAgentError{cause: fmt.Errorf("gemini unavailable after immediate retries: %w", err)}
 		}
 		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 		_ = resp.Body.Close()
@@ -436,6 +495,41 @@ func (s *AgentService) generate(ctx context.Context, phone, messageID string, me
 	return "", nil, &permanentAgentError{cause: errors.New("gemini tool loop exceeded")}
 }
 
+func (s *AgentService) doGeminiRequest(ctx context.Context, endpoint string, payload []byte) (*http.Response, error) {
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("content-type", "application/json")
+		req.Header.Set("x-goog-api-key", s.gemini.APIKey)
+		resp, requestErr := s.http.Do(req)
+		if requestErr == nil && resp.StatusCode != http.StatusTooManyRequests && resp.StatusCode < http.StatusInternalServerError {
+			return resp, nil
+		}
+		if requestErr == nil {
+			if attempt == 2 {
+				return resp, nil
+			}
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+			_ = resp.Body.Close()
+			lastErr = fmt.Errorf("transient gemini status %d", resp.StatusCode)
+		} else {
+			lastErr = requestErr
+		}
+		if attempt < 2 {
+			delay := time.Duration(attempt+1) * time.Second
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+	}
+	return nil, lastErr
+}
+
 type agentStateRecord struct {
 	PK            string             `dynamodbav:"pk"`
 	SK            string             `dynamodbav:"sk"`
@@ -478,9 +572,9 @@ func geminiStatusError(status int, body []byte) error {
 		if len(message) > 500 {
 			message = message[:500]
 		}
-		return fmt.Errorf("gemini status %d (%s): %s", status, result.Error.Status, string(message))
+		return &geminiProviderError{status: status, code: result.Error.Status, message: string(message)}
 	}
-	return fmt.Errorf("gemini status %d", status)
+	return &geminiProviderError{status: status}
 }
 
 func contains(values []string, want string) bool {

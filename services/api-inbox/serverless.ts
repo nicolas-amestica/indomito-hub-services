@@ -26,6 +26,9 @@ const INBOX_PARAMETER_ARN = {
 const GOOGLE_CALENDAR_OAUTH_PARAMETER_ARN = {
   "Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/${STAGE}/google/calendar-oauth`,
 };
+const PAYMENTS_RECEIPT_SMTP_PARAMETER_ARN = {
+  "Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/${STAGE}/payments/receipt-smtp`,
+};
 const INBOX_OPERATIONAL_ALERTS_TOPIC = { Ref: "InboxOperationalAlerts" };
 
 const endpoints: GoHttpEndpoint[] = [
@@ -248,7 +251,7 @@ const endpoints: GoHttpEndpoint[] = [
     description: "Procesa el agente Gemini, audio y controles de frecuencia de Inbox",
     events: [{ sqs: { arn: { "Fn::GetAtt": ["InboxAgentQueue", "Arn"] }, batchSize: 1, functionResponseType: "ReportBatchItemFailures" } }],
     policies: [
-      dynamodbCrudPolicy(TABLE_ARN), s3ObjectPolicy(INBOX_BUCKET_OBJECTS_ARN), ssmReadPolicy(INBOX_PARAMETER_ARN), ssmReadPolicy(GOOGLE_CALENDAR_OAUTH_PARAMETER_ARN),
+      dynamodbCrudPolicy(TABLE_ARN), s3ObjectPolicy(INBOX_BUCKET_OBJECTS_ARN), ssmReadPolicy(INBOX_PARAMETER_ARN), ssmReadPolicy(GOOGLE_CALENDAR_OAUTH_PARAMETER_ARN), ssmReadPolicy(PAYMENTS_RECEIPT_SMTP_PARAMETER_ARN),
       { Effect: "Allow", Action: ["s3:ListBucket"], Resource: INBOX_ASSETS_BUCKET_ARN },
       { Effect: "Allow", Action: ["s3:GetObject"], Resource: INBOX_ASSETS_BUCKET_OBJECTS_ARN },
       { Effect: "Allow", Action: ["transcribe:StartTranscriptionJob", "transcribe:GetTranscriptionJob"], Resource: "*" },
