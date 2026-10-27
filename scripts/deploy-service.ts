@@ -110,11 +110,34 @@ function exportCredentials(profile: string): Record<string, string> {
   }
 }
 
-function getCallerIdentity(env: Record<string, string>): { account: string; arn: string } {
-  const output = execSync('aws sts get-caller-identity', {
+function createAwsEnvironment(credentials: Record<string, string>): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+
+  delete env.AWS_PROFILE;
+  delete env.AWS_DEFAULT_PROFILE;
+
+  if (Object.keys(credentials).length > 0) {
+    delete env.AWS_ACCESS_KEY_ID;
+    delete env.AWS_SECRET_ACCESS_KEY;
+    delete env.AWS_SESSION_TOKEN;
+    delete env.AWS_SECURITY_TOKEN;
+    delete env.AWS_CREDENTIAL_EXPIRATION;
+    delete env.AWS_ROLE_ARN;
+    delete env.AWS_ROLE_SESSION_NAME;
+    delete env.AWS_WEB_IDENTITY_TOKEN_FILE;
+    delete env.AWS_CONTAINER_CREDENTIALS_FULL_URI;
+    delete env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI;
+    Object.assign(env, credentials);
+  }
+
+  return env;
+}
+
+function getCallerIdentity(env: NodeJS.ProcessEnv): { account: string; arn: string } {
+  const output = execFileSync('aws', ['sts', 'get-caller-identity'], {
     encoding: 'utf8',
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, ...env },
+    env,
   });
 
   const identity = JSON.parse(output);
@@ -128,6 +151,7 @@ const stage = getArg('stage', 'dev');
 const region = getArg('region', 'us-east-1');
 const skipBuild = hasFlag('skip-build');
 const skipValidate = hasFlag('skip-validate');
+const preflightOnly = hasFlag('preflight-only');
 // En modo --remove se omiten build y validate: no se compila nada para borrar
 // un stack. Este script se encarga del remove (y no un `npx serverless remove`
 // directo en el Makefile) porque hay que exportar las credenciales SSO primero,
@@ -166,16 +190,18 @@ if (hasAmbientAwsCredentials) {
   awsCredentials = exportCredentials(profile);
 }
 
-// 3. Evitar que un perfil local invalide las credenciales OIDC del entorno.
-const {
-  AWS_PROFILE: _awsProfile,
-  AWS_DEFAULT_PROFILE: _awsDefaultProfile,
-  ...processEnvWithoutAwsProfile
-} = process.env;
-const identity = getCallerIdentity(awsCredentials);
+// 3. Evitar que perfiles o metadatos de credenciales vencidas del terminal
+// invaliden las credenciales SSO recién exportadas o las credenciales OIDC.
+const awsEnvironment = createAwsEnvironment(awsCredentials);
+const identity = getCallerIdentity(awsEnvironment);
 log('green', '✓', `Credenciales válidas — Account: ${identity.account}`);
 log('green', ' ', `ARN: ${identity.arn}`);
 console.log('');
+
+if (preflightOnly) {
+  log('green', '✓', `Preflight exitoso: ${service} → ${stage} (${region})`);
+  process.exit(0);
+}
 
 // 4. Build (no aplica en --remove)
 if (isRemove) {
@@ -187,7 +213,7 @@ if (isRemove) {
     execFileSync('npx', ['tsx', 'scripts/build-service.ts', '--service', service], {
       cwd: resolve('.'),
       stdio: 'inherit',
-      env: { ...process.env, ...awsCredentials },
+      env: awsEnvironment,
     });
     log('green', '✓', 'Build completado');
     console.log('');
@@ -201,7 +227,7 @@ if (isRemove) {
     execFileSync('npx', ['tsx', 'scripts/validate-service.ts', '--service', service, '--stage', stage, '--region', region], {
       cwd: resolve('.'),
       stdio: 'inherit',
-      env: { ...processEnvWithoutAwsProfile, ...awsCredentials },
+      env: awsEnvironment,
     });
     console.log('');
   } else {
@@ -217,8 +243,7 @@ execFileSync('npx', ['serverless', slsCommand, '--stage', stage, '--region', reg
   cwd: servicePath,
   stdio: 'inherit',
   env: {
-    ...processEnvWithoutAwsProfile,
-    ...awsCredentials,
+    ...awsEnvironment,
     STAGE: stage,
     NODE_OPTIONS: '--no-deprecation',
   },
