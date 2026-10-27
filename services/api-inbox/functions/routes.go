@@ -20,6 +20,11 @@ func (r Route) Register(e *echo.Echo, handler echo.HandlerFunc) {
 
 // Routes contiene la superficie HTTP normativa del servicio.
 var Routes = []Route{
+	GetAgentManagementRoute,
+	SaveAgentDraftRoute,
+	PublishAgentConfigRoute,
+	RestoreAgentConfigRoute,
+	PrepareAgentAssetRoute,
 	ListConversationsRoute,
 	GetConversationRoute,
 	{Method: http.MethodPost, Path: "/conversaciones/:telefono/respuestas"},
@@ -69,6 +74,11 @@ var GetBulkRoute = Route{Method: http.MethodGet, Path: "/operaciones-inbox/:oper
 var CreateSubscriptionRoute = Route{Method: http.MethodGet, Path: "/conversaciones/suscripcion"}
 var VerifyWhatsAppWebhookRoute = Route{Method: http.MethodGet, Path: "/webhooks/whatsapp"}
 var ReceiveWhatsAppWebhookRoute = Route{Method: http.MethodPost, Path: "/webhooks/whatsapp"}
+var GetAgentManagementRoute = Route{Method: http.MethodGet, Path: "/configuracion-agente"}
+var SaveAgentDraftRoute = Route{Method: http.MethodPut, Path: "/configuracion-agente/borrador"}
+var PublishAgentConfigRoute = Route{Method: http.MethodPost, Path: "/configuracion-agente/publicaciones"}
+var RestoreAgentConfigRoute = Route{Method: http.MethodPost, Path: "/configuracion-agente/restauraciones"}
+var PrepareAgentAssetRoute = Route{Method: http.MethodPost, Path: "/configuracion-agente/programas/cargas"}
 
 // ImplementedRoutes contiene sólo endpoints con handler y binario desplegable.
-var ImplementedRoutes = []Route{ListConversationsRoute, GetConversationRoute, SendReplyRoute, ListTemplatesRoute, SendTemplateRoute, SendReactionRoute, SendRichMessageRoute, PrepareAttachmentsRoute, SendAttachmentRoute, UpdateContactRoute, MarkUnreadRoute, ReactivateAgentRoute, DeleteConversationRoute, StartMarkAllReadRoute, StartRecalculateUnreadRoute, CreateSubscriptionRoute, GetSendRoute, RetrySendRoute, ResolveSendRoute, GetActiveBulkRoute, GetBulkRoute, VerifyWhatsAppWebhookRoute, ReceiveWhatsAppWebhookRoute}
+var ImplementedRoutes = []Route{GetAgentManagementRoute, SaveAgentDraftRoute, PublishAgentConfigRoute, RestoreAgentConfigRoute, PrepareAgentAssetRoute, ListConversationsRoute, GetConversationRoute, SendReplyRoute, ListTemplatesRoute, SendTemplateRoute, SendReactionRoute, SendRichMessageRoute, PrepareAttachmentsRoute, SendAttachmentRoute, UpdateContactRoute, MarkUnreadRoute, ReactivateAgentRoute, DeleteConversationRoute, StartMarkAllReadRoute, StartRecalculateUnreadRoute, CreateSubscriptionRoute, GetSendRoute, RetrySendRoute, ResolveSendRoute, GetActiveBulkRoute, GetBulkRoute, VerifyWhatsAppWebhookRoute, ReceiveWhatsAppWebhookRoute}

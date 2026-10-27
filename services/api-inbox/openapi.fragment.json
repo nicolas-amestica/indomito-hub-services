@@ -216,6 +216,21 @@
     }
   },
   "paths": {
+    "/configuracion-agente": {
+      "get": { "operationId": "getAgentManagement", "security": [{ "BearerAuth": [] }], "responses": { "200": { "description": "Borrador, version publicada e historial" }, "401": { "description": "No autenticado" }, "500": { "description": "Fallo interno" } } }
+    },
+    "/configuracion-agente/borrador": {
+      "put": { "operationId": "saveAgentDraft", "security": [{ "BearerAuth": [] }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } }, "responses": { "200": { "description": "Borrador validado" }, "400": { "description": "Configuracion invalida" }, "401": { "description": "No autenticado" } } }
+    },
+    "/configuracion-agente/publicaciones": {
+      "post": { "operationId": "publishAgentConfig", "security": [{ "BearerAuth": [] }], "responses": { "201": { "description": "Configuracion publicada" }, "400": { "description": "Borrador invalido" }, "401": { "description": "No autenticado" } } }
+    },
+    "/configuracion-agente/restauraciones": {
+      "post": { "operationId": "restoreAgentConfig", "security": [{ "BearerAuth": [] }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "additionalProperties": false, "required": ["version"], "properties": { "version": { "type": "string", "minLength": 1 } } } } } }, "responses": { "201": { "description": "Version restaurada y publicada" }, "400": { "description": "Version invalida" }, "401": { "description": "No autenticado" } } }
+    },
+    "/configuracion-agente/programas/cargas": {
+      "post": { "operationId": "prepareAgentProgramUpload", "security": [{ "BearerAuth": [] }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "additionalProperties": false, "required": ["fileName", "size"], "properties": { "fileName": { "type": "string", "pattern": "(?i)\\.pdf$" }, "size": { "type": "integer", "minimum": 1, "maximum": 33554432 } } } } } }, "responses": { "200": { "description": "Carga firmada por diez minutos" }, "400": { "description": "Archivo invalido" }, "401": { "description": "No autenticado" } } }
+    },
     "/conversaciones": {
       "get": {
         "operationId": "listConversations",

@@ -30,6 +30,7 @@ const (
 	runtimeConfigPathEnv    = "INBOX_RUNTIME_CONFIG_PARAM"
 	whatsAppConfigPathEnv   = "INBOX_WHATSAPP_CONFIG_PARAM"
 	inboxTemporaryBucketEnv = "INBOX_TEMPORARY_BUCKET_NAME"
+	inboxAssetsBucketEnv    = "INBOX_ASSETS_BUCKET_NAME"
 	inboxWebSocketURLEnv    = "INBOX_WEBSOCKET_URL"
 )
 
@@ -79,6 +80,8 @@ type App struct {
 	Templates    TemplateLister
 	TemplateSend TemplateSender
 	Reaction     ReactionSender
+	AgentConfig  *domain.AgentManagementService
+	AgentUploads *domain.AgentAssetUploadService
 	VerifyToken  string
 	Port         string
 }
@@ -108,8 +111,9 @@ func GetApp(ctx context.Context) (*App, error) {
 		runtimePath := os.Getenv(runtimeConfigPathEnv)
 		whatsAppPath := os.Getenv(whatsAppConfigPathEnv)
 		bucketName := os.Getenv(inboxTemporaryBucketEnv)
+		assetsBucketName := os.Getenv(inboxAssetsBucketEnv)
 		webSocketURL := os.Getenv(inboxWebSocketURLEnv)
-		if tableName == "" || cursorPath == "" || runtimePath == "" || whatsAppPath == "" || bucketName == "" || webSocketURL == "" {
+		if tableName == "" || cursorPath == "" || runtimePath == "" || whatsAppPath == "" || bucketName == "" || assetsBucketName == "" || webSocketURL == "" {
 			appError = errors.New("inbox environment configuration is incomplete")
 			return
 		}
@@ -196,13 +200,23 @@ func GetApp(ctx context.Context) (*App, error) {
 			appError = err
 			return
 		}
+		agentConfig, err := domain.NewAgentManagementService(client, tableName)
+		if err != nil {
+			appError = err
+			return
+		}
+		agentUploads, err := domain.NewAgentAssetUploadService(s3.NewPresignClient(storage), assetsBucketName)
+		if err != nil {
+			appError = err
+			return
+		}
 		catalog := domain.NewMetaTemplateCatalog(nil, whatsApp.BusinessAccountID, whatsApp.AccessToken)
 		templateSend, err := domain.NewTemplateService(catalog, sender)
 		if err != nil {
 			appError = err
 			return
 		}
-		appInstance = &App{List: service, Detail: detail, Send: sender, Contact: contact, Attachment: attachments, Mutation: mutation, Bulk: bulk, Subscription: subscription, Webhook: webhook, Templates: catalog, TemplateSend: templateSend, Reaction: reaction, VerifyToken: whatsApp.VerifyToken, Port: base.Port}
+		appInstance = &App{List: service, Detail: detail, Send: sender, Contact: contact, Attachment: attachments, Mutation: mutation, Bulk: bulk, Subscription: subscription, Webhook: webhook, Templates: catalog, TemplateSend: templateSend, Reaction: reaction, AgentConfig: agentConfig, AgentUploads: agentUploads, VerifyToken: whatsApp.VerifyToken, Port: base.Port}
 	})
 	if appError != nil {
 		// El detalle se registra solo en CloudWatch; la respuesta HTTP conserva el

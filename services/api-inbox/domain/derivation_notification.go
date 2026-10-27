@@ -24,12 +24,12 @@ var derivationNotificationLanguagePattern = regexp.MustCompile(`^[a-z]{2,3}(?:_[
 // internal team when the agent transfers a conversation.
 type DerivationNotificationConfig struct {
 	Enabled           bool   `json:"enabled"`
-	RecipientPhone    string `json:"recipientPhone"`
 	TemplateName      string `json:"templateName"`
 	Language          string `json:"language"`
-	EmailEnabled      bool   `json:"emailEnabled"`
-	EmailRecipient    string `json:"emailRecipient"`
 	SMTPParameterPath string `json:"smtpParameterPath"`
+	RecipientPhone    string `json:"-"`
+	EmailEnabled      bool   `json:"-"`
+	EmailRecipient    string `json:"-"`
 }
 
 // DerivationSMTPConfig is loaded from the existing encrypted receipt SMTP parameter.

@@ -97,7 +97,10 @@ type AgentService struct {
 	mutations     *ConversationMutationService
 	notifier      DerivationNotifier
 	quotaNotifier AgentQuotaNotifier
+	managed       *AgentManagedConfig
 }
+
+func (s *AgentService) SetManagedConfig(config *AgentManagedConfig) { s.managed = config }
 
 // SetDerivationNotifier enables the optional internal WhatsApp alert.
 func (s *AgentService) SetDerivationNotifier(notifier DerivationNotifier) {
@@ -203,7 +206,11 @@ func (s *AgentService) Process(ctx context.Context, phone, messageID string) err
 		_, err = s.mutations.Derive(ctx, phone, derivation.Reason, derivation.Label)
 		if err == nil {
 			s.notifyDerivation(ctx, phone, messageID, latest, derivation.Label)
-			_, err = s.sender.SendAgentText(ctx, phone, "agent-"+messageID+"-derivation", "Te derivé con nuestro equipo para que continúen ayudándote. Te contactarán apenas sea posible.")
+			confirmation := "Te derivé con nuestro equipo para que continúen ayudándote. Te contactarán apenas sea posible."
+			if s.managed != nil && strings.TrimSpace(s.managed.Policies.HandoffConfirmation) != "" {
+				confirmation = s.managed.Policies.HandoffConfirmation
+			}
+			_, err = s.sender.SendAgentText(ctx, phone, "agent-"+messageID+"-derivation", confirmation)
 		}
 		return err
 	}
@@ -421,7 +428,7 @@ func (s *AgentService) generate(ctx context.Context, phone, messageID string, me
 	steps := []json.RawMessage{initialStep}
 	endpoint := "https://generativelanguage.googleapis.com/v1beta/interactions"
 	for round := 0; round < 8; round++ {
-		payload := map[string]any{"model": s.gemini.Model, "input": steps, "system_instruction": agentSystemPrompt(phone, len(messages) > 1, s.now(), state.collected), "generation_config": map[string]any{"temperature": s.gemini.Temperature, "top_p": s.gemini.TopP}, "tools": agentInteractionTools(), "store": false}
+		payload := map[string]any{"model": s.gemini.Model, "input": steps, "system_instruction": agentSystemPromptWithConfig(phone, len(messages) > 1, s.now(), state.collected, s.managed), "generation_config": map[string]any{"temperature": s.gemini.Temperature, "top_p": s.gemini.TopP}, "tools": agentInteractionTools(), "store": false}
 		raw, err := json.Marshal(payload)
 		if err != nil {
 			return "", nil, err

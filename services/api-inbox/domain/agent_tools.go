@@ -65,7 +65,10 @@ type AgentToolbox struct {
 	oauth   GoogleOAuthConfig
 	http    *http.Client
 	now     func() time.Time
+	managed *AgentManagedConfig
 }
+
+func (t *AgentToolbox) SetManagedConfig(config *AgentManagedConfig) { t.managed = config }
 
 type agentExecutionState struct {
 	certificateSent       bool
@@ -105,6 +108,14 @@ func NewAgentToolbox(storage agentAssetStore, sender AgentSender, assets AgentAs
 }
 
 func (t *AgentToolbox) execute(ctx context.Context, phone, messageID, name string, args map[string]any, state *agentExecutionState) (map[string]any, bool, error) {
+	if t.managed != nil {
+		if (name == "sin_respuesta" || name == "derivar_equipo") && !t.managed.Policies.HumanHandoffEnabled {
+			return map[string]any{"derivado": false, "motivo": "La derivacion humana esta deshabilitada. Responde usando el conocimiento disponible."}, false, nil
+		}
+		if isMeetingTool(name) && !t.managed.Policies.OfferMeetings {
+			return map[string]any{"exito": false, "mensaje": "La gestion de reuniones esta deshabilitada."}, false, nil
+		}
+	}
 	switch name {
 	case "sin_respuesta", "derivar_equipo":
 		reason := stringArg(args, "motivo")
@@ -151,6 +162,15 @@ func (t *AgentToolbox) execute(ctx context.Context, phone, messageID, name strin
 		return result, false, err
 	default:
 		return map[string]any{"error": "herramienta no permitida"}, false, nil
+	}
+}
+
+func isMeetingTool(name string) bool {
+	switch name {
+	case "guardar_datos_reunion", "listar_reuniones", "listar_reunion", "crear_reunion", "editar_reunion", "reagendar_reunion", "cancelar_reunion":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -268,7 +288,32 @@ func (t *AgentToolbox) sendBudgets(ctx context.Context, phone, messageID, destin
 	}
 	var keys []string
 	var err error
-	if city != "" {
+	if t.managed != nil && len(t.managed.Programs) > 0 {
+		for _, program := range t.managed.Programs {
+			if !program.Active || program.DocumentKey == "" || normalizeSegment(program.Destination) != destination {
+				continue
+			}
+			regionMatch := len(program.OriginRegions) == 0
+			for _, allowed := range program.OriginRegions {
+				if normalizeSegment(allowed) == region {
+					regionMatch = true
+					break
+				}
+			}
+			cityMatch := len(program.OriginCities) == 0
+			for _, allowed := range program.OriginCities {
+				if normalizeSegment(allowed) == city {
+					cityMatch = true
+					break
+				}
+			}
+			if regionMatch && cityMatch {
+				keys = append(keys, program.DocumentKey)
+			}
+		}
+		sort.Strings(keys)
+	}
+	if len(keys) == 0 && city != "" {
 		prefix := strings.TrimSuffix(t.assets.BudgetExceptionsPrefix, "/") + "/" + city + "/"
 		keys, err = t.listPDFs(ctx, prefix, destination)
 	}
@@ -298,7 +343,7 @@ func (t *AgentToolbox) sendBudgets(ctx context.Context, phone, messageID, destin
 		files = append(files, name)
 	}
 	result := map[string]any{"encontrados": true, "archivos": files, "certificadoSernatur": map[string]any{"enviado": false, "yaEnviado": state.certificateSent}}
-	if !state.certificateSent {
+	if !state.certificateSent && (t.managed == nil || t.managed.Policies.SendSernaturWithQuotations) {
 		certificate, certificateErr := t.sendCertificate(ctx, phone, messageID+"-budget", "post_presupuesto")
 		result["certificadoSernatur"] = certificate
 		if certificateErr != nil {

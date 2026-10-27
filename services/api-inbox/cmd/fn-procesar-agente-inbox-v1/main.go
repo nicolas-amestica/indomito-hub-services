@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -72,6 +73,32 @@ func handle(ctx context.Context, event events.SQSEvent) (events.SQSEventResponse
 		return events.SQSEventResponse{}, err
 	}
 	db := dynamodb.NewFromConfig(cfg)
+	managedService, err := domain.NewAgentManagementService(db, table)
+	if err != nil {
+		return events.SQSEventResponse{}, err
+	}
+	managed, err := managedService.Published(ctx)
+	if err != nil {
+		return events.SQSEventResponse{}, err
+	}
+	if managed == nil {
+		defaults := domain.DefaultAgentManagedConfig()
+		managed = &defaults
+	}
+	if managed != nil {
+		agent.DebounceMS = managed.Generation.DebounceMS
+		agent.RateLimitMax = managed.Generation.RateLimitMax
+		agent.RateLimitWindowSeconds = managed.Generation.RateLimitWindowSeconds
+		agent.MaxMessageLength = managed.Generation.MaxMessageLength
+		agent.MaxHistoryTurns = managed.Generation.MaxHistoryTurns
+		gemini.Model = managed.Generation.Model
+		gemini.Temperature = managed.Generation.Temperature
+		gemini.TopP = managed.Generation.TopP
+		derivationNotification.Enabled = managed.Policies.HumanHandoffEnabled
+		derivationNotification.RecipientPhone = managed.Policies.HandoffPhone
+		derivationNotification.EmailEnabled = managed.Policies.HandoffEmailEnabled
+		derivationNotification.EmailRecipient = managed.Policies.HandoffEmail
+	}
 	provider, err := domain.NewMetaTextProvider(nil, whatsApp.PhoneNumberID, whatsApp.AccessToken)
 	if err != nil {
 		return events.SQSEventResponse{}, err
@@ -89,30 +116,39 @@ func handle(ctx context.Context, event events.SQSEvent) (events.SQSEventResponse
 	if err != nil {
 		return events.SQSEventResponse{}, err
 	}
+	toolbox.SetManagedConfig(managed)
 	processor, err := domain.NewAgentService(db, storage, transcribe.NewFromConfig(cfg), sender, toolbox, table, agent, gemini)
 	if err != nil {
 		return events.SQSEventResponse{}, err
 	}
+	processor.SetManagedConfig(managed)
+	var emailNotifier *domain.EmailDerivationNotifier
+	if managed != nil && strings.TrimSpace(managed.Policies.HandoffEmail) != "" {
+		var smtp domain.DerivationSMTPConfig
+		if err = read(derivationNotification.SMTPParameterPath, &smtp); err != nil {
+			return events.SQSEventResponse{}, err
+		}
+		emailNotifier, err = domain.NewEmailDerivationNotifier(smtp, managed.Policies.HandoffEmail)
+		if err != nil {
+			return events.SQSEventResponse{}, err
+		}
+		processor.SetAgentQuotaNotifier(emailNotifier)
+	}
 	if derivationNotification.Enabled {
 		notifiers := domain.MultiDerivationNotifier{}
-		notifier, notifierErr := domain.NewWhatsAppDerivationNotifier(sender, derivationNotification)
-		if notifierErr != nil {
-			return events.SQSEventResponse{}, notifierErr
+		if managed != nil && managed.Policies.HandoffWhatsAppEnabled {
+			notifier, notifierErr := domain.NewWhatsAppDerivationNotifier(sender, derivationNotification)
+			if notifierErr != nil {
+				return events.SQSEventResponse{}, notifierErr
+			}
+			notifiers = append(notifiers, notifier)
 		}
-		notifiers = append(notifiers, notifier)
-		if derivationNotification.EmailEnabled {
-			var smtp domain.DerivationSMTPConfig
-			if err = read(derivationNotification.SMTPParameterPath, &smtp); err != nil {
-				return events.SQSEventResponse{}, err
-			}
-			emailNotifier, emailErr := domain.NewEmailDerivationNotifier(smtp, derivationNotification.EmailRecipient)
-			if emailErr != nil {
-				return events.SQSEventResponse{}, emailErr
-			}
+		if derivationNotification.EmailEnabled && emailNotifier != nil {
 			notifiers = append(notifiers, emailNotifier)
-			processor.SetAgentQuotaNotifier(emailNotifier)
 		}
-		processor.SetDerivationNotifier(notifiers)
+		if len(notifiers) > 0 {
+			processor.SetDerivationNotifier(notifiers)
+		}
 	}
 	return functions.ProcessAgentQueue(ctx, processor, event), nil
 }

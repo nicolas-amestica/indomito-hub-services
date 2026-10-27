@@ -15,6 +15,7 @@ const TABLE_STREAM_ARN = `\${cf:${DDB_STACK}.ConversacionesTableStreamArn}`;
 const INBOX_BUCKET_NAME = `\${cf:${S3_STACK}.InboxTemporaryBucketName}`;
 const INBOX_BUCKET_OBJECTS_ARN = `\${cf:${S3_STACK}.InboxTemporaryBucketArn}/*`;
 const INBOX_ASSETS_BUCKET_ARN = `\${cf:${S3_STACK}.InboxAssetsBucketArn}`;
+const INBOX_ASSETS_BUCKET_NAME = `\${cf:${S3_STACK}.InboxAssetsBucketName}`;
 const INBOX_ASSETS_BUCKET_OBJECTS_ARN = `${INBOX_ASSETS_BUCKET_ARN}/*`;
 const INBOX_WEBSOCKET_URL = `\${cf:${WEBSOCKET_STACK}.WebSocketUrl}`;
 const INBOX_WEBSOCKET_API_ID = `\${cf:${WEBSOCKET_STACK}.WebSocketApiId}`;
@@ -32,6 +33,41 @@ const PAYMENTS_RECEIPT_SMTP_PARAMETER_ARN = {
 const INBOX_OPERATIONAL_ALERTS_TOPIC = { Ref: "InboxOperationalAlerts" };
 
 const endpoints: GoHttpEndpoint[] = [
+  {
+    name: "fn-obtener-configuracion-agente-v1",
+    method: "GET",
+    path: "/configuracion-agente",
+    public: false, memorySize: 256, timeout: 12, description: "Obtiene borrador, version publicada e historial del agente IA",
+    policies: [dynamodbCrudPolicy(TABLE_ARN), ssmReadPolicy(INBOX_PARAMETER_ARN)],
+  },
+  {
+    name: "fn-guardar-borrador-agente-v1",
+    method: "PUT",
+    path: "/configuracion-agente/borrador",
+    public: false, memorySize: 256, timeout: 12, description: "Guarda un borrador validado de configuracion del agente IA",
+    policies: [dynamodbCrudPolicy(TABLE_ARN), ssmReadPolicy(INBOX_PARAMETER_ARN)],
+  },
+  {
+    name: "fn-publicar-configuracion-agente-v1",
+    method: "POST",
+    path: "/configuracion-agente/publicaciones",
+    public: false, memorySize: 256, timeout: 12, description: "Publica de forma atomica la configuracion del agente IA",
+    policies: [dynamodbCrudPolicy(TABLE_ARN), ssmReadPolicy(INBOX_PARAMETER_ARN)],
+  },
+  {
+    name: "fn-restaurar-configuracion-agente-v1",
+    method: "POST",
+    path: "/configuracion-agente/restauraciones",
+    public: false, memorySize: 256, timeout: 12, description: "Restaura una version historica del agente IA",
+    policies: [dynamodbCrudPolicy(TABLE_ARN), ssmReadPolicy(INBOX_PARAMETER_ARN)],
+  },
+  {
+    name: "fn-preparar-activo-agente-v1",
+    method: "POST",
+    path: "/configuracion-agente/programas/cargas",
+    public: false, memorySize: 256, timeout: 12, description: "Firma una carga PDF privada para un programa del agente IA",
+    policies: [dynamodbCrudPolicy(TABLE_ARN), s3ObjectPolicy(INBOX_ASSETS_BUCKET_OBJECTS_ARN), ssmReadPolicy(INBOX_PARAMETER_ARN)],
+  },
   {
     name: "fn-obtener-conversaciones-v1",
     method: "GET",
@@ -310,6 +346,7 @@ const serverlessConfiguration = buildGoServiceServerless(ApiServices.Inbox, endp
     INBOX_MEETING_CONFIG_PARAM: `/indomito/${STAGE}/inbox/meeting-config`,
     INBOX_DERIVATION_NOTIFICATION_CONFIG_PARAM: `/indomito/${STAGE}/inbox/derivation-notification-config`,
     INBOX_TEMPORARY_BUCKET_NAME: INBOX_BUCKET_NAME,
+    INBOX_ASSETS_BUCKET_NAME,
     INBOX_WEBSOCKET_URL,
   },
 });
