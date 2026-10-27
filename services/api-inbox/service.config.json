@@ -57,6 +57,11 @@
     { "name": "fn-conectar-websocket-v1", "entrypoint": "./cmd/fn-conectar-websocket-v1" },
     { "name": "fn-desconectar-websocket-v1", "entrypoint": "./cmd/fn-desconectar-websocket-v1" },
     { "name": "fn-publicar-evento-inbox-v1", "entrypoint": "./cmd/fn-publicar-evento-inbox-v1" },
-    { "name": "fn-procesar-operacion-masiva-v1", "entrypoint": "./cmd/fn-procesar-operacion-masiva-v1" }
+    { "name": "fn-procesar-operacion-masiva-v1", "entrypoint": "./cmd/fn-procesar-operacion-masiva-v1" },
+    { "name": "fn-obtener-configuracion-agente-v1", "entrypoint": "./cmd/fn-obtener-configuracion-agente-v1" },
+    { "name": "fn-guardar-borrador-agente-v1", "entrypoint": "./cmd/fn-guardar-borrador-agente-v1" },
+    { "name": "fn-publicar-configuracion-agente-v1", "entrypoint": "./cmd/fn-publicar-configuracion-agente-v1" },
+    { "name": "fn-restaurar-configuracion-agente-v1", "entrypoint": "./cmd/fn-restaurar-configuracion-agente-v1" },
+    { "name": "fn-preparar-activo-agente-v1", "entrypoint": "./cmd/fn-preparar-activo-agente-v1" }
   ]
 }
