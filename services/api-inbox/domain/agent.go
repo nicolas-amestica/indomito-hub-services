@@ -382,6 +382,7 @@ type interactionStep struct {
 type interactionResponse struct {
 	Status string            `json:"status"`
 	Steps  []json.RawMessage `json:"steps"`
+	Usage  AgentTokenUsage   `json:"usage"`
 	Error  *struct {
 		Code    int    `json:"code"`
 		Status  string `json:"status"`
@@ -452,6 +453,10 @@ func (s *AgentService) generate(ctx context.Context, phone, messageID string, me
 		var result interactionResponse
 		if json.Unmarshal(body, &result) != nil || len(result.Steps) == 0 {
 			return "", nil, &permanentAgentError{cause: errors.New("invalid gemini response")}
+		}
+		if err = s.recordTokenUsage(ctx, result.Usage); err != nil {
+			// La telemetria nunca debe impedir una respuesta al cliente.
+			log.Printf("agent token usage persistence failed messageId=%s: %v", messageID, err)
 		}
 		var reply strings.Builder
 		var responses []json.RawMessage

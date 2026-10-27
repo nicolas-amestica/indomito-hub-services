@@ -289,29 +289,7 @@ func (t *AgentToolbox) sendBudgets(ctx context.Context, phone, messageID, destin
 	var keys []string
 	var err error
 	if t.managed != nil && len(t.managed.Programs) > 0 {
-		for _, program := range t.managed.Programs {
-			if !program.Active || program.DocumentKey == "" || normalizeSegment(program.Destination) != destination {
-				continue
-			}
-			regionMatch := len(program.OriginRegions) == 0
-			for _, allowed := range program.OriginRegions {
-				if normalizeSegment(allowed) == region {
-					regionMatch = true
-					break
-				}
-			}
-			cityMatch := len(program.OriginCities) == 0
-			for _, allowed := range program.OriginCities {
-				if normalizeSegment(allowed) == city {
-					cityMatch = true
-					break
-				}
-			}
-			if regionMatch && cityMatch {
-				keys = append(keys, program.DocumentKey)
-			}
-		}
-		sort.Strings(keys)
+		keys = managedBudgetKeys(t.managed.Programs, destination, region, city)
 	}
 	if len(keys) == 0 && city != "" {
 		prefix := strings.TrimSuffix(t.assets.BudgetExceptionsPrefix, "/") + "/" + city + "/"
@@ -353,6 +331,42 @@ func (t *AgentToolbox) sendBudgets(ctx context.Context, phone, messageID, destin
 		}
 	}
 	return result, false, nil
+}
+
+func managedBudgetKeys(programs []AgentProgram, destination, region, city string) []string {
+	destination, region, city = normalizeSegment(destination), normalizeSegment(region), normalizeSegment(city)
+	selected := make(map[string]struct{})
+	if city != "" {
+		for _, program := range programs {
+			if !program.Active || program.DocumentKey == "" || !agentProgramSupportsDestination(program, destination) || !segmentListContains(program.OriginCities, city) {
+				continue
+			}
+			selected[program.DocumentKey] = struct{}{}
+		}
+	}
+	if len(selected) == 0 {
+		for _, program := range programs {
+			if !program.Active || program.DocumentKey == "" || len(program.OriginCities) > 0 || !agentProgramSupportsDestination(program, destination) || !segmentListContains(program.OriginRegions, region) {
+				continue
+			}
+			selected[program.DocumentKey] = struct{}{}
+		}
+	}
+	keys := make([]string, 0, len(selected))
+	for key := range selected {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func segmentListContains(values []string, expected string) bool {
+	for _, value := range values {
+		if normalizeSegment(value) == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *AgentToolbox) sendCertificate(ctx context.Context, phone, messageID, reason string) (map[string]any, error) {

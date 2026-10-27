@@ -41,6 +41,17 @@ const endpoints: GoHttpEndpoint[] = [
     policies: [dynamodbCrudPolicy(TABLE_ARN), ssmReadPolicy(INBOX_PARAMETER_ARN)],
   },
   {
+    name: "fn-obtener-metricas-operacionales-v1",
+    method: "GET",
+    path: "/configuracion-agente/metricas",
+    public: false, memorySize: 256, timeout: 20, description: "Obtiene consumo de tokens, costo AWS y estado del Free Tier con cache diario",
+    policies: [
+      dynamodbCrudPolicy(TABLE_ARN),
+      ssmReadPolicy(INBOX_PARAMETER_ARN),
+      { Effect: "Allow", Action: ["ce:GetCostAndUsage", "freetier:GetFreeTierUsage"], Resource: "*" },
+    ],
+  },
+  {
     name: "fn-guardar-borrador-agente-v1",
     method: "PUT",
     path: "/configuracion-agente/borrador",
@@ -67,6 +78,13 @@ const endpoints: GoHttpEndpoint[] = [
     path: "/configuracion-agente/programas/cargas",
     public: false, memorySize: 256, timeout: 12, description: "Firma una carga PDF privada para un programa del agente IA",
     policies: [dynamodbCrudPolicy(TABLE_ARN), s3ObjectPolicy(INBOX_ASSETS_BUCKET_OBJECTS_ARN), ssmReadPolicy(INBOX_PARAMETER_ARN)],
+  },
+  {
+    name: "fn-descargar-activo-agente-v1",
+    method: "GET",
+    path: "/configuracion-agente/programas/descargas",
+    public: false, memorySize: 128, timeout: 12, description: "Firma la descarga privada de un PDF del agente IA",
+    policies: [s3ObjectPolicy(INBOX_ASSETS_BUCKET_OBJECTS_ARN), ssmReadPolicy(INBOX_PARAMETER_ARN)],
   },
   {
     name: "fn-obtener-conversaciones-v1",

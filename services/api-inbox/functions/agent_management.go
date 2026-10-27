@@ -36,6 +36,17 @@ func GetAgentManagement(ctx context.Context, service *domain.AgentManagementServ
 	return lambdautil.SuccessResponse(http.StatusOK, result)
 }
 
+func GetOperationalMetrics(ctx context.Context, service *domain.OperationalMetricsService, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+	if err := requireAgentManager(request); err != nil {
+		return lambdautil.ErrorResponse(request, err)
+	}
+	result, err := service.Get(ctx)
+	if err != nil {
+		return lambdautil.ErrorResponse(request, apperr.Internal(err))
+	}
+	return lambdautil.SuccessResponse(http.StatusOK, result)
+}
+
 func SaveAgentDraft(ctx context.Context, service *domain.AgentManagementService, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	if err := requireAgentManager(request); err != nil {
 		return lambdautil.ErrorResponse(request, err)
@@ -102,6 +113,17 @@ func PrepareAgentAsset(ctx context.Context, service *domain.AgentAssetUploadServ
 	result, err := service.Prepare(ctx, input.FileName, input.Size)
 	if err != nil {
 		return lambdautil.ErrorResponse(request, invalidListQuery("file", err.Error()))
+	}
+	return lambdautil.SuccessResponse(http.StatusOK, result)
+}
+
+func PrepareAgentAssetDownload(ctx context.Context, service *domain.AgentAssetUploadService, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+	if err := requireAgentManager(request); err != nil {
+		return lambdautil.ErrorResponse(request, err)
+	}
+	result, err := service.PrepareDownload(ctx, request.QueryStringParameters["documentKey"], request.QueryStringParameters["fileName"])
+	if err != nil {
+		return lambdautil.ErrorResponse(request, invalidListQuery("documentKey", err.Error()))
 	}
 	return lambdautil.SuccessResponse(http.StatusOK, result)
 }

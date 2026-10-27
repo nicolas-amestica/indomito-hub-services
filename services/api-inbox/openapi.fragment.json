@@ -219,6 +219,9 @@
     "/configuracion-agente": {
       "get": { "operationId": "getAgentManagement", "security": [{ "BearerAuth": [] }], "responses": { "200": { "description": "Borrador, version publicada e historial" }, "401": { "description": "No autenticado" }, "500": { "description": "Fallo interno" } } }
     },
+    "/configuracion-agente/metricas": {
+      "get": { "operationId": "getOperationalMetrics", "security": [{ "BearerAuth": [] }], "responses": { "200": { "description": "Consumo mensual del agente y metricas AWS cacheadas" }, "401": { "description": "No autenticado" }, "403": { "description": "Perfil sin acceso" }, "500": { "description": "Fallo interno" } } }
+    },
     "/configuracion-agente/borrador": {
       "put": { "operationId": "saveAgentDraft", "security": [{ "BearerAuth": [] }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } }, "responses": { "200": { "description": "Borrador validado" }, "400": { "description": "Configuracion invalida" }, "401": { "description": "No autenticado" } } }
     },
@@ -230,6 +233,9 @@
     },
     "/configuracion-agente/programas/cargas": {
       "post": { "operationId": "prepareAgentProgramUpload", "security": [{ "BearerAuth": [] }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "additionalProperties": false, "required": ["fileName", "size"], "properties": { "fileName": { "type": "string", "pattern": "(?i)\\.pdf$" }, "size": { "type": "integer", "minimum": 1, "maximum": 33554432 } } } } } }, "responses": { "200": { "description": "Carga firmada por diez minutos" }, "400": { "description": "Archivo invalido" }, "401": { "description": "No autenticado" } } }
+    },
+    "/configuracion-agente/programas/descargas": {
+      "get": { "operationId": "prepareAgentProgramDownload", "security": [{ "BearerAuth": [] }], "parameters": [{ "name": "documentKey", "in": "query", "required": true, "schema": { "type": "string", "minLength": 1 } }, { "name": "fileName", "in": "query", "required": false, "schema": { "type": "string", "pattern": "(?i)\\.pdf$" } }], "responses": { "200": { "description": "Descarga privada firmada por cinco minutos" }, "400": { "description": "PDF invalido" }, "401": { "description": "No autenticado" } } }
     },
     "/conversaciones": {
       "get": {

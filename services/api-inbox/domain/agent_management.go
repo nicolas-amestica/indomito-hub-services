@@ -16,6 +16,9 @@ import (
 
 const agentManagementPK = "AGENT_CONFIG"
 
+// ErrAgentConfigChanged indicates that another writer updated the draft during an operation.
+var ErrAgentConfigChanged = errors.New("agent configuration changed concurrently")
+
 type AgentPersonality struct {
 	DisplayName            string   `json:"displayName" dynamodbav:"displayName"`
 	Role                   string   `json:"role" dynamodbav:"role"`
@@ -53,6 +56,14 @@ type AgentPolicies struct {
 	FallbackResponse           string `json:"fallbackResponse" dynamodbav:"fallbackResponse"`
 }
 
+type AgentCommercialPolicy struct {
+	ID        string `json:"id" dynamodbav:"id"`
+	Title     string `json:"title" dynamodbav:"title"`
+	Content   string `json:"content" dynamodbav:"content"`
+	Active    bool   `json:"active" dynamodbav:"active"`
+	SortOrder int    `json:"sortOrder" dynamodbav:"sortOrder"`
+}
+
 type AgentKnowledgeEntry struct {
 	ID            string   `json:"id" dynamodbav:"id"`
 	Title         string   `json:"title" dynamodbav:"title"`
@@ -68,6 +79,7 @@ type AgentProgram struct {
 	ID            string   `json:"id" dynamodbav:"id"`
 	Name          string   `json:"name" dynamodbav:"name"`
 	Destination   string   `json:"destination" dynamodbav:"destination"`
+	Destinations  []string `json:"destinations,omitempty" dynamodbav:"destinations,omitempty"`
 	Country       string   `json:"country" dynamodbav:"country"`
 	OriginRegions []string `json:"originRegions" dynamodbav:"originRegions"`
 	OriginCities  []string `json:"originCities" dynamodbav:"originCities"`
@@ -81,11 +93,12 @@ type AgentProgram struct {
 }
 
 type AgentManagedConfig struct {
-	Personality AgentPersonality        `json:"personality" dynamodbav:"personality"`
-	Generation  AgentGenerationSettings `json:"generation" dynamodbav:"generation"`
-	Policies    AgentPolicies           `json:"policies" dynamodbav:"policies"`
-	Knowledge   []AgentKnowledgeEntry   `json:"knowledge" dynamodbav:"knowledge"`
-	Programs    []AgentProgram          `json:"programs" dynamodbav:"programs"`
+	Personality        AgentPersonality        `json:"personality" dynamodbav:"personality"`
+	Generation         AgentGenerationSettings `json:"generation" dynamodbav:"generation"`
+	Policies           AgentPolicies           `json:"policies" dynamodbav:"policies"`
+	CommercialPolicies []AgentCommercialPolicy `json:"commercialPolicies" dynamodbav:"commercialPolicies"`
+	Knowledge          []AgentKnowledgeEntry   `json:"knowledge" dynamodbav:"knowledge"`
+	Programs           []AgentProgram          `json:"programs" dynamodbav:"programs"`
 }
 
 type AgentConfigRevision struct {
@@ -126,9 +139,10 @@ func NewAgentManagementService(db agentConfigDynamo, table string) (*AgentManage
 
 func DefaultAgentManagedConfig() AgentManagedConfig {
 	return AgentManagedConfig{
-		Personality: AgentPersonality{DisplayName: "Agente IA", Role: "Asistente virtual de Giras Indomito", Tone: "Amigable y profesional", Language: "Espanol chileno formal", ResponseStyle: "Preciso, conciso y directo", Greeting: "Hola, soy el Agente IA de Giras Indomito. Como puedo ayudarte?", ForbiddenPhrases: []string{"descuento por pago en efectivo", "Susana Guevara"}},
-		Generation:  AgentGenerationSettings{Model: "gemini-3.5-flash-lite", Temperature: .2, TopP: .8, MaxMessageLength: 1200, MaxHistoryTurns: 20, DebounceMS: 4000, RateLimitMax: 12, RateLimitWindowSeconds: 60},
-		Policies:    AgentPolicies{OfferMeetings: true, HumanHandoffEnabled: true, HandoffWhatsAppEnabled: true, HandoffEmailEnabled: true, HandoffPhone: "56963552893", HandoffEmail: "info@girasindomito.cl", ExplainProgramDifferences: true, SendSernaturWithQuotations: true, HandoffConfirmation: "Te derive con nuestro equipo para que continuen ayudandote. Te contactaran apenas sea posible.", FallbackResponse: "No tengo esa informacion confirmada. Puedo derivarte con nuestro equipo."},
+		Personality:        AgentPersonality{DisplayName: "Agente IA", Role: "Asistente virtual de Giras Indomito", Tone: "Amigable y profesional", Language: "Espanol chileno formal", ResponseStyle: "Preciso, conciso y directo", Greeting: "Hola, soy el Agente IA de Giras Indomito. Como puedo ayudarte?", ForbiddenPhrases: []string{"descuento por pago en efectivo", "Susana Guevara"}},
+		Generation:         AgentGenerationSettings{Model: "gemini-3.5-flash-lite", Temperature: .2, TopP: .8, MaxMessageLength: 1200, MaxHistoryTurns: 20, DebounceMS: 4000, RateLimitMax: 12, RateLimitWindowSeconds: 60},
+		Policies:           AgentPolicies{OfferMeetings: true, HumanHandoffEnabled: true, HandoffWhatsAppEnabled: true, HandoffEmailEnabled: true, HandoffPhone: "56963552893", HandoffEmail: "info@girasindomito.cl", ExplainProgramDifferences: true, SendSernaturWithQuotations: true, HandoffConfirmation: "Te derive con nuestro equipo para que continuen ayudandote. Te contactaran apenas sea posible.", FallbackResponse: "No tengo esa informacion confirmada. Puedo derivarte con nuestro equipo."},
+		CommercialPolicies: []AgentCommercialPolicy{},
 		Knowledge: []AgentKnowledgeEntry{
 			{ID: "destinos", Title: "Destinos y origen", Category: "Programas", Answer: "Los destinos principales son Bariloche, Camboriu y circuitos del Sur de Chile. Brasil corresponde a Camboriu. Para Bariloche se usa la region chilena real del colegio y los circuitos del Sur disponibles por PDF aplican a origen V Region.", Active: true, Priority: 100},
 			{ID: "financiamiento", Title: "Financiamiento y beneficios", Category: "Pagos", Answer: "Hay tres talonarios por persona; cada numero cuesta $1.000, los premios los aporta Giras Indomito y lo recaudado puede financiar el viaje. Las cuotas las define el curso y no tienen interes. No existe descuento por pago en efectivo. Hay 10% para quien tenga un hermano que haya viajado antes con la empresa.", Active: true, Priority: 90},
@@ -149,8 +163,13 @@ func validateManagedConfig(c AgentManagedConfig) error {
 	if !allowedModels[c.Generation.Model] {
 		return errors.New("model is not allowed")
 	}
-	if len(c.Knowledge) > 200 || len(c.Programs) > 100 {
+	if len(c.CommercialPolicies) > 100 || len(c.Knowledge) > 200 || len(c.Programs) > 100 {
 		return errors.New("configuration collection limit exceeded")
+	}
+	for _, item := range c.CommercialPolicies {
+		if strings.TrimSpace(item.ID) == "" || strings.TrimSpace(item.Title) == "" || strings.TrimSpace(item.Content) == "" || len([]rune(item.Title)) > 120 || len([]rune(item.Content)) > 1000 {
+			return errors.New("invalid commercial policy")
+		}
 	}
 	if c.Policies.HumanHandoffEnabled {
 		phone := strings.TrimPrefix(strings.TrimSpace(c.Policies.HandoffPhone), "+")
@@ -173,11 +192,42 @@ func validateManagedConfig(c AgentManagedConfig) error {
 		}
 	}
 	for _, item := range c.Programs {
-		if item.ID == "" || strings.TrimSpace(item.Name) == "" || strings.TrimSpace(item.Destination) == "" {
+		destinations := agentProgramDestinations(item)
+		if item.ID == "" || strings.TrimSpace(item.Name) == "" || len(destinations) == 0 || len(destinations) > 10 || (len(item.OriginRegions) == 0 && len(item.OriginCities) == 0) || (item.Active && strings.TrimSpace(item.DocumentKey) == "") {
 			return errors.New("invalid program")
 		}
 	}
 	return nil
+}
+
+func agentProgramDestinations(program AgentProgram) []string {
+	values := program.Destinations
+	if len(values) == 0 && strings.TrimSpace(program.Destination) != "" {
+		values = []string{program.Destination}
+	}
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		normalized := normalizeSegment(value)
+		if normalized == "" {
+			continue
+		}
+		if _, exists := seen[normalized]; exists {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		result = append(result, normalized)
+	}
+	return result
+}
+
+func agentProgramSupportsDestination(program AgentProgram, destination string) bool {
+	for _, candidate := range agentProgramDestinations(program) {
+		if candidate == destination {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *AgentManagementService) get(ctx context.Context, sk string) (*AgentConfigRevision, error) {
@@ -229,6 +279,31 @@ func (s *AgentManagementService) SaveDraft(ctx context.Context, config AgentMana
 	}
 	_, err = s.db.PutItem(ctx, &dynamodb.PutItemInput{TableName: &s.table, Item: item})
 	return revision, err
+}
+
+// SaveDraftIfUnchanged updates the draft only when it has not changed since it was read.
+func (s *AgentManagementService) SaveDraftIfUnchanged(ctx context.Context, config AgentManagedConfig, expectedUpdatedAt time.Time) (AgentConfigRevision, error) {
+	if err := validateManagedConfig(config); err != nil {
+		return AgentConfigRevision{}, err
+	}
+	revision := AgentConfigRevision{PK: agentManagementPK, SK: "DRAFT", Version: "draft", Status: "draft", UpdatedAt: s.now().UTC(), Config: config}
+	item, err := attributevalue.MarshalMap(revision)
+	if err != nil {
+		return AgentConfigRevision{}, err
+	}
+	_, err = s.db.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: &s.table, Item: item,
+		ConditionExpression:       aws.String("attribute_not_exists(pk) OR updatedAt = :expected"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{":expected": &types.AttributeValueMemberS{Value: expectedUpdatedAt.UTC().Format(time.RFC3339Nano)}},
+	})
+	if err != nil {
+		var conditional *types.ConditionalCheckFailedException
+		if errors.As(err, &conditional) {
+			return AgentConfigRevision{}, ErrAgentConfigChanged
+		}
+		return AgentConfigRevision{}, err
+	}
+	return revision, nil
 }
 
 func (s *AgentManagementService) Publish(ctx context.Context) (AgentConfigRevision, error) {

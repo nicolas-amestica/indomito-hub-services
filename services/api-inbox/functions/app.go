@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/costexplorer"
+	"github.com/aws/aws-sdk-go-v2/service/freetier"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
@@ -73,17 +75,18 @@ type App struct {
 		AttachmentPreparer
 		AttachmentSender
 	}
-	Mutation     ConversationMutator
-	Bulk         BulkOperator
-	Subscription SubscriptionCreator
-	Webhook      WebhookReceiver
-	Templates    TemplateLister
-	TemplateSend TemplateSender
-	Reaction     ReactionSender
-	AgentConfig  *domain.AgentManagementService
-	AgentUploads *domain.AgentAssetUploadService
-	VerifyToken  string
-	Port         string
+	Mutation           ConversationMutator
+	Bulk               BulkOperator
+	Subscription       SubscriptionCreator
+	Webhook            WebhookReceiver
+	Templates          TemplateLister
+	TemplateSend       TemplateSender
+	Reaction           ReactionSender
+	AgentConfig        *domain.AgentManagementService
+	AgentUploads       *domain.AgentAssetUploadService
+	OperationalMetrics *domain.OperationalMetricsService
+	VerifyToken        string
+	Port               string
 }
 
 type InboxSender interface {
@@ -210,13 +213,20 @@ func GetApp(ctx context.Context) (*App, error) {
 			appError = err
 			return
 		}
+		billingConfig := awsConfig
+		billingConfig.Region = "us-east-1"
+		operationalMetrics, err := domain.NewOperationalMetricsService(client, costexplorer.NewFromConfig(billingConfig), freetier.NewFromConfig(billingConfig), tableName)
+		if err != nil {
+			appError = err
+			return
+		}
 		catalog := domain.NewMetaTemplateCatalog(nil, whatsApp.BusinessAccountID, whatsApp.AccessToken)
 		templateSend, err := domain.NewTemplateService(catalog, sender)
 		if err != nil {
 			appError = err
 			return
 		}
-		appInstance = &App{List: service, Detail: detail, Send: sender, Contact: contact, Attachment: attachments, Mutation: mutation, Bulk: bulk, Subscription: subscription, Webhook: webhook, Templates: catalog, TemplateSend: templateSend, Reaction: reaction, AgentConfig: agentConfig, AgentUploads: agentUploads, VerifyToken: whatsApp.VerifyToken, Port: base.Port}
+		appInstance = &App{List: service, Detail: detail, Send: sender, Contact: contact, Attachment: attachments, Mutation: mutation, Bulk: bulk, Subscription: subscription, Webhook: webhook, Templates: catalog, TemplateSend: templateSend, Reaction: reaction, AgentConfig: agentConfig, AgentUploads: agentUploads, OperationalMetrics: operationalMetrics, VerifyToken: whatsApp.VerifyToken, Port: base.Port}
 	})
 	if appError != nil {
 		// El detalle se registra solo en CloudWatch; la respuesta HTTP conserva el

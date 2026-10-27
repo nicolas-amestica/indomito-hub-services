@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -48,13 +49,30 @@ func agentSystemPromptWithConfig(phone string, hasHistory bool, now time.Time, c
 			}
 		}
 		commercialKnowledge = strings.Join(knowledge, "\n")
-		var programs []string
-		for _, item := range managed.Programs {
+		managedPolicies := append([]AgentCommercialPolicy(nil), managed.CommercialPolicies...)
+		sort.SliceStable(managedPolicies, func(i, j int) bool { return managedPolicies[i].SortOrder < managedPolicies[j].SortOrder })
+		var commercialPolicies []string
+		for _, item := range managedPolicies {
 			if item.Active {
-				programs = append(programs, fmt.Sprintf("- %s (%s): %s. Actividades: %s", item.Name, item.Destination, item.Description, strings.Join(item.Activities, ", ")))
+				commercialPolicies = append(commercialPolicies, fmt.Sprintf("- %s: %s", item.Title, item.Content))
 			}
 		}
-		managedInstructions = fmt.Sprintf("\nConfiguracion editorial publicada:\n- Saludo sugerido: %s\n- Cierre sugerido: %s\n- Frases prohibidas: %s\n- Instrucciones adicionales: %s\n- Ofrecer reuniones: %t\n- Derivacion humana habilitada: %t\n- Explicar diferencias entre programas: %t\nConocimiento administrado:\n%s\nProgramas administrados:\n%s\n", managed.Personality.Greeting, managed.Personality.Closing, strings.Join(managed.Personality.ForbiddenPhrases, "; "), managed.Personality.AdditionalInstructions, managed.Policies.OfferMeetings, managed.Policies.HumanHandoffEnabled, managed.Policies.ExplainProgramDifferences, strings.Join(knowledge, "\n"), strings.Join(programs, "\n"))
+		programDestinations := make(map[string]struct{})
+		activePrograms := 0
+		for _, item := range managed.Programs {
+			if item.Active {
+				activePrograms++
+				for _, destination := range agentProgramDestinations(item) {
+					programDestinations[destination] = struct{}{}
+				}
+			}
+		}
+		destinations := make([]string, 0, len(programDestinations))
+		for destination := range programDestinations {
+			destinations = append(destinations, destination)
+		}
+		sort.Strings(destinations)
+		managedInstructions = fmt.Sprintf("\nConfiguracion editorial publicada:\n- Saludo sugerido: %s\n- Cierre sugerido: %s\n- Frases prohibidas: %s\n- Instrucciones adicionales: %s\n- Ofrecer reuniones: %t\n- Derivacion humana habilitada: %t\n- Explicar diferencias entre programas: %t\nPoliticas comerciales administradas:\n%s\nConocimiento administrado:\n%s\nCatalogo administrado: %d PDF activos para los destinos %s. Usa buscar_presupuestos para resolver los documentos exactos; no enumeres ni inventes programas.\n", managed.Personality.Greeting, managed.Personality.Closing, strings.Join(managed.Personality.ForbiddenPhrases, "; "), managed.Personality.AdditionalInstructions, managed.Policies.OfferMeetings, managed.Policies.HumanHandoffEnabled, managed.Policies.ExplainProgramDifferences, strings.Join(commercialPolicies, "\n"), strings.Join(knowledge, "\n"), activePrograms, strings.Join(destinations, ", "))
 	}
 	return fmt.Sprintf(`%s Nunca afirmes ser una persona ni uses el nombre Susana Guevara.
 
