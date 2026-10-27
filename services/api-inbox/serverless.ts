@@ -31,6 +31,7 @@ const PAYMENTS_RECEIPT_SMTP_PARAMETER_ARN = {
   "Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/${STAGE}/payments/receipt-smtp`,
 };
 const INBOX_OPERATIONAL_ALERTS_TOPIC = { Ref: "InboxOperationalAlerts" };
+const FREE_TIER_READ_ROLE_ARN = "arn:aws:iam::691725736887:role/IndomitoHubFreeTierReadRole";
 
 const endpoints: GoHttpEndpoint[] = [
   {
@@ -48,7 +49,8 @@ const endpoints: GoHttpEndpoint[] = [
     policies: [
       dynamodbCrudPolicy(TABLE_ARN),
       ssmReadPolicy(INBOX_PARAMETER_ARN),
-      { Effect: "Allow", Action: ["ce:GetCostAndUsage", "freetier:GetFreeTierUsage"], Resource: "*" },
+      { Effect: "Allow", Action: ["ce:GetCostAndUsage"], Resource: "*" },
+      { Effect: "Allow", Action: ["sts:AssumeRole"], Resource: FREE_TIER_READ_ROLE_ARN },
     ],
   },
   {
@@ -363,6 +365,7 @@ const serverlessConfiguration = buildGoServiceServerless(ApiServices.Inbox, endp
     INBOX_ASSET_CONFIG_PARAM: `/indomito/${STAGE}/inbox/asset-config`,
     INBOX_MEETING_CONFIG_PARAM: `/indomito/${STAGE}/inbox/meeting-config`,
     INBOX_DERIVATION_NOTIFICATION_CONFIG_PARAM: `/indomito/${STAGE}/inbox/derivation-notification-config`,
+    INBOX_OPERATIONAL_METRICS_CONFIG_PARAM: `/indomito/${STAGE}/inbox/operational-metrics-config`,
     INBOX_TEMPORARY_BUCKET_NAME: INBOX_BUCKET_NAME,
     INBOX_ASSETS_BUCKET_NAME,
     INBOX_WEBSOCKET_URL,

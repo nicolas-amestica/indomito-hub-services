@@ -17,7 +17,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/freetier"
 )
 
-const operationalMetricsCacheDuration = 24 * time.Hour
+const (
+	operationalMetricsCacheDuration = 24 * time.Hour
+	operationalMetricsCacheSortKey  = "AWS_CONSOLIDATED_V2"
+)
 
 type operationalMetricsDynamo interface {
 	GetItem(context.Context, *dynamodb.GetItemInput, ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
@@ -187,7 +190,7 @@ func (s *OperationalMetricsService) awsMetrics(ctx context.Context) (AWSOperatio
 }
 
 func (s *OperationalMetricsService) readAWSCache(ctx context.Context) (awsOperationalCache, bool, error) {
-	output, err := s.db.GetItem(ctx, &dynamodb.GetItemInput{TableName: aws.String(s.table), Key: snapshotKey("OPERATIONAL_METRICS", "AWS")})
+	output, err := s.db.GetItem(ctx, &dynamodb.GetItemInput{TableName: aws.String(s.table), Key: snapshotKey("OPERATIONAL_METRICS", operationalMetricsCacheSortKey)})
 	if err != nil {
 		return awsOperationalCache{}, false, fmt.Errorf("read operational metrics cache: %w", err)
 	}
@@ -202,7 +205,7 @@ func (s *OperationalMetricsService) readAWSCache(ctx context.Context) (awsOperat
 }
 
 func (s *OperationalMetricsService) writeAWSCache(ctx context.Context, metric AWSOperationalMetric, now time.Time) error {
-	record, err := attributevalue.MarshalMap(awsOperationalCache{PK: "OPERATIONAL_METRICS", SK: "AWS", Metrics: metric, ExpiresAt: now.Add(operationalMetricsCacheDuration).Unix()})
+	record, err := attributevalue.MarshalMap(awsOperationalCache{PK: "OPERATIONAL_METRICS", SK: operationalMetricsCacheSortKey, Metrics: metric, ExpiresAt: now.Add(operationalMetricsCacheDuration).Unix()})
 	if err != nil {
 		return err
 	}

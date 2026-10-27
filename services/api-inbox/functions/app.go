@@ -15,11 +15,13 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/costexplorer"
 	"github.com/aws/aws-sdk-go-v2/service/freetier"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"ind-hub-api-gox-sls-pri-gh/bootstrap"
 	"ind-hub-api-gox-sls-pri-gh/libs/awsddb"
@@ -27,13 +29,15 @@ import (
 )
 
 const (
-	conversationsTableEnv   = "CONVERSATIONS_TABLE_NAME"
-	cursorSecretPathEnv     = "INBOX_CURSOR_SECRET_PARAM"
-	runtimeConfigPathEnv    = "INBOX_RUNTIME_CONFIG_PARAM"
-	whatsAppConfigPathEnv   = "INBOX_WHATSAPP_CONFIG_PARAM"
-	inboxTemporaryBucketEnv = "INBOX_TEMPORARY_BUCKET_NAME"
-	inboxAssetsBucketEnv    = "INBOX_ASSETS_BUCKET_NAME"
-	inboxWebSocketURLEnv    = "INBOX_WEBSOCKET_URL"
+	conversationsTableEnv           = "CONVERSATIONS_TABLE_NAME"
+	cursorSecretPathEnv             = "INBOX_CURSOR_SECRET_PARAM"
+	runtimeConfigPathEnv            = "INBOX_RUNTIME_CONFIG_PARAM"
+	whatsAppConfigPathEnv           = "INBOX_WHATSAPP_CONFIG_PARAM"
+	inboxTemporaryBucketEnv         = "INBOX_TEMPORARY_BUCKET_NAME"
+	inboxAssetsBucketEnv            = "INBOX_ASSETS_BUCKET_NAME"
+	inboxWebSocketURLEnv            = "INBOX_WEBSOCKET_URL"
+	operationalMetricsConfigPathEnv = "INBOX_OPERATIONAL_METRICS_CONFIG_PARAM"
+	consolidatedFreeTierRoleARN     = "arn:aws:iam::691725736887:role/IndomitoHubFreeTierReadRole"
 )
 
 type parameterReader interface {
@@ -50,6 +54,10 @@ type runtimeConfig struct {
 	MaxMaterializableConversations int `json:"maxMaterializableConversations"`
 	DueQueueShards                 int `json:"dueQueueShards"`
 	WorkerQueryLimit               int `json:"workerQueryLimit"`
+}
+
+type operationalMetricsConfig struct {
+	FreeTierRoleARN string `json:"freeTierRoleArn"`
 }
 
 type whatsAppConfig struct {
@@ -116,7 +124,8 @@ func GetApp(ctx context.Context) (*App, error) {
 		bucketName := os.Getenv(inboxTemporaryBucketEnv)
 		assetsBucketName := os.Getenv(inboxAssetsBucketEnv)
 		webSocketURL := os.Getenv(inboxWebSocketURLEnv)
-		if tableName == "" || cursorPath == "" || runtimePath == "" || whatsAppPath == "" || bucketName == "" || assetsBucketName == "" || webSocketURL == "" {
+		operationalMetricsPath := os.Getenv(operationalMetricsConfigPathEnv)
+		if tableName == "" || cursorPath == "" || runtimePath == "" || whatsAppPath == "" || bucketName == "" || assetsBucketName == "" || webSocketURL == "" || operationalMetricsPath == "" {
 			appError = errors.New("inbox environment configuration is incomplete")
 			return
 		}
@@ -215,7 +224,20 @@ func GetApp(ctx context.Context) (*App, error) {
 		}
 		billingConfig := awsConfig
 		billingConfig.Region = "us-east-1"
-		operationalMetrics, err := domain.NewOperationalMetricsService(client, costexplorer.NewFromConfig(billingConfig), freetier.NewFromConfig(billingConfig), tableName)
+		var metricsConfig operationalMetricsConfig
+		if err := readSecureJSON(ctx, parameters, operationalMetricsPath, &metricsConfig); err != nil {
+			appError = err
+			return
+		}
+		if metricsConfig.FreeTierRoleARN != consolidatedFreeTierRoleARN {
+			appError = errors.New("invalid operational metrics role ARN")
+			return
+		}
+		freeTierConfig := billingConfig
+		freeTierConfig.Credentials = aws.NewCredentialsCache(stscreds.NewAssumeRoleProvider(sts.NewFromConfig(awsConfig), metricsConfig.FreeTierRoleARN, func(options *stscreds.AssumeRoleOptions) {
+			options.RoleSessionName = "indomito-operational-metrics"
+		}))
+		operationalMetrics, err := domain.NewOperationalMetricsService(client, costexplorer.NewFromConfig(billingConfig), freetier.NewFromConfig(freeTierConfig), tableName)
 		if err != nil {
 			appError = err
 			return
