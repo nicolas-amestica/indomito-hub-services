@@ -28,6 +28,11 @@ import (
 
 var serviceIDPattern = regexp.MustCompile(`^[0-7][0-9A-HJKMNP-TV-Z]{25}$`)
 
+const (
+	serviceCatalogCacheControl      = "private, max-age=300"
+	serviceCatalogAdminCacheControl = "no-store"
+)
+
 type scopePointer struct {
 	PK        string `dynamodbav:"pk"`
 	SK        string `dynamodbav:"sk"`
@@ -113,7 +118,14 @@ func list(ctx context.Context, app *functions.App, req events.APIGatewayV2HTTPRe
 	if err != nil {
 		return lambdautil.ErrorResponse(req, err)
 	}
-	return lambdautil.SuccessResponseWithHeaders(http.StatusOK, listResponse{Items: items}, map[string]string{"Cache-Control": "private, max-age=300"})
+	return lambdautil.SuccessResponseWithHeaders(http.StatusOK, listResponse{Items: items}, map[string]string{"Cache-Control": listCacheControl(includeInactive)})
+}
+
+func listCacheControl(includeInactive bool) string {
+	if includeInactive {
+		return serviceCatalogAdminCacheControl
+	}
+	return serviceCatalogCacheControl
 }
 
 func create(ctx context.Context, app *functions.App, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {

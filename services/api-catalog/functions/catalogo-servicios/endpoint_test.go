@@ -39,3 +39,24 @@ func TestIsAdministrator(t *testing.T) {
 		t.Fatal("GESTOR no debe administrar el catalogo")
 	}
 }
+
+func TestListCacheControl(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name            string
+		includeInactive bool
+		want            string
+	}{
+		{name: "catalogo activo conserva cache", want: "private, max-age=300"},
+		{name: "administracion no usa cache", includeInactive: true, want: "no-store"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := listCacheControl(test.includeInactive); got != test.want {
+				t.Fatalf("listCacheControl(%t) = %q, se esperaba %q", test.includeInactive, got, test.want)
+			}
+		})
+	}
+}
