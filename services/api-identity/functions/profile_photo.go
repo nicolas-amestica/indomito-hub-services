@@ -54,7 +54,7 @@ func readProfilePhoto(ctx context.Context, app *App, userID string) ([]byte, str
 	if err != nil {
 		return nil, "", err
 	}
-	defer result.Body.Close()
+	defer func() { _ = result.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(result.Body, maxProfilePhotoBytes+1))
 	if err != nil || len(body) > maxProfilePhotoBytes {
 		return nil, "", errors.New("foto de perfil inválida")

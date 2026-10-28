@@ -60,6 +60,8 @@ func SendAttachment(ctx context.Context, service AttachmentSender, request event
 		switch {
 		case errors.Is(err, domain.ErrUploadInvalid):
 			mapped = invalidListQuery("attachment", "upload reservation or object is invalid")
+		case errors.Is(err, domain.ErrUnsupportedAttachment):
+			mapped = invalidListQuery("attachment", "WhatsApp no admite este archivo; usa PNG de 8 bits o WebP mediante la accion de sticker")
 		case errors.Is(err, domain.ErrSendConflict):
 			mapped = apperr.New(apperr.CodeInboxIdempotencyConflict, "El identificador ya fue usado con otros datos")
 		case errors.Is(err, domain.ErrServiceWindow):

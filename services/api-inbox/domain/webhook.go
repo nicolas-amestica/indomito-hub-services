@@ -42,6 +42,15 @@ type InboundMetaStatus struct {
 	Error             string
 }
 
+type pendingMetaStatus struct {
+	PK        string         `dynamodbav:"pk"`
+	SK        string         `dynamodbav:"sk"`
+	Status    DeliveryStatus `dynamodbav:"status"`
+	Timestamp string         `dynamodbav:"providerTimestamp"`
+	Error     string         `dynamodbav:"error,omitempty"`
+	ExpiresAt int64          `dynamodbav:"expiresAt"`
+}
+
 type webhookDynamo interface {
 	GetItem(context.Context, *dynamodb.GetItemInput, ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
 	TransactWriteItems(context.Context, *dynamodb.TransactWriteItemsInput, ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error)
@@ -115,8 +124,17 @@ func (s *WebhookService) ApplyStatus(ctx context.Context, status InboundMetaStat
 		}
 	}
 	if phone == "" || msgSK == "" {
-		// Receipts for legacy or otherwise unknown messages are acknowledged deliberately.
-		return nil
+		if err := s.persistPendingStatus(ctx, status); err != nil {
+			return err
+		}
+		index, err := s.db.GetItem(ctx, &dynamodb.GetItemInput{TableName: &s.table, Key: snapshotKey("WAMID#"+status.WhatsAppMessageID, "META"), ConsistentRead: aws.Bool(true)})
+		if err != nil {
+			return fmt.Errorf("recheck WhatsApp delivery index: %w", err)
+		}
+		phone, msgSK = attributeString(index.Item, "phone"), attributeString(index.Item, "msgSk")
+		if phone == "" || msgSK == "" {
+			return nil
+		}
 	}
 	for attempt := 0; attempt < mutationMaxAttempts; attempt++ {
 		messageOut, readErr := s.db.GetItem(ctx, &dynamodb.GetItemInput{TableName: &s.table, Key: snapshotKey("CONV#"+phone, msgSK), ConsistentRead: aws.Bool(true)})
@@ -170,6 +188,7 @@ func (s *WebhookService) ApplyStatus(ctx context.Context, status InboundMetaStat
 			sequenceUpdate(s.table, "SEQ#DETAIL#"+phone, sequence, nextSequence),
 			{Update: &types.Update{TableName: &s.table, Key: snapshotKey("CONV#"+phone, msgSK), UpdateExpression: aws.String(updateExpression), ConditionExpression: aws.String(condition), ExpressionAttributeNames: map[string]string{"#deliveryStatus": "deliveryStatus"}, ExpressionAttributeValues: values}},
 			{Put: &types.Put{TableName: &s.table, Item: outbox, ConditionExpression: aws.String("attribute_not_exists(pk)")}},
+			{Delete: &types.Delete{TableName: &s.table, Key: snapshotKey("STATUS_PENDING#"+status.WhatsAppMessageID, "META")}},
 		}})
 		if err == nil {
 			return nil
@@ -179,6 +198,19 @@ func (s *WebhookService) ApplyStatus(ctx context.Context, status InboundMetaStat
 		}
 	}
 	return ErrWebhookCapacity
+}
+
+func (s *WebhookService) persistPendingStatus(ctx context.Context, status InboundMetaStatus) error {
+	now := s.now().UTC()
+	record, err := attributevalue.MarshalMap(pendingMetaStatus{PK: "STATUS_PENDING#" + status.WhatsAppMessageID, SK: "META", Status: status.Status, Timestamp: status.Timestamp, Error: status.Error, ExpiresAt: now.Add(24 * time.Hour).Unix()})
+	if err != nil {
+		return fmt.Errorf("encode pending WhatsApp delivery status: %w", err)
+	}
+	_, err = s.db.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{{Put: &types.Put{TableName: &s.table, Item: record}}}})
+	if err != nil {
+		return fmt.Errorf("persist pending WhatsApp delivery status: %w", err)
+	}
+	return nil
 }
 
 func attributeString(item map[string]types.AttributeValue, key string) string {
@@ -312,6 +344,8 @@ func DecodeInboundMetaMessages(raw []byte) ([]InboundMetaMessage, error) {
 				mediaID, mimeType, checksum, fileName, text := "", "", "", "", message.Text.Body
 				var rich *MessageRichContent
 				switch message.Type {
+				case "text":
+					// The text body was decoded above.
 				case "audio":
 					mediaID, mimeType, checksum = message.Audio.ID, message.Audio.MIMEType, message.Audio.SHA256
 				case "image":
@@ -347,6 +381,12 @@ func DecodeInboundMetaMessages(raw []byte) ([]InboundMetaMessage, error) {
 					}
 					text = reply.Title
 					rich = &MessageRichContent{Kind: "interactive_reply", InteractiveReply: &reply}
+				default:
+					kind := strings.TrimSpace(message.Type)
+					if kind == "" {
+						kind = "desconocido"
+					}
+					text = "[Contenido de WhatsApp no compatible: " + kind + "]"
 				}
 				result = append(result, InboundMetaMessage{MessageID: message.ID, Phone: message.From, Type: message.Type, Timestamp: message.Timestamp, Text: text, MediaID: mediaID, MIMEType: mimeType, SHA256: checksum, FileName: fileName, Rich: rich})
 			}

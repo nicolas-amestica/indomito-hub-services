@@ -50,8 +50,126 @@ func TestCreateMeetingDoesNotDuplicateExistingCustomerMeeting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if boolResult(result, "exito") || !strings.Contains(result["mensaje"].(string), "Ya existe") {
+	if boolResult(result, "exito") || stringArg(result, "codigo") != "MEETING_ALREADY_EXISTS" || !strings.Contains(result["mensaje"].(string), "Ya existe") {
 		t.Fatalf("unexpected result %#v", result)
+	}
+}
+
+func TestMeetingRejectsInvalidCustomerEmailBeforeCalendar(t *testing.T) {
+	t.Parallel()
+	for _, email := range []string{"correo@sfsdfsdaf.aksjdahgsd", "sin-arroba", "Nombre <correo@gmail.com>", "correo@localhost"} {
+		if validCustomerEmail(email) {
+			t.Fatalf("invalid email was accepted: %q", email)
+		}
+	}
+	for _, email := range []string{"niamesvi3@gmail.com", "info@girasindomito.cl"} {
+		if !validCustomerEmail(email) {
+			t.Fatalf("valid email was rejected: %q", email)
+		}
+	}
+	toolbox := &AgentToolbox{}
+	result, err := toolbox.createMeeting(context.Background(), "56912345678", map[string]any{
+		"nombreCliente": "Nicolás", "emailCliente": "correo@sfsdfsdaf.aksjdahgsd", "fechaSugerida": "2026-10-30", "horaSugerida": "13:00",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if boolResult(result, "exito") || stringArg(result, "codigo") != "MEETING_INVALID_CONTACT" {
+		t.Fatalf("invalid email reached calendar flow: %#v", result)
+	}
+}
+
+func TestMeetingMutationsReturnNotFoundWithoutCreatingReplacement(t *testing.T) {
+	t.Parallel()
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Host {
+		case "oauth2.googleapis.com":
+			return jsonResponse(http.StatusOK, `{"access_token":"token"}`), nil
+		case "www.googleapis.com":
+			if request.Method != http.MethodGet {
+				t.Fatalf("unexpected calendar mutation %s", request.Method)
+			}
+			return jsonResponse(http.StatusOK, `{"items":[]}`), nil
+		default:
+			t.Fatalf("unexpected host %q", request.URL.Host)
+			return nil, nil
+		}
+	})}
+	toolbox := &AgentToolbox{meeting: AgentMeetingConfig{CalendarID: "calendar", Timezone: "America/Santiago"}, oauth: GoogleOAuthConfig{ClientID: "client", ClientSecret: "secret", RefreshToken: "refresh"}, http: client, now: time.Now}
+	updated, err := toolbox.updateMeeting(context.Background(), "56912345678", map[string]any{"nuevaFecha": "2026-10-30", "nuevaHora": "13:00", "emailCliente": "niamesvi3@gmail.com"})
+	if err != nil || stringArg(updated, "codigo") != "MEETING_NOT_FOUND" {
+		t.Fatalf("missing update result=%#v err=%v", updated, err)
+	}
+	cancelled, err := toolbox.cancelMeeting(context.Background(), "56912345678")
+	if err != nil || stringArg(cancelled, "codigo") != "MEETING_NOT_FOUND" {
+		t.Fatalf("missing cancellation result=%#v err=%v", cancelled, err)
+	}
+}
+
+func TestVerifyCreatedMeetingRequiresPersistedCalendarEvidence(t *testing.T) {
+	t.Parallel()
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Host {
+		case "oauth2.googleapis.com":
+			return jsonResponse(http.StatusOK, `{"access_token":"token"}`), nil
+		case "www.googleapis.com":
+			if request.Method != http.MethodGet || !strings.HasSuffix(request.URL.Path, "/events/event-1") {
+				t.Fatalf("unexpected calendar verification request %s %s", request.Method, request.URL)
+			}
+			return jsonResponse(http.StatusOK, `{"id":"event-1","status":"confirmed","hangoutLink":"https://meet.google.com/new-link","start":{"dateTime":"2026-10-29T10:00:00-03:00"},"attendees":[{"email":"niamesvi3@gmail.com"}]}`), nil
+		default:
+			t.Fatalf("unexpected host %q", request.URL.Host)
+			return nil, nil
+		}
+	})}
+	toolbox := &AgentToolbox{
+		meeting: AgentMeetingConfig{CalendarID: "calendar"},
+		oauth:   GoogleOAuthConfig{ClientID: "client", ClientSecret: "secret", RefreshToken: "refresh"},
+		http:    client,
+	}
+	if err := toolbox.verifyCreatedMeeting(context.Background(), calendarEvent{ID: "event-1"}, "niamesvi3@gmail.com", "2026-10-29", "10:00"); err != nil {
+		t.Fatal(err)
+	}
+	if err := toolbox.verifyCreatedMeeting(context.Background(), calendarEvent{ID: "event-1"}, "otro@example.com", "2026-10-29", "10:00"); err == nil {
+		t.Fatal("verification accepted an event without the requested attendee")
+	}
+}
+
+func TestCreateMeetingAcceptsContactExplicitInLatestMessage(t *testing.T) {
+	t.Parallel()
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Host {
+		case "oauth2.googleapis.com":
+			return jsonResponse(http.StatusOK, `{"access_token":"token"}`), nil
+		case "www.googleapis.com":
+			if request.Method == http.MethodPost {
+				return jsonResponse(http.StatusOK, `{"id":"event-1","status":"confirmed","hangoutLink":"https://meet.google.com/new-link"}`), nil
+			}
+			if strings.HasSuffix(request.URL.Path, "/events/event-1") {
+				return jsonResponse(http.StatusOK, `{"id":"event-1","status":"confirmed","hangoutLink":"https://meet.google.com/new-link","start":{"dateTime":"2026-10-29T14:30:00-03:00"},"attendees":[{"email":"niamesvi3@gmail.com"}]}`), nil
+			}
+			return jsonResponse(http.StatusOK, `{"items":[]}`), nil
+		default:
+			t.Fatalf("unexpected host %q", request.URL.Host)
+			return nil, nil
+		}
+	})}
+	now := time.Date(2026, time.October, 28, 12, 0, 0, 0, time.UTC)
+	toolbox := &AgentToolbox{
+		meeting: AgentMeetingConfig{CalendarID: "calendar", Timezone: "America/Santiago", SlotDurationMinutes: 90, MinAdvanceMinutes: 120, WeekdayStartHour: 10, WeekdayEndHour: 22, SaturdayStartHour: 10, SaturdayEndHour: 14},
+		oauth:   GoogleOAuthConfig{ClientID: "client", ClientSecret: "secret", RefreshToken: "refresh"},
+		http:    client,
+		now:     func() time.Time { return now },
+	}
+	state := &agentExecutionState{latestCustomerMessage: "Nicolas niamesvi3@gmail.com", currentCustomerTurn: "Nicolas niamesvi3@gmail.com"}
+	result, _, err := toolbox.execute(context.Background(), "56959139687", "message-1", "crear_reunion", map[string]any{
+		"nombreCliente": "Nicolás", "emailCliente": "niamesvi3@gmail.com", "fechaSugerida": "2026-10-29", "horaSugerida": "14:30",
+	}, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !boolResult(result, "exito") || !state.meetingCreated || stringArg(result, "meetLink") != "https://meet.google.com/new-link" {
+		t.Fatalf("explicit contact did not create a verified meeting: result=%#v state=%#v", result, state)
 	}
 }
 
@@ -129,9 +247,10 @@ func TestAgentDeclarationsOmitEmptyRequiredArrays(t *testing.T) {
 func TestAgentExecutionStateMergesPartialDataAndClearsMeetingOnly(t *testing.T) {
 	t.Parallel()
 	state := &agentExecutionState{}
+	now := time.Date(2026, time.October, 23, 12, 0, 0, 0, time.UTC)
 	state.mergeQuote(map[string]any{"destino": "Bariloche", "codigoRegion": "V", "ciudad": "Viña del Mar"})
-	state.mergeMeeting(map[string]any{"nombreCliente": "Ana", "emailCliente": "ANA@EXAMPLE.COM"})
-	state.mergeMeeting(map[string]any{"fechaSugerida": "2026-10-24", "horaSugerida": "10:00"})
+	state.mergeMeeting(map[string]any{"nombreCliente": "Ana", "emailCliente": "ANA@EXAMPLE.COM"}, "Soy Ana y mi correo es ana@example.com", now)
+	state.mergeMeeting(map[string]any{"fechaSugerida": "2026-10-24", "horaSugerida": "10:00"}, "El 24 a las 10", now)
 	if !state.collectedDirty || state.collected.Destination != "bariloche" || state.collected.Region != "v" || state.collected.City != "vina_del_mar" {
 		t.Fatalf("unexpected quote state %#v", state.collected)
 	}
@@ -142,6 +261,26 @@ func TestAgentExecutionStateMergesPartialDataAndClearsMeetingOnly(t *testing.T) 
 	state.clearMeeting()
 	if !state.collectedDirty || state.collected.MeetingName != "" || state.collected.MeetingMail != "" || state.collected.Destination != "bariloche" {
 		t.Fatalf("meeting clear damaged collected state %#v", state.collected)
+	}
+}
+
+func TestMeetingContactMustComeFromCurrentCustomerFlow(t *testing.T) {
+	now := time.Date(2026, time.October, 28, 12, 0, 0, 0, time.UTC)
+	state := &agentExecutionState{}
+	state.mergeMeeting(map[string]any{"fechaSugerida": "2026-10-30"}, "El 30 de octubre", now)
+	if state.collected.MeetingDate != "2026-10-30" || state.collected.MeetingUpdatedAt != now || !state.collected.MeetingContactConfirmedAt.IsZero() {
+		t.Fatalf("partial non-contact meeting data was not preserved safely: %#v", state.collected)
+	}
+	state.mergeMeeting(map[string]any{"nombreCliente": "Contacto antiguo", "emailCliente": "contacto@girasindomito.cl"}, "Quiero reagendar", now)
+	if state.collected.MeetingName != "" || state.collected.MeetingMail != "" || state.hasConfirmedMeetingContact(map[string]any{"nombreCliente": "Contacto antiguo", "emailCliente": "contacto@girasindomito.cl"}, now) {
+		t.Fatalf("stale inferred contact was accepted: %#v", state.collected)
+	}
+	state.mergeMeeting(map[string]any{"nombreCliente": "Nicolás", "emailCliente": "niamesvi3@gmail.com"}, "Nicolas niamesvi3@gmail.com", now)
+	if !state.hasConfirmedMeetingContact(map[string]any{"nombreCliente": "Nicolás", "emailCliente": "niamesvi3@gmail.com"}, now.Add(time.Hour)) {
+		t.Fatal("explicit current contact was not accepted")
+	}
+	if state.hasConfirmedMeetingContact(map[string]any{"nombreCliente": "Nicolás", "emailCliente": "niamesvi3@gmail.com"}, now.Add(3*time.Hour)) {
+		t.Fatal("expired meeting contact remained valid")
 	}
 }
 

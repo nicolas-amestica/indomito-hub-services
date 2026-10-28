@@ -22,7 +22,7 @@ func ProcessAgentQueue(ctx context.Context, processor AgentMessageProcessor, eve
 		}
 		if err != nil || work.Phone == "" || work.MessageID == "" {
 			if err != nil {
-				log.Printf("agent processing failed messageId=%s: %v", work.MessageID, err)
+				log.Printf("agent processing failed: %v", err)
 			}
 			result.BatchItemFailures = append(result.BatchItemFailures, events.SQSBatchItemFailure{ItemIdentifier: record.MessageId})
 		}

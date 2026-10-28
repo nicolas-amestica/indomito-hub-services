@@ -22,6 +22,7 @@ require (
 	github.com/oklog/ulid/v2 v2.1.2
 	github.com/wneessen/go-mail v0.8.1
 	go.uber.org/zap v1.28.0
+	golang.org/x/net v0.57.0
 	golang.org/x/text v0.41.0
 	ind-hub-api-gox-sls-pri-gh v0.0.0
 	ind-hub-api-gox-sls-pri-gh/libs v0.0.0
@@ -60,7 +61,6 @@ require (
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/crypto v0.55.0 // indirect
-	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 )

@@ -25,7 +25,7 @@ type prepareAttachmentsRequest struct {
 	Files   []domain.AttachmentPreparationItem `json:"files"`
 }
 
-var outgoingMIMEs = map[string]bool{"application/pdf": true, "image/jpeg": true, "image/png": true, "image/gif": true, "image/webp": true, "audio/ogg": true, "audio/aac": true, "audio/mp4": true, "audio/mpeg": true, "audio/amr": true, "video/mp4": true}
+var outgoingMIMEs = map[string]bool{"application/pdf": true, "image/jpeg": true, "image/png": true, "audio/ogg": true, "audio/aac": true, "audio/mp4": true, "audio/mpeg": true, "audio/amr": true, "video/mp4": true}
 
 func PrepareAttachments(ctx context.Context, service AttachmentPreparer, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	identity, err := lambdautil.IdentityFromContext(request)
@@ -52,7 +52,8 @@ func PrepareAttachments(ctx context.Context, service AttachmentPreparer, request
 	for index, file := range input.Files {
 		digest, decodeErr := base64.StdEncoding.DecodeString(file.ChecksumSHA256)
 		canonical := decodeErr == nil && len(digest) == 32 && base64.StdEncoding.EncodeToString(digest) == file.ChecksumSHA256
-		if !uuidPattern.MatchString(file.ClientMessageID) || seen[file.ClientMessageID] || len([]rune(file.FileName)) < 1 || len([]rune(file.FileName)) > 200 || filepath.Base(file.FileName) != file.FileName || strings.IndexFunc(file.FileName, unicode.IsControl) >= 0 || !outgoingMIMEs[file.MIMEType] || file.Size < 1 || file.Size > 7*1024*1024 || !canonical {
+		allowedMIME := outgoingMIMEs[file.MIMEType] || file.MIMEType == "image/webp"
+		if !uuidPattern.MatchString(file.ClientMessageID) || seen[file.ClientMessageID] || len([]rune(file.FileName)) < 1 || len([]rune(file.FileName)) > 200 || filepath.Base(file.FileName) != file.FileName || strings.IndexFunc(file.FileName, unicode.IsControl) >= 0 || !allowedMIME || file.Size < 1 || file.Size > 7*1024*1024 || !canonical {
 			return lambdautil.ErrorResponse(request, invalidListQuery("files", fmt.Sprintf("item %d is invalid", index)))
 		}
 		seen[file.ClientMessageID] = true

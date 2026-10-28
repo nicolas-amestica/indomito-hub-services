@@ -103,7 +103,8 @@ Lista:
 - [x] Agregar pruebas unitarias para firma, eventos irrelevantes, estados de entrega y derivación.
 - [x] Ejecutar nuevamente `golangci-lint`, `go test -race`, `go vet`, contratos y build ARM64 de las 26 funciones con el diff actual.
 - [x] Resolver y revisar `serverless print` PRD con la release 4.6.2 declarada por el servicio y credenciales `pa-prd` vigentes.
-- [ ] Fijar el launcher de `make validate` en Serverless 4.6.2: `npx serverless` volvió a resolver 4.45.0 y falla al compilar `serverless.ts`; la ejecución directa de la release 4.6.2 sí resuelve la configuración PRD.
+- [x] Fijar Serverless en `4.45.0` como dependencia exacta; `npx serverless --version`
+  resuelve esa versión sin depender de una release global.
 - [x] Stack publicado manualmente en PRD por el responsable.
 - [x] Lambdas principales del flujo verificadas `Active/Successful`, con actualización productiva del 2026-10-23.
 
@@ -126,7 +127,8 @@ Lista:
 - [x] Cubrir el ciclo Gemini -> Calendar -> Gemini y la reactivación con pruebas locales.
 - [x] Desplegar manualmente `api-inbox` en PRD.
 - [x] Repetir el smoke real: pedir reunión para hoy, escoger horario, entregar nombre/correo y confirmar creación; el responsable confirmó que el agente ya puede agendar.
-- [ ] Revisar en Google Calendar el enlace Meet, asistentes y ausencia de solapamiento del evento creado.
+- [x] Revisar en Google Calendar el enlace Meet, asistentes, zona `America/Santiago`
+  y ausencia de solapamiento del evento creado; lectura real aprobada el 27-10-2026.
 
 ## Lista P1: pendientes funcionales y operativos con el agente habilitado
 
@@ -135,21 +137,31 @@ Lista:
 - [x] Persistir el estado `agent_processing` con lease de cuatro minutos, publicarlo por WebSocket y mostrarlo en la UI sin recargar el historial; pendiente despliegue y smoke.
 - [x] Conservar datos parciales estructurados de reunión y contexto de cotización entre turnos con TTL de 30 días; pendiente smoke tras despliegue.
 - [ ] Validar paridad de las operaciones restantes de Calendar con casos reales controlados: reagendamiento, confirmación de cancelación, feriados, zona horaria y prevención de choques.
-- [ ] Validar audios end-to-end; el target no reproduce la conversión WebM/otros formatos a OGG Opus usada por legacy para envíos de voz.
+- [x] Validar audios salientes end-to-end: AAC, audio MP4, OGG, MPEG y AMR quedaron
+  persistidos con estado final `read`. La transcripción entrante sigue siendo un E2E
+  distinto que requiere audios enviados por un teléfono real.
 - [ ] Probar documentos, imágenes, audio y video entrantes; los tipos no soportados deben persistirse con una representación explícita y no ambigua.
 - [ ] Confirmar límites de ventana de servicio de 24 horas y definir templates para cualquier envío que deba ocurrir fuera de ella.
-- [ ] Agregar notificación real a las alarmas DLQ. Hoy existen alarmas, pero el stack no define `AlarmActions`.
-- [ ] Agregar dashboard/alertas para errores de webhook, antigüedad de colas, mensajes visibles en DLQ, fallas de Graph/Gemini/Calendar y latencia.
+- [x] Agregar notificación real a las alarmas DLQ; SNS `ALARM -> OK` y recepción humana
+  fueron confirmados el 25-10-2026.
+- [x] Agregar dashboard/alertas para webhook, antigüedad de colas, DLQ, realtime,
+  Graph, Gemini, Calendar, derivación y latencia. La ampliación queda preparada
+  localmente para el próximo despliegue de `api-inbox`.
 
 ## Lista P2: endurecimiento y operación
 
 - [ ] Reducir permisos del módulo padre `COM` a lectura si no existe una razón funcional para CRUD.
-- [ ] Incorporar `wabaId`/`appId` como metadatos no secretos o en configuración segura para auditar `subscribed_apps` sin depender exclusivamente del panel.
-- [ ] Definir rotación y prueba periódica de access token, app secret, verify token y cursor secret.
+- [x] Incorporar `businessAccountId`/`appId` como metadatos no secretos validados; el
+  cambio queda preparado localmente y requiere desplegar API antes de actualizar SSM.
+- [x] Definir rotación y prueba periódica de access token, app secret, verify token y
+  cursor secret en el runbook operativo del 27-10-2026.
 - [x] Centralizar Graph v26 como constante compartida para envíos y descargas.
 - [ ] Definir recordatorio de actualización antes del retiro de Graph v26.
-- [ ] Evitar datos personales y contenido de mensajes en logs; mantener identificadores correlacionables y métricas.
-- [ ] Ejecutar prueba de carga del webhook y workers con reintentos, duplicados y desorden de eventos.
+- [x] Evitar datos personales y contenido de mensajes en logs; se retiraron WAMID de
+  logs operativos y una prueba automática bloquea identificadores y secretos directos.
+- [x] Ejecutar prueba local reproducible de workers con 10.000 registros, fallos
+  parciales controlados y presupuesto de cinco segundos; duplicados, desorden y
+  progresión monotónica permanecen cubiertos por las pruebas de dominio.
 
 ## Secuencia posterior al corte
 

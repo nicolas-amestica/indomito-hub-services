@@ -47,7 +47,7 @@ func TestAgentCollectedDataRoundTripUsesExpiringConversationItem(t *testing.T) {
 	now := time.Date(2026, time.October, 23, 12, 0, 0, 0, time.UTC)
 	db := &agentStateDynamoFake{}
 	service := &AgentService{db: db, table: "table", now: func() time.Time { return now }}
-	want := AgentCollectedData{Destination: "bariloche", Region: "v", MeetingName: "Ana", MeetingMail: "ana@example.com"}
+	want := AgentCollectedData{Destination: "bariloche", Region: "v", MeetingName: "Ana", MeetingMail: "ana@example.com", MeetingUpdatedAt: now, MeetingContactConfirmedAt: now}
 	if err := service.saveAgentCollectedData(context.Background(), "56912345678", want); err != nil {
 		t.Fatal(err)
 	}
@@ -126,6 +126,210 @@ func TestAgentGenerateUsesStatelessInteractionsToolLoop(t *testing.T) {
 	}
 	if derivation != nil || interactionCalls != 2 || !strings.Contains(reply, "10:30") {
 		t.Fatalf("reply=%q derivation=%#v calls=%d", reply, derivation, interactionCalls)
+	}
+}
+
+func TestAgentRejectsUnverifiedMeetingConfirmationFromModel(t *testing.T) {
+	t.Parallel()
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host != "generativelanguage.googleapis.com" {
+			t.Fatalf("unexpected host %q", request.URL.Host)
+		}
+		var payload struct {
+			Input []json.RawMessage `json:"input"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		for _, raw := range payload.Input {
+			if strings.Contains(string(raw), "historical-link") {
+				t.Fatal("historical agent Meet link was exposed to Gemini")
+			}
+		}
+		return jsonResponse(http.StatusOK, `{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"He registrado tu reunión. El enlace es https://meet.google.com/old-link"}]}]}`), nil
+	})}
+	service := &AgentService{gemini: GeminiConfig{APIKey: "api-key", Model: "model"}, http: client, tools: &AgentToolbox{assets: AgentAssetConfig{}}, now: time.Now}
+	content := "Agenda una reunión"
+	oldAgentReply := "Tu reunión anterior usó https://meet.google.com/historical-link"
+	reply, _, err := service.generate(context.Background(), "56912345678", "wamid-1", []Message{{Type: MessageTypeAIAgent, Content: &oldAgentReply}, {Type: MessageTypeCustomer, Content: &content}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(reply, "old-link") || !strings.Contains(reply, "No pude confirmar") {
+		t.Fatalf("unverified meeting claim was not blocked: %q", reply)
+	}
+}
+
+func TestCurrentCustomerTurnKeepsConsecutivePartialContactMessages(t *testing.T) {
+	t.Parallel()
+	oldAgentReply := "Indícame nombre y correo"
+	name := "Nicolás"
+	email := "niamesvi3@gmail.com"
+	messages := []Message{
+		{Type: MessageTypeAIAgent, Content: &oldAgentReply},
+		{Type: MessageTypeCustomer, Content: &name},
+		{Type: MessageTypeCustomer, Content: &email},
+	}
+	if got := currentCustomerTurn(messages); got != "Nicolás\nniamesvi3@gmail.com" {
+		t.Fatalf("current customer turn = %q", got)
+	}
+	state := &agentExecutionState{}
+	now := time.Date(2026, time.October, 28, 21, 20, 0, 0, time.UTC)
+	state.mergeMeeting(map[string]any{"nombreCliente": name, "emailCliente": email}, currentCustomerTurn(messages), now)
+	if !state.hasConfirmedMeetingContact(map[string]any{"nombreCliente": name, "emailCliente": email}, now) {
+		t.Fatalf("separate contact messages were not preserved: %#v", state.collected)
+	}
+}
+
+func TestRapidCustomerMessagesOnlyAllowLatestWorker(t *testing.T) {
+	t.Parallel()
+	firstID, secondID, thirdID := "wamid-1", "wamid-2", "wamid-3"
+	name, email, slot := "Nicolás", "niamesvi3@gmail.com", "Mañana a las 16:00"
+	messages := []Message{
+		{Type: MessageTypeCustomer, Content: &name, WhatsAppMessageID: &firstID},
+		{Type: MessageTypeCustomer, Content: &email, WhatsAppMessageID: &secondID},
+		{Type: MessageTypeCustomer, Content: &slot, WhatsAppMessageID: &thirdID},
+	}
+	if isLatestCustomerMessage(messages, firstID) || isLatestCustomerMessage(messages, secondID) {
+		t.Fatal("an obsolete rapid-message worker was allowed to execute")
+	}
+	if !isLatestCustomerMessage(messages, thirdID) {
+		t.Fatal("the latest rapid-message worker was rejected")
+	}
+}
+
+func TestGuardedAgentReplyAllowsOnlyVerifiedMeetLinks(t *testing.T) {
+	t.Parallel()
+	state := &agentExecutionState{verifiedMeetLinks: map[string]struct{}{"https://meet.google.com/verified-link": {}}}
+	want := "Tu reunión actual usa https://meet.google.com/verified-link."
+	if got := guardedAgentReply(want, state); got != want {
+		t.Fatalf("verified link was blocked: %q", got)
+	}
+	if got := guardedAgentReply("Usa https://meet.google.com/other-link.", state); !strings.Contains(got, "No pude confirmar") {
+		t.Fatalf("unverified link was accepted: %q", got)
+	}
+}
+
+func TestConfirmedMeetingReplyUsesOnlyToolResult(t *testing.T) {
+	t.Parallel()
+	reply := confirmedMeetingReply(
+		map[string]any{"fecha": "2026-10-29", "hora": "10:00", "meetLink": "https://meet.google.com/new-link"},
+		map[string]any{"nombreCliente": "Nicolás", "emailCliente": "niamesvi3@gmail.com"},
+	)
+	for _, required := range []string{"2026-10-29", "10:00", "Nicolás", "niamesvi3@gmail.com", "new-link"} {
+		if !strings.Contains(reply, required) {
+			t.Fatalf("confirmation omitted %q: %q", required, reply)
+		}
+	}
+}
+
+func TestConfirmedBudgetDeliveryReplyUsesExactChannelSafeWording(t *testing.T) {
+	t.Parallel()
+	result := map[string]any{
+		"encontrados":         true,
+		"certificadoSernatur": map[string]any{"enviado": true},
+	}
+	args := map[string]any{"destino": "bariloche"}
+	want := "Te adjunté las cotizaciones y programas disponibles para Bariloche, junto con nuestro certificado Sernatur."
+	if got := confirmedBudgetDeliveryReply(result, args); got != want {
+		t.Fatalf("budget delivery confirmation = %q, want %q", got, want)
+	}
+}
+
+func TestConfirmedBudgetDeliveryReplyDoesNotClaimMissingCertificate(t *testing.T) {
+	t.Parallel()
+	result := map[string]any{
+		"encontrados":         true,
+		"certificadoSernatur": map[string]any{"enviado": false},
+	}
+	args := map[string]any{"destino": "pucon"}
+	want := "Te adjunté las cotizaciones y programas disponibles para Pucón."
+	if got := confirmedBudgetDeliveryReply(result, args); got != want {
+		t.Fatalf("budget delivery confirmation = %q, want %q", got, want)
+	}
+}
+
+func TestConfirmedMeetingUpdateReplyUsesOnlyToolResult(t *testing.T) {
+	t.Parallel()
+	reply := confirmedMeetingUpdateReply(map[string]any{"fecha": "2026-10-29", "hora": "19:00", "meetLink": "https://meet.google.com/new-link"})
+	for _, required := range []string{"reagendada", "2026-10-29", "19:00", "new-link"} {
+		if !strings.Contains(reply, required) {
+			t.Fatalf("update confirmation omitted %q: %q", required, reply)
+		}
+	}
+}
+
+func TestExistingMeetingReplyForbidsSecondConcurrentMeeting(t *testing.T) {
+	t.Parallel()
+	reply := existingMeetingReply()
+	for _, required := range []string{"reunión futura", "reagendar", "cancelarla", "no crear una segunda"} {
+		if !strings.Contains(reply, required) {
+			t.Fatalf("existing meeting response omitted %q: %q", required, reply)
+		}
+	}
+}
+
+func TestAgentReturnsDeterministicResponseWhenMeetingAlreadyExists(t *testing.T) {
+	t.Parallel()
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Host {
+		case "generativelanguage.googleapis.com":
+			return jsonResponse(http.StatusOK, `{"status":"requires_action","steps":[{"type":"function_call","id":"call-1","name":"crear_reunion","arguments":{"nombreCliente":"Nicolas","emailCliente":"niamesvi3@gmail.com","fechaSugerida":"2026-10-29","horaSugerida":"20:30"}}]}`), nil
+		case "oauth2.googleapis.com":
+			return jsonResponse(http.StatusOK, `{"access_token":"token"}`), nil
+		case "www.googleapis.com":
+			return jsonResponse(http.StatusOK, `{"items":[{"id":"existing","status":"confirmed","start":{"dateTime":"2026-10-29T14:30:00-03:00"},"end":{"dateTime":"2026-10-29T16:00:00-03:00"}}]}`), nil
+		default:
+			t.Fatalf("unexpected host %q", request.URL.Host)
+			return nil, nil
+		}
+	})}
+	now := time.Date(2026, time.October, 28, 12, 0, 0, 0, time.UTC)
+	toolbox := &AgentToolbox{
+		meeting: AgentMeetingConfig{CalendarID: "calendar", Timezone: "America/Santiago", SlotDurationMinutes: 90},
+		oauth:   GoogleOAuthConfig{ClientID: "client", ClientSecret: "secret", RefreshToken: "refresh"},
+		http:    client,
+		now:     func() time.Time { return now },
+	}
+	service := &AgentService{gemini: GeminiConfig{APIKey: "api-key", Model: "model"}, http: client, tools: toolbox, now: func() time.Time { return now }}
+	content := "Confirmo, soy Nicolas y mi correo es niamesvi3@gmail.com"
+	reply, _, err := service.generate(context.Background(), "56959139687", "wamid-1", []Message{{Type: MessageTypeCustomer, Content: &content}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reply != existingMeetingReply() {
+		t.Fatalf("existing meeting response = %q", reply)
+	}
+}
+
+func TestGuardedAgentReplyBlocksUnaccentedHallucinationAndHistoryMarker(t *testing.T) {
+	t.Parallel()
+	state := &agentExecutionState{}
+	reply := "Tu reunion quedo agendada. El enlace es [enlace Meet omitido del historial]."
+	if got := guardedAgentReply(reply, state); !strings.Contains(got, "No pude confirmar") {
+		t.Fatalf("unaccented hallucination was accepted: %q", got)
+	}
+}
+
+func TestDeterministicMeetingFailureReplies(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{name: "invalid email", got: invalidMeetingContactReply(), want: "correo indicado no es válido"},
+		{name: "occupied slot", got: unavailableMeetingSlotReply(map[string]any{"horariosDisponibles": []string{"10:00", "11:30"}}), want: "10:00, 11:30"},
+		{name: "missing update", got: missingMeetingUpdateReply(), want: "No encontré una reunión futura para reagendar"},
+		{name: "missing cancellation", got: missingMeetingCancellationReply(), want: "No encontré una reunión futura para cancelar"},
+		{name: "provider failure", got: meetingProviderFailureReply(), want: "No pude confirmar la operación"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if !strings.Contains(test.got, test.want) {
+				t.Fatalf("reply %q does not contain %q", test.got, test.want)
+			}
+		})
 	}
 }
 

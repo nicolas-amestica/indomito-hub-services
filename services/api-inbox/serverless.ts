@@ -408,6 +408,71 @@ const queueDimensions = (logicalID: string) => [{
   Value: { "Fn::GetAtt": [logicalID, "QueueName"] },
 }];
 
+const dashboardBody = JSON.stringify({
+  start: "-PT6H",
+  periodOverride: "inherit",
+  widgets: [
+    {
+      type: "metric", x: 0, y: 0, width: 12, height: 6,
+      properties: {
+        title: "Webhook y envios salientes", region: REGION, view: "timeSeries", period: 60, stat: "Sum",
+        metrics: [
+          ["AWS/Lambda", "Errors", "FunctionName", `${ApiServices.Inbox}-${STAGE}-fn-recibir-webhook-whatsapp-v1`, { label: "Webhook errors" }],
+          [".", "Duration", ".", ".", { label: "Webhook duration max", stat: "Maximum", yAxis: "right" }],
+          [".", "Errors", ".", `${ApiServices.Inbox}-${STAGE}-fn-enviar-respuesta-v1`, { label: "Outbound errors" }],
+        ],
+      },
+    },
+    {
+      type: "metric", x: 12, y: 0, width: 12, height: 6,
+      properties: {
+        title: "Proveedores externos", region: REGION, view: "timeSeries", period: 60, stat: "Sum",
+        metrics: [
+          ["Indomito/Inbox", "GraphApiFailures", "Stage", STAGE],
+          [".", "GeminiFailures", ".", "."],
+          [".", "CalendarFailures", ".", "."],
+          [".", "DerivationNotificationFailures", ".", "."],
+        ],
+      },
+    },
+    {
+      type: "metric", x: 0, y: 6, width: 24, height: 7,
+      properties: {
+        title: "Edad de colas", region: REGION, view: "timeSeries", period: 60, stat: "Maximum",
+        metrics: [
+          ["AWS/SQS", "ApproximateAgeOfOldestMessage", "QueueName", "${InboundQueueName}", { label: "Inbound" }],
+          [".", ".", ".", "${AgentQueueName}", { label: "Agent" }],
+          [".", ".", ".", "${WorkflowQueueName}", { label: "Workflow" }],
+          [".", ".", ".", "${RealtimeQueueName}", { label: "Realtime" }],
+        ],
+      },
+    },
+    {
+      type: "metric", x: 0, y: 13, width: 12, height: 6,
+      properties: {
+        title: "Mensajes en DLQ", region: REGION, view: "singleValue", period: 60, stat: "Maximum",
+        metrics: [
+          ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "${InboundDlqName}", { label: "Inbound DLQ" }],
+          [".", ".", ".", "${AgentDlqName}", { label: "Agent DLQ" }],
+          [".", ".", ".", "${WorkflowDlqName}", { label: "Workflow DLQ" }],
+          [".", ".", ".", "${RealtimeDlqName}", { label: "Realtime DLQ" }],
+        ],
+      },
+    },
+    {
+      type: "metric", x: 12, y: 13, width: 12, height: 6,
+      properties: {
+        title: "Publicacion realtime", region: REGION, view: "timeSeries", period: 60, stat: "Sum",
+        metrics: [
+          ["AWS/Lambda", "Errors", "FunctionName", `${ApiServices.Inbox}-${STAGE}-fn-publicar-evento-inbox-v1`, { label: "Errors" }],
+          [".", "Throttles", ".", ".", { label: "Throttles" }],
+          [".", "Duration", ".", ".", { label: "Duration max", stat: "Maximum", yAxis: "right" }],
+        ],
+      },
+    },
+  ],
+});
+
 serverlessConfiguration.resources = {
   ...serverlessConfiguration.resources,
   Resources: {
@@ -435,6 +500,24 @@ serverlessConfiguration.resources = {
               StringEquals: { "AWS:SourceAccount": { Ref: "AWS::AccountId" } },
               ArnLike: { "AWS:SourceArn": { "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:*" } },
             },
+          }],
+        },
+      },
+    },
+    InboxOperationalDashboard: {
+      Type: "AWS::CloudWatch::Dashboard",
+      Properties: {
+        DashboardName: `ind-inbox-${STAGE}-operations`,
+        DashboardBody: {
+          "Fn::Sub": [dashboardBody, {
+            InboundQueueName: { "Fn::GetAtt": ["InboxInboundQueue", "QueueName"] },
+            AgentQueueName: { "Fn::GetAtt": ["InboxAgentQueue", "QueueName"] },
+            WorkflowQueueName: { "Fn::GetAtt": ["InboxWorkflowQueue", "QueueName"] },
+            RealtimeQueueName: { "Fn::GetAtt": ["InboxRealtimeQueue", "QueueName"] },
+            InboundDlqName: { "Fn::GetAtt": ["InboxInboundDeadLetterQueue", "QueueName"] },
+            AgentDlqName: { "Fn::GetAtt": ["InboxAgentDeadLetterQueue", "QueueName"] },
+            WorkflowDlqName: { "Fn::GetAtt": ["InboxWorkflowDeadLetterQueue", "QueueName"] },
+            RealtimeDlqName: { "Fn::GetAtt": ["InboxRealtimeDeadLetterQueue", "QueueName"] },
           }],
         },
       },
@@ -517,6 +600,18 @@ serverlessConfiguration.resources = {
     InboxGraphApiFailuresAlarm: {
       Type: "AWS::CloudWatch::Alarm",
       Properties: alarmProperties("Inbox Graph API failures", "Indomito/Inbox", "GraphApiFailures", [{ Name: "Stage", Value: STAGE }], 1, 60),
+    },
+    InboxGeminiFailuresAlarm: {
+      Type: "AWS::CloudWatch::Alarm",
+      Properties: alarmProperties("Inbox Gemini failures", "Indomito/Inbox", "GeminiFailures", [{ Name: "Stage", Value: STAGE }], 1, 60),
+    },
+    InboxCalendarFailuresAlarm: {
+      Type: "AWS::CloudWatch::Alarm",
+      Properties: alarmProperties("Inbox Google Calendar failures", "Indomito/Inbox", "CalendarFailures", [{ Name: "Stage", Value: STAGE }], 1, 60),
+    },
+    InboxDerivationNotificationFailuresAlarm: {
+      Type: "AWS::CloudWatch::Alarm",
+      Properties: alarmProperties("Inbox derivation notification failures", "Indomito/Inbox", "DerivationNotificationFailures", [{ Name: "Stage", Value: STAGE }], 1, 60),
     },
     InboxRealtimeErrorsAlarm: {
       Type: "AWS::CloudWatch::Alarm",

@@ -5,6 +5,8 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -46,10 +48,22 @@ func TestDecodeInboundMetaMessagesPreservesRichContent(t *testing.T) {
 	}
 }
 
+func TestDecodeInboundMetaMessagesMakesUnsupportedContentVisible(t *testing.T) {
+	raw := []byte(`{"entry":[{"changes":[{"value":{"messages":[{"id":"wamid.unsupported","from":"56912345678","type":"order","timestamp":"1"}]}}]}]}`)
+	messages, err := DecodeInboundMetaMessages(raw)
+	if err != nil || len(messages) != 1 {
+		t.Fatalf("unexpected unsupported decode: %#v err=%v", messages, err)
+	}
+	if messages[0].Text != "[Contenido de WhatsApp no compatible: order]" || messages[0].Type != "order" {
+		t.Fatalf("unsupported content must remain unequivocal and auditable: %#v", messages[0])
+	}
+}
+
 type webhookFakeDynamo struct {
-	items  map[string]map[string]types.AttributeValue
-	writes []*dynamodb.TransactWriteItemsInput
-	reads  map[string]int
+	items               map[string]map[string]types.AttributeValue
+	writes              []*dynamodb.TransactWriteItemsInput
+	reads               map[string]int
+	transactionFailures int
 }
 
 func (f *webhookFakeDynamo) GetItem(_ context.Context, input *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
@@ -64,6 +78,11 @@ func (f *webhookFakeDynamo) GetItem(_ context.Context, input *dynamodb.GetItemIn
 
 func (f *webhookFakeDynamo) TransactWriteItems(_ context.Context, input *dynamodb.TransactWriteItemsInput, _ ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error) {
 	f.writes = append(f.writes, input)
+	if f.transactionFailures > 0 {
+		f.transactionFailures--
+		code := "ConditionalCheckFailed"
+		return nil, &types.TransactionCanceledException{CancellationReasons: []types.CancellationReason{{Code: &code}}}
+	}
 	return &dynamodb.TransactWriteItemsOutput{}, nil
 }
 
@@ -99,6 +118,52 @@ func TestDecodeInboundMetaMessagesIgnoresIrrelevantEvents(t *testing.T) {
 	}
 }
 
+func TestWebhookDecodersSustainDuplicateDelayedAndMixedCallbackLoad(t *testing.T) {
+	const callbacks = 1_000
+	messages := make([]map[string]any, 0, callbacks*2)
+	statuses := make([]map[string]any, 0, callbacks*3)
+	for index := 0; index < callbacks; index++ {
+		wamid := fmt.Sprintf("wamid.load.%04d", index)
+		messages = append(messages,
+			map[string]any{"id": wamid, "from": "56912345678", "type": "text", "timestamp": "1", "text": map[string]string{"body": "carga sintética"}},
+			map[string]any{"id": wamid + ".reaction", "from": "56912345678", "type": "reaction", "timestamp": "2", "reaction": map[string]string{"message_id": wamid, "emoji": "👍"}},
+		)
+		// Intentionally delayed and out of order, including a duplicate read.
+		statuses = append(statuses,
+			map[string]any{"id": wamid, "status": "read", "timestamp": "4"},
+			map[string]any{"id": wamid, "status": "delivered", "timestamp": "3"},
+			map[string]any{"id": wamid, "status": "read", "timestamp": "4"},
+		)
+	}
+	envelope := map[string]any{
+		"entry": []any{
+			map[string]any{
+				"changes": []any{
+					map[string]any{
+						"value": map[string]any{"messages": messages, "statuses": statuses},
+					},
+				},
+			},
+		},
+	}
+	raw, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decodedMessages, err := DecodeInboundMetaMessages(raw)
+	if err != nil || len(decodedMessages) != callbacks {
+		t.Fatalf("messages = %d, want %d, err=%v", len(decodedMessages), callbacks, err)
+	}
+	decodedReactions, err := DecodeInboundMetaReactions(raw)
+	if err != nil || len(decodedReactions) != callbacks {
+		t.Fatalf("reactions = %d, want %d, err=%v", len(decodedReactions), callbacks, err)
+	}
+	decodedStatuses, err := DecodeInboundMetaStatuses(raw)
+	if err != nil || len(decodedStatuses) != callbacks*3 {
+		t.Fatalf("statuses = %d, want %d, err=%v", len(decodedStatuses), callbacks*3, err)
+	}
+}
+
 func TestDecodeAndApplyInboundMetaDeliveryStatus(t *testing.T) {
 	raw := []byte(`{"entry":[{"changes":[{"value":{"statuses":[{"id":"wamid.out.1","status":"failed","timestamp":"10","errors":[{"code":131026,"message":"Message undeliverable"}]}]}}]}]}`)
 	statuses, err := DecodeInboundMetaStatuses(raw)
@@ -120,7 +185,7 @@ func TestDecodeAndApplyInboundMetaDeliveryStatus(t *testing.T) {
 	if err = service.ApplyStatus(context.Background(), statuses[0]); err != nil {
 		t.Fatal(err)
 	}
-	if len(db.writes) != 1 || len(db.writes[0].TransactItems) != 3 {
+	if len(db.writes) != 1 || len(db.writes[0].TransactItems) != 4 {
 		t.Fatalf("writes = %d, want delivery, sequence and realtime event transaction", len(db.writes))
 	}
 }
@@ -141,6 +206,42 @@ func TestDeliveryStatusProgressionIsMonotonic(t *testing.T) {
 		current := test.current
 		if got := shouldApplyDeliveryStatus(&current, test.next); got != test.want {
 			t.Errorf("%s -> %s = %v, want %v", test.current, test.next, got, test.want)
+		}
+	}
+}
+
+func TestApplyStatusRetriesCanceledRealtimeTransaction(t *testing.T) {
+	delivery := DeliveryStatusSent
+	message, err := attributevalue.MarshalMap(Message{ID: "01MESSAGE", MessageSK: "MSG#01MESSAGE", Phone: "56912345678", Type: MessageTypeTeam, DeliveryStatus: &delivery})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sequence, err := attributevalue.MarshalMap(listSequence{Sequence: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := &webhookFakeDynamo{transactionFailures: 1, items: map[string]map[string]types.AttributeValue{
+		"WAMID#wamid.out.1|META":         {"phone": &types.AttributeValueMemberS{Value: "56912345678"}, "msgSk": &types.AttributeValueMemberS{Value: "MSG#01MESSAGE"}},
+		"CONV#56912345678|MSG#01MESSAGE": message,
+		"SEQ#DETAIL#56912345678|META":    sequence,
+	}}
+	service, err := NewWebhookService(db, "table", "0123456789abcdef", func() time.Time { return time.Unix(100, 0) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = service.ApplyStatus(context.Background(), InboundMetaStatus{WhatsAppMessageID: "wamid.out.1", Status: DeliveryStatusDelivered}); err != nil {
+		t.Fatal(err)
+	}
+	if len(db.writes) != 2 {
+		t.Fatalf("transaction attempts = %d, want 2", len(db.writes))
+	}
+	for index, write := range db.writes {
+		if len(write.TransactItems) != 4 {
+			t.Fatalf("attempt %d items = %d, want 4", index, len(write.TransactItems))
+		}
+		sequenceValue := write.TransactItems[2].Put.Item["sequence"].(*types.AttributeValueMemberN).Value
+		if sequenceValue != "5" {
+			t.Fatalf("attempt %d realtime sequence = %s, want 5", index, sequenceValue)
 		}
 	}
 }
@@ -169,11 +270,15 @@ func TestApplyStatusAcknowledgesUnknownAndDuplicateReceipts(t *testing.T) {
 			if err = service.ApplyStatus(context.Background(), InboundMetaStatus{WhatsAppMessageID: "wamid.out.1", Status: DeliveryStatusRead}); err != nil {
 				t.Fatal(err)
 			}
-			if len(db.writes) != 0 {
-				t.Fatalf("unexpected writes: %d", len(db.writes))
+			wantWrites := 0
+			if test.name == "unknown WAMID" {
+				wantWrites = 1
 			}
-			if test.name == "unknown WAMID" && db.reads["WAMID#wamid.out.1|META"] != 2 {
-				t.Fatalf("WAMID lookup attempts = %d, want 2", db.reads["WAMID#wamid.out.1|META"])
+			if len(db.writes) != wantWrites {
+				t.Fatalf("writes = %d, want %d", len(db.writes), wantWrites)
+			}
+			if test.name == "unknown WAMID" && db.reads["WAMID#wamid.out.1|META"] != 3 {
+				t.Fatalf("WAMID lookup attempts = %d, want 3", db.reads["WAMID#wamid.out.1|META"])
 			}
 		})
 	}

@@ -236,6 +236,12 @@ func effectivePermissions(raw []permissionView) []permissionView {
 		if permission.Module.Level == "LV2" && !readableParents[permission.Module.ParentCode] {
 			continue
 		}
+		// COM is a navigation parent without mutable resources of its own. CRUD
+		// belongs to its children (for example INBOX), so never expose synthetic
+		// create/update/delete permissions for the parent to clients or authorizers.
+		if permission.Module.Code == "COM" && permission.Module.Level != "LV2" {
+			permission.Allowances = []string{"r"}
+		}
 		out = append(out, permission)
 	}
 	return out

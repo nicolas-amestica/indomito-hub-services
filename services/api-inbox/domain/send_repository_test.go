@@ -13,12 +13,18 @@ import (
 
 type sendDynamoFake struct {
 	item    map[string]types.AttributeValue
+	items   map[string]map[string]types.AttributeValue
 	writes  []types.TransactWriteItem
 	updates int
 	puts    int
 }
 
-func (fake *sendDynamoFake) GetItem(context.Context, *dynamodb.GetItemInput, ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+func (fake *sendDynamoFake) GetItem(_ context.Context, input *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+	if fake.items != nil {
+		pk := input.Key["pk"].(*types.AttributeValueMemberS).Value
+		sk := input.Key["sk"].(*types.AttributeValueMemberS).Value
+		return &dynamodb.GetItemOutput{Item: fake.items[pk+"|"+sk]}, nil
+	}
 	return &dynamodb.GetItemOutput{Item: fake.item}, nil
 }
 
@@ -114,6 +120,49 @@ func TestDynamoSendRepositoryCommitPersistsFullContent(t *testing.T) {
 	}
 	if message.Content == nil || *message.Content != content || len([]rune(*message.Content)) <= 200 {
 		t.Fatalf("persisted content length = %d, want %d", len([]rune(valueOrEmpty(message.Content))), len([]rune(content)))
+	}
+}
+
+func TestDynamoSendRepositoryReconcilesPendingDeliveryAfterCommit(t *testing.T) {
+	now := time.Date(2026, 10, 25, 8, 0, 0, 0, time.UTC)
+	preview := "respuesta"
+	recordItem, err := attributevalue.MarshalMap(sendRecord{PK: "SEND#client-message", SK: "META", OwnerID: "agent", Content: preview, Actor: MessageTypeAIAgent, SendState: SendState{ClientMessageID: "client-message", Phone: "56912345678", State: SendProviderPending, CreatedAt: now, UpdatedAt: now, Preview: &preview}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pendingItem, err := attributevalue.MarshalMap(pendingMetaStatus{PK: "STATUS_PENDING#wamid.sent", SK: "META", Status: DeliveryStatusDelivered, Timestamp: "10", ExpiresAt: now.Add(24 * time.Hour).Unix()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	delivery := DeliveryStatusSent
+	messageItem, err := attributevalue.MarshalMap(Message{ID: "01MESSAGE", MessageSK: "MSG#01MESSAGE", Phone: "56912345678", Type: MessageTypeAIAgent, DeliveryStatus: &delivery})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sequenceItem, err := attributevalue.MarshalMap(listSequence{Sequence: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := &sendDynamoFake{items: map[string]map[string]types.AttributeValue{
+		"SEND#client-message|META":       recordItem,
+		"STATUS_PENDING#wamid.sent|META": pendingItem,
+		"WAMID#wamid.sent|META":          {"phone": &types.AttributeValueMemberS{Value: "56912345678"}, "msgSk": &types.AttributeValueMemberS{Value: "MSG#01MESSAGE"}},
+		"CONV#56912345678|MSG#01MESSAGE": messageItem,
+		"SEQ#DETAIL#56912345678|META":    sequenceItem,
+	}}
+	repository, err := NewDynamoSendRepository(fake, "table")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = repository.Commit(context.Background(), "agent", "client-message", "wamid.sent", now); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.writes) != 4 || fake.writes[3].Delete == nil {
+		t.Fatalf("reconciliation transaction = %#v", fake.writes)
+	}
+	deletedPK := fake.writes[3].Delete.Key["pk"].(*types.AttributeValueMemberS).Value
+	if deletedPK != "STATUS_PENDING#wamid.sent" {
+		t.Fatalf("deleted pending status = %q", deletedPK)
 	}
 }
 

@@ -36,3 +36,21 @@ func TestEffectivePermissionsKeepsChildWhenParentIsReadable(t *testing.T) {
 		t.Fatalf("se esperaban 2 permisos efectivos y se obtuvieron %d", len(effective))
 	}
 }
+
+func TestEffectivePermissionsRestrictsCommunicationsParentToRead(t *testing.T) {
+	raw := []permissionView{
+		{Module: domain.Module{Code: "COM", Level: "LV1"}, Allowances: []string{"c", "r", "u", "d"}},
+		{Module: domain.Module{Code: "INBOX", Level: "LV2", ParentCode: "COM"}, Allowances: []string{"c", "r", "u", "d"}},
+	}
+
+	effective := effectivePermissions(raw)
+	if len(effective) != 2 {
+		t.Fatalf("se esperaban 2 permisos efectivos y se obtuvieron %d", len(effective))
+	}
+	if got := effective[0].Allowances; len(got) != 1 || got[0] != "r" {
+		t.Fatalf("COM debe ser solo lectura y obtuvo %v", got)
+	}
+	if got := effective[1].Allowances; len(got) != 4 {
+		t.Fatalf("INBOX debe conservar su CRUD y obtuvo %v", got)
+	}
+}

@@ -254,7 +254,29 @@ func (r *DynamoSendRepository) Commit(ctx context.Context, ownerID, id, wamid st
 	if err != nil {
 		return SendState{}, fmt.Errorf("commit send: %w", err)
 	}
+	if err = r.reconcilePendingStatus(ctx, wamid); err != nil {
+		return state, fmt.Errorf("reconcile pending delivery status: %w", err)
+	}
 	return state, nil
+}
+
+func (r *DynamoSendRepository) reconcilePendingStatus(ctx context.Context, wamid string) error {
+	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{TableName: &r.tableName, Key: snapshotKey("STATUS_PENDING#"+wamid, "META"), ConsistentRead: aws.Bool(true)})
+	if err != nil {
+		return err
+	}
+	if len(out.Item) == 0 {
+		return nil
+	}
+	var pending pendingMetaStatus
+	if err = attributevalue.UnmarshalMap(out.Item, &pending); err != nil {
+		return err
+	}
+	if pending.Status == "" {
+		return nil
+	}
+	service := &WebhookService{db: r.client, table: r.tableName, now: time.Now, sleep: func(time.Duration) {}}
+	return service.ApplyStatus(ctx, InboundMetaStatus{WhatsAppMessageID: wamid, Status: pending.Status, Timestamp: pending.Timestamp, Error: pending.Error})
 }
 
 func (r *DynamoSendRepository) read(ctx context.Context, id string) (SendState, sendRecord, error) {

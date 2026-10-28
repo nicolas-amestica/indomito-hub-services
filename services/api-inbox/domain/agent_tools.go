@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"path"
 	"sort"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"golang.org/x/net/publicsuffix"
 )
 
 // AgentAssetConfig identifies the permanent documents used by the commercial agent.
@@ -74,21 +76,28 @@ type agentExecutionState struct {
 	certificateSent       bool
 	derivation            *AgentDerivation
 	latestCustomerMessage string
+	currentCustomerTurn   string
 	collected             AgentCollectedData
 	collectedDirty        bool
+	meetingCreated        bool
+	verifiedMeetLinks     map[string]struct{}
 }
 
 // AgentCollectedData is the short-lived structured context required to resume
 // a meeting or quotation flow after a later WhatsApp message.
 type AgentCollectedData struct {
-	Destination string `json:"destino,omitempty" dynamodbav:"destino,omitempty"`
-	Region      string `json:"region,omitempty" dynamodbav:"region,omitempty"`
-	City        string `json:"ciudad,omitempty" dynamodbav:"ciudad,omitempty"`
-	MeetingName string `json:"nombreCliente,omitempty" dynamodbav:"nombreCliente,omitempty"`
-	MeetingMail string `json:"emailCliente,omitempty" dynamodbav:"emailCliente,omitempty"`
-	MeetingDate string `json:"fechaSugerida,omitempty" dynamodbav:"fechaSugerida,omitempty"`
-	MeetingTime string `json:"horaSugerida,omitempty" dynamodbav:"horaSugerida,omitempty"`
+	Destination               string    `json:"destino,omitempty" dynamodbav:"destino,omitempty"`
+	Region                    string    `json:"region,omitempty" dynamodbav:"region,omitempty"`
+	City                      string    `json:"ciudad,omitempty" dynamodbav:"ciudad,omitempty"`
+	MeetingName               string    `json:"nombreCliente,omitempty" dynamodbav:"nombreCliente,omitempty"`
+	MeetingMail               string    `json:"emailCliente,omitempty" dynamodbav:"emailCliente,omitempty"`
+	MeetingDate               string    `json:"fechaSugerida,omitempty" dynamodbav:"fechaSugerida,omitempty"`
+	MeetingTime               string    `json:"horaSugerida,omitempty" dynamodbav:"horaSugerida,omitempty"`
+	MeetingUpdatedAt          time.Time `json:"-" dynamodbav:"meetingUpdatedAt,omitempty"`
+	MeetingContactConfirmedAt time.Time `json:"-" dynamodbav:"meetingContactConfirmedAt,omitempty"`
 }
+
+const meetingContactValidity = 2 * time.Hour
 
 // AgentDerivation describes a persistent handoff requested by the model.
 type AgentDerivation struct {
@@ -128,7 +137,7 @@ func (t *AgentToolbox) execute(ctx context.Context, phone, messageID, name strin
 		state.derivation = &AgentDerivation{Reason: reason, Label: "Requiere atencion del equipo"}
 		return map[string]any{"derivado": true}, true, nil
 	case "guardar_datos_reunion":
-		state.mergeMeeting(args)
+		state.mergeMeeting(args, state.currentCustomerTurn, t.now().UTC())
 		return map[string]any{"guardado": true, "datos": state.collected}, false, nil
 	case "buscar_presupuestos":
 		state.mergeQuote(args)
@@ -141,18 +150,30 @@ func (t *AgentToolbox) execute(ctx context.Context, phone, messageID, name strin
 		return result, false, err
 	case "listar_reuniones":
 		result, err := t.listMeetings(ctx, stringArg(args, "fechaInicio"), stringArg(args, "fechaFin"), "")
+		state.rememberMeetingEvidence(result)
 		return result, false, err
 	case "listar_reunion":
 		result, err := t.listCustomerMeeting(ctx, phone)
+		state.rememberMeetingEvidence(result)
 		return result, false, err
 	case "crear_reunion":
+		now := t.now().UTC()
+		state.mergeMeeting(args, state.currentCustomerTurn, now)
+		if !state.hasConfirmedMeetingContact(args, now) {
+			return map[string]any{"exito": false, "mensaje": "Antes de crear la reunión debes pedir al cliente su nombre y correo, o confirmarlos nuevamente en esta conversación."}, false, nil
+		}
 		result, err := t.createMeeting(ctx, phone, args)
 		if err == nil && boolResult(result, "exito") {
+			state.meetingCreated = true
+			state.rememberMeetingEvidence(result)
 			state.clearMeeting()
 		}
 		return result, false, err
 	case "editar_reunion", "reagendar_reunion":
 		result, err := t.updateMeeting(ctx, phone, args)
+		if err == nil && boolResult(result, "exito") {
+			state.rememberMeetingEvidence(result)
+		}
 		return result, false, err
 	case "cancelar_reunion":
 		if confirmed, _ := args["confirmado"].(bool); !confirmed {
@@ -163,6 +184,35 @@ func (t *AgentToolbox) execute(ctx context.Context, phone, messageID, name strin
 	default:
 		return map[string]any{"error": "herramienta no permitida"}, false, nil
 	}
+}
+
+func (s *agentExecutionState) rememberMeetingEvidence(value any) {
+	if s.verifiedMeetLinks == nil {
+		s.verifiedMeetLinks = make(map[string]struct{})
+	}
+	var walk func(any)
+	walk = func(current any) {
+		switch typed := current.(type) {
+		case map[string]any:
+			for key, nested := range typed {
+				candidate := strings.TrimSpace(fmt.Sprint(nested))
+				if (key == "meetLink" || key == "hangoutLink") && strings.HasPrefix(candidate, "https://meet.google.com/") {
+					s.verifiedMeetLinks[candidate] = struct{}{}
+					continue
+				}
+				walk(nested)
+			}
+		case []map[string]any:
+			for _, nested := range typed {
+				walk(nested)
+			}
+		case []any:
+			for _, nested := range typed {
+				walk(nested)
+			}
+		}
+	}
+	walk(value)
 }
 
 func isMeetingTool(name string) bool {
@@ -184,11 +234,42 @@ func isHumanHandoffReason(reason string) bool {
 	return false
 }
 
-func (s *agentExecutionState) mergeMeeting(args map[string]any) {
-	mergeCollectedString(&s.collected.MeetingName, stringArg(args, "nombreCliente"), &s.collectedDirty)
-	mergeCollectedString(&s.collected.MeetingMail, strings.ToLower(stringArg(args, "emailCliente")), &s.collectedDirty)
-	mergeCollectedString(&s.collected.MeetingDate, stringArg(args, "fechaSugerida"), &s.collectedDirty)
-	mergeCollectedString(&s.collected.MeetingTime, stringArg(args, "horaSugerida"), &s.collectedDirty)
+func (s *agentExecutionState) mergeMeeting(args map[string]any, latestMessage string, now time.Time) {
+	name := stringArg(args, "nombreCliente")
+	email := strings.ToLower(stringArg(args, "emailCliente"))
+	latest := strings.ToLower(strings.TrimSpace(latestMessage))
+	normalizedLatest := normalizeSegment(latestMessage)
+	contactUpdated := false
+	if name != "" && strings.Contains(normalizedLatest, normalizeSegment(name)) {
+		mergeCollectedString(&s.collected.MeetingName, name, &s.collectedDirty)
+		contactUpdated = true
+	}
+	if email != "" && strings.Contains(latest, email) {
+		mergeCollectedString(&s.collected.MeetingMail, email, &s.collectedDirty)
+		contactUpdated = true
+	}
+	if contactUpdated {
+		s.collected.MeetingContactConfirmedAt = now
+		s.collectedDirty = true
+	}
+	date := stringArg(args, "fechaSugerida")
+	clockValue := stringArg(args, "horaSugerida")
+	mergeCollectedString(&s.collected.MeetingDate, date, &s.collectedDirty)
+	mergeCollectedString(&s.collected.MeetingTime, clockValue, &s.collectedDirty)
+	if contactUpdated || date != "" || clockValue != "" {
+		s.collected.MeetingUpdatedAt = now
+		s.collectedDirty = true
+	}
+}
+
+func (s *agentExecutionState) hasConfirmedMeetingContact(args map[string]any, now time.Time) bool {
+	confirmedAt := s.collected.MeetingContactConfirmedAt
+	if confirmedAt.IsZero() || now.Before(confirmedAt) || now.Sub(confirmedAt) > meetingContactValidity {
+		return false
+	}
+	return s.collected.MeetingName != "" && s.collected.MeetingMail != "" &&
+		normalizeSegment(s.collected.MeetingName) == normalizeSegment(stringArg(args, "nombreCliente")) &&
+		s.collected.MeetingMail == strings.ToLower(stringArg(args, "emailCliente"))
 }
 
 func (s *agentExecutionState) mergeQuote(args map[string]any) {
@@ -201,6 +282,8 @@ func (s *agentExecutionState) clearMeeting() {
 	if s.collected.MeetingName != "" || s.collected.MeetingMail != "" || s.collected.MeetingDate != "" || s.collected.MeetingTime != "" {
 		s.collected.MeetingName, s.collected.MeetingMail = "", ""
 		s.collected.MeetingDate, s.collected.MeetingTime = "", ""
+		s.collected.MeetingUpdatedAt = time.Time{}
+		s.collected.MeetingContactConfirmedAt = time.Time{}
 		s.collectedDirty = true
 	}
 }
@@ -442,7 +525,13 @@ func (t *AgentToolbox) accessToken(ctx context.Context) (string, error) {
 	return payload.AccessToken, nil
 }
 
-func (t *AgentToolbox) calendarRequest(ctx context.Context, method, eventID string, query url.Values, body any, target any) error {
+func (t *AgentToolbox) calendarRequest(ctx context.Context, method, eventID string, query url.Values, body any, target any) (resultErr error) {
+	operation := strings.ToLower(method)
+	defer func() {
+		if resultErr != nil {
+			emitProviderFailure("CalendarFailures", operation)
+		}
+	}()
 	token, err := t.accessToken(ctx)
 	if err != nil {
 		return err
@@ -614,19 +703,19 @@ func (t *AgentToolbox) validateSlot(ctx context.Context, date, clockValue, exclu
 func (t *AgentToolbox) createMeeting(ctx context.Context, phone string, args map[string]any) (map[string]any, error) {
 	name, email := stringArg(args, "nombreCliente"), stringArg(args, "emailCliente")
 	date, clockValue := stringArg(args, "fechaSugerida"), stringArg(args, "horaSugerida")
-	if name == "" || email == "" || !strings.Contains(email, "@") {
-		return map[string]any{"exito": false, "mensaje": "Nombre y correo válido son obligatorios."}, nil
+	if name == "" || !validCustomerEmail(email) {
+		return map[string]any{"exito": false, "codigo": "MEETING_INVALID_CONTACT", "mensaje": "Nombre y correo válido son obligatorios."}, nil
 	}
 	existing, err := t.customerMeetings(ctx, phone)
 	if err != nil {
 		return nil, err
 	}
 	if len(existing) > 0 {
-		return map[string]any{"exito": false, "mensaje": "Ya existe una reunión futura para este contacto.", "eventos": t.safeEvents(existing)}, nil
+		return map[string]any{"exito": false, "codigo": "MEETING_ALREADY_EXISTS", "mensaje": "Ya existe una reunión futura para este contacto.", "eventos": t.safeEvents(existing)}, nil
 	}
 	slots, valid, err := t.validateSlot(ctx, date, clockValue, "")
 	if err != nil || !valid {
-		return map[string]any{"exito": false, "mensaje": "El horario no está disponible.", "horariosDisponibles": slots}, err
+		return map[string]any{"exito": false, "codigo": "MEETING_SLOT_UNAVAILABLE", "mensaje": "El horario no está disponible.", "horariosDisponibles": slots}, err
 	}
 	code, err := meetingCode()
 	if err != nil {
@@ -645,7 +734,56 @@ func (t *AgentToolbox) createMeeting(ctx context.Context, phone string, args map
 	if err = t.calendarRequest(ctx, http.MethodPost, "", url.Values{"conferenceDataVersion": {"1"}, "sendUpdates": {"all"}}, body, &event); err != nil {
 		return nil, err
 	}
+	if err = t.verifyCreatedMeeting(ctx, event, email, date, clockValue); err != nil {
+		return nil, err
+	}
 	return map[string]any{"exito": true, "eventId": event.ID, "codigoEvento": code, "fecha": date, "hora": clockValue, "meetLink": event.HangoutLink}, nil
+}
+
+func validCustomerEmail(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	address, err := mail.ParseAddress(value)
+	if err != nil || address.Address != value || strings.Count(value, "@") != 1 {
+		return false
+	}
+	domain := value[strings.LastIndex(value, "@")+1:]
+	if domain == "" || strings.ContainsAny(domain, " _") {
+		return false
+	}
+	_, icann := publicsuffix.PublicSuffix(domain)
+	if !icann {
+		return false
+	}
+	_, err = publicsuffix.EffectiveTLDPlusOne(domain)
+	return err == nil
+}
+
+func (t *AgentToolbox) verifyCreatedMeeting(ctx context.Context, created calendarEvent, email, date, clockValue string) error {
+	if created.ID == "" {
+		return errors.New("calendar creation response has no event id")
+	}
+	var verified calendarEvent
+	if err := t.calendarRequest(ctx, http.MethodGet, created.ID, url.Values{"conferenceDataVersion": {"1"}}, nil, &verified); err != nil {
+		return fmt.Errorf("verify created calendar event: %w", err)
+	}
+	if verified.ID != created.ID || verified.Status == "cancelled" || verified.HangoutLink == "" {
+		return errors.New("calendar event verification returned incomplete event")
+	}
+	if !strings.HasPrefix(verified.Start.DateTime, date+"T"+clockValue) || (strings.TrimSpace(email) != "" && !calendarEventHasAttendee(verified, email)) {
+		return errors.New("calendar event verification does not match requested meeting")
+	}
+	return nil
+}
+
+func calendarEventHasAttendee(event calendarEvent, email string) bool {
+	want := strings.ToLower(strings.TrimSpace(email))
+	for _, attendee := range event.Attendees {
+		candidate, _ := attendee["email"].(string)
+		if strings.ToLower(strings.TrimSpace(candidate)) == want {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *AgentToolbox) customerMeetings(ctx context.Context, phone string) ([]calendarEvent, error) {
@@ -676,20 +814,26 @@ func (t *AgentToolbox) updateMeeting(ctx context.Context, phone string, args map
 		return nil, err
 	}
 	if len(events) == 0 {
-		return map[string]any{"exito": false, "mensaje": "No se encontró una reunión agendada."}, nil
+		return map[string]any{"exito": false, "codigo": "MEETING_NOT_FOUND", "mensaje": "No se encontró una reunión agendada."}, nil
 	}
 	event := events[0]
 	date, clockValue, email := stringArg(args, "nuevaFecha"), stringArg(args, "nuevaHora"), stringArg(args, "emailCliente")
+	if email != "" && !validCustomerEmail(email) {
+		return map[string]any{"exito": false, "codigo": "MEETING_INVALID_CONTACT", "mensaje": "El correo no es válido."}, nil
+	}
 	slots, valid, err := t.validateSlot(ctx, date, clockValue, event.ID)
 	if err != nil || !valid {
-		return map[string]any{"exito": false, "mensaje": "El horario no está disponible.", "horariosDisponibles": slots}, err
+		return map[string]any{"exito": false, "codigo": "MEETING_SLOT_UNAVAILABLE", "mensaje": "El horario no está disponible.", "horariosDisponibles": slots}, err
 	}
 	body := map[string]any{"start": map[string]string{"dateTime": date + "T" + clockValue + ":00", "timeZone": t.meeting.Timezone}, "end": map[string]string{"dateTime": t.endDateTime(date, clockValue), "timeZone": t.meeting.Timezone}, "attendees": t.mergeAttendees(event.Attendees, email), "extendedProperties": event.ExtendedProperties}
 	var updated calendarEvent
 	if err = t.calendarRequest(ctx, http.MethodPatch, event.ID, url.Values{"sendUpdates": {"all"}}, body, &updated); err != nil {
 		return nil, err
 	}
-	return map[string]any{"exito": true, "fecha": date, "hora": clockValue, "meetLink": updated.HangoutLink, "mensaje": "Reunión reagendada correctamente."}, nil
+	if err = t.verifyCreatedMeeting(ctx, updated, email, date, clockValue); err != nil {
+		return nil, err
+	}
+	return map[string]any{"exito": true, "eventId": updated.ID, "fecha": date, "hora": clockValue, "meetLink": updated.HangoutLink, "mensaje": "Reunión reagendada correctamente."}, nil
 }
 
 func (t *AgentToolbox) cancelMeeting(ctx context.Context, phone string) (map[string]any, error) {
@@ -698,7 +842,7 @@ func (t *AgentToolbox) cancelMeeting(ctx context.Context, phone string) (map[str
 		return nil, err
 	}
 	if len(events) == 0 {
-		return map[string]any{"exito": false, "mensaje": "No se encontró una reunión agendada."}, nil
+		return map[string]any{"exito": false, "codigo": "MEETING_NOT_FOUND", "mensaje": "No se encontró una reunión agendada."}, nil
 	}
 	for _, event := range events {
 		if err = t.calendarRequest(ctx, http.MethodDelete, event.ID, url.Values{"sendUpdates": {"all"}}, nil, nil); err != nil {

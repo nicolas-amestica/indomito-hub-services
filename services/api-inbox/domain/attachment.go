@@ -21,6 +21,7 @@ import (
 
 var ErrUploadConflict = errors.New("upload batch conflict")
 var ErrUploadInvalid = errors.New("uploaded object does not match reservation")
+var ErrUnsupportedAttachment = errors.New("attachment content is unsupported by WhatsApp")
 
 type AttachmentPreparationItem struct {
 	ClientMessageID string `json:"clientMessageId" dynamodbav:"clientMessageId"`
@@ -142,6 +143,18 @@ func (s *AttachmentService) send(ctx context.Context, owner, phone, clientMessag
 	if base64.StdEncoding.EncodeToString(digest[:]) != record.ChecksumSHA256 {
 		return SendState{}, ErrUploadInvalid
 	}
+	if record.MIMEType == "image/png" {
+		bitDepth, valid := pngBitDepth(data)
+		if !valid {
+			return SendState{}, ErrUploadInvalid
+		}
+		if bitDepth == 16 {
+			return SendState{}, ErrUnsupportedAttachment
+		}
+	}
+	if record.MIMEType == "image/webp" && (!sticker || !isWebP(data)) {
+		return SendState{}, ErrUnsupportedAttachment
+	}
 	if sticker && record.Size > stickerMaximumSize(data) {
 		return SendState{}, ErrUploadInvalid
 	}
@@ -197,6 +210,17 @@ func (s *AttachmentService) send(ctx context.Context, owner, phone, clientMessag
 	_, _ = s.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{TableName: &s.table, Key: snapshotKey("UPLOAD#"+clientMessageID, "META"), UpdateExpression: aws.String("SET #state=:sent, updatedAt=:now"), ConditionExpression: aws.String("#state=:reserved"), ExpressionAttributeNames: map[string]string{"#state": "state"}, ExpressionAttributeValues: map[string]types.AttributeValue{":sent": &types.AttributeValueMemberS{Value: "sent"}, ":reserved": &types.AttributeValueMemberS{Value: "reserved"}, ":now": &types.AttributeValueMemberS{Value: now.Format(time.RFC3339Nano)}}})
 	_, _ = s.storage.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &s.bucket, Key: &key})
 	return state, nil
+}
+
+func pngBitDepth(content []byte) (byte, bool) {
+	if len(content) < 25 || !bytes.Equal(content[:8], []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}) || !bytes.Equal(content[12:16], []byte("IHDR")) {
+		return 0, false
+	}
+	return content[24], true
+}
+
+func isWebP(content []byte) bool {
+	return len(content) >= 12 && bytes.Equal(content[:4], []byte("RIFF")) && bytes.Equal(content[8:12], []byte("WEBP"))
 }
 
 func stickerMaximumSize(content []byte) int64 {

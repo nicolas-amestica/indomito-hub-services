@@ -1,0 +1,42 @@
+name: API Inbox Resilience
+
+on:
+  schedule:
+    - cron: '30 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-inbox-resilience
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.work
+          cache-dependency-path: |
+            go.work.sum
+            services/api-inbox/go.sum
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Run Inbox race and resilience tests
+        run: go test -race -count=1 ./services/api-inbox/...
+      - name: Run static analysis
+        run: go vet ./services/api-inbox/...
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          args: ./services/api-inbox/...
+      - name: Validate infrastructure and contracts
+        run: |
+          npx tsc --noEmit
+          git diff --check

@@ -83,6 +83,16 @@ func TestMultiDerivationNotifierAttemptsEveryChannel(t *testing.T) {
 	}
 }
 
+func TestAgentDerivationNotificationFailureDoesNotEscape(t *testing.T) {
+	notifier := &derivationNotifierFake{err: errors.New("provider unavailable")}
+	service := &AgentService{notifier: notifier}
+	content := "Quiero hablar con una persona"
+	service.notifyDerivation(context.Background(), "56911112222", "wamid.source", Message{Content: &content}, "Atencion humana")
+	if notifier.calls != 1 {
+		t.Fatalf("notification calls = %d, want 1", notifier.calls)
+	}
+}
+
 func TestEmailDerivationNotifierValidatesConfiguration(t *testing.T) {
 	_, err := NewEmailDerivationNotifier(DerivationSMTPConfig{Host: "smtp.example.com", Port: 587, User: "user", Password: "secret", From: "Giras <no-reply@girasindomito.cl>"}, "info@girasindomito.cl")
 	if err != nil {

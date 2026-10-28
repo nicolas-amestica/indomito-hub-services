@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 
@@ -100,6 +101,8 @@ type AgentService struct {
 	managed       *AgentManagedConfig
 }
 
+var meetLinkPattern = regexp.MustCompile(`https://meet\.google\.com/[a-z0-9-]+`)
+
 func (s *AgentService) SetManagedConfig(config *AgentManagedConfig) { s.managed = config }
 
 // SetDerivationNotifier enables the optional internal WhatsApp alert.
@@ -148,7 +151,7 @@ func (s *AgentService) Process(ctx context.Context, phone, messageID string) err
 		return nil
 	}
 	latest := messages[len(messages)-1]
-	if latest.Type != MessageTypeCustomer || latest.WhatsAppMessageID == nil || *latest.WhatsAppMessageID != messageID {
+	if !isLatestCustomerMessage(messages, messageID) {
 		return nil
 	}
 	window := s.now().UTC().Add(-time.Duration(s.cfg.RateLimitWindowSeconds) * time.Second)
@@ -184,7 +187,7 @@ func (s *AgentService) Process(ctx context.Context, phone, messageID string) err
 		if isGeminiQuotaExhausted(err) {
 			if s.quotaNotifier != nil {
 				if notifyErr := s.quotaNotifier.NotifyAgentQuota(ctx, s.gemini.Model, err.Error()); notifyErr != nil {
-					log.Printf("agent quota notification failed messageId=%s: %v", messageID, notifyErr)
+					log.Printf("agent quota notification failed: %v", notifyErr)
 				}
 			}
 			err = &permanentAgentError{cause: err}
@@ -237,6 +240,14 @@ func (s *AgentService) Process(ctx context.Context, phone, messageID string) err
 	return err
 }
 
+func isLatestCustomerMessage(messages []Message, messageID string) bool {
+	if len(messages) == 0 {
+		return false
+	}
+	latest := messages[len(messages)-1]
+	return latest.Type == MessageTypeCustomer && latest.WhatsAppMessageID != nil && *latest.WhatsAppMessageID == messageID
+}
+
 func isGeminiQuotaExhausted(err error) bool {
 	var provider *geminiProviderError
 	return errors.As(err, &provider) && provider.status == http.StatusTooManyRequests && strings.EqualFold(provider.code, "RESOURCE_EXHAUSTED")
@@ -277,7 +288,8 @@ func (s *AgentService) notifyDerivation(ctx context.Context, phone, messageID st
 		detail = "Adjunto: " + latest.Attachments[0].FileName
 	}
 	if err := s.notifier.NotifyDerivation(ctx, DerivationNotification{SourcePhone: phone, MessageID: messageID, Detail: detail, ReasonLabel: label}); err != nil {
-		log.Printf("derivation notification failed messageId=%s: %v", messageID, err)
+		emitProviderFailure("DerivationNotificationFailures", "notify")
+		log.Printf("derivation notification failed: %v", err)
 	}
 }
 
@@ -391,7 +403,7 @@ type interactionResponse struct {
 }
 
 func (s *AgentService) generate(ctx context.Context, phone, messageID string, messages []Message) (string, *AgentDerivation, error) {
-	state := &agentExecutionState{}
+	state := &agentExecutionState{currentCustomerTurn: currentCustomerTurn(messages)}
 	if len(messages) > 0 {
 		latest := messages[len(messages)-1]
 		if latest.Type == MessageTypeCustomer && latest.Content != nil {
@@ -417,10 +429,12 @@ func (s *AgentService) generate(ctx context.Context, phone, messageID string, me
 			continue
 		}
 		role := "Cliente"
+		content := strings.TrimSpace(*m.Content)
 		if m.Type != MessageTypeCustomer {
 			role = "Agente IA"
+			content = meetLinkPattern.ReplaceAllString(content, "[enlace Meet omitido del historial]")
 		}
-		fmt.Fprintf(&history, "%s: %s\n", role, strings.TrimSpace(*m.Content))
+		fmt.Fprintf(&history, "%s: %s\n", role, content)
 	}
 	initialStep, err := json.Marshal(map[string]any{"type": "user_input", "content": []map[string]string{{"type": "text", "text": history.String()}}})
 	if err != nil {
@@ -456,7 +470,7 @@ func (s *AgentService) generate(ctx context.Context, phone, messageID string, me
 		}
 		if err = s.recordTokenUsage(ctx, result.Usage); err != nil {
 			// La telemetria nunca debe impedir una respuesta al cliente.
-			log.Printf("agent token usage persistence failed messageId=%s: %v", messageID, err)
+			log.Printf("agent token usage persistence failed: %v", err)
 		}
 		var reply strings.Builder
 		var responses []json.RawMessage
@@ -476,6 +490,16 @@ func (s *AgentService) generate(ctx context.Context, phone, messageID string, me
 				continue
 			}
 			toolResult, silent, toolErr := s.tools.execute(ctx, phone, fmt.Sprintf("%s-%d-%d", messageID, round, index), step.Name, step.Arguments, state)
+			if isMeetingTool(step.Name) {
+				outcome := "rejected"
+				if toolErr != nil {
+					outcome = "error"
+				} else if boolResult(toolResult, "exito") || step.Name == "listar_reuniones" || step.Name == "listar_reunion" || step.Name == "guardar_datos_reunion" {
+					outcome = "success"
+				}
+				_, eventIDPresent := toolResult["eventId"]
+				log.Printf("agent meeting tool completed tool=%s outcome=%s eventIdPresent=%t", step.Name, outcome, eventIDPresent)
+			}
 			if state.collectedDirty && s.db != nil {
 				if persistErr := s.saveAgentCollectedData(ctx, phone, state.collected); persistErr != nil {
 					return "", nil, persistErr
@@ -483,11 +507,42 @@ func (s *AgentService) generate(ctx context.Context, phone, messageID string, me
 					state.collectedDirty = false
 				}
 			}
+			if toolErr != nil && isMeetingMutationTool(step.Name) {
+				return meetingProviderFailureReply(), nil, nil
+			}
+			if toolErr == nil {
+				switch stringArg(toolResult, "codigo") {
+				case "MEETING_INVALID_CONTACT":
+					return invalidMeetingContactReply(), nil, nil
+				case "MEETING_SLOT_UNAVAILABLE":
+					return unavailableMeetingSlotReply(toolResult), nil, nil
+				case "MEETING_NOT_FOUND":
+					if step.Name == "cancelar_reunion" {
+						return missingMeetingCancellationReply(), nil, nil
+					}
+					return missingMeetingUpdateReply(), nil, nil
+				}
+			}
 			if toolErr != nil {
 				toolResult = map[string]any{"exito": false, "error": "La herramienta no pudo completar la operación."}
 			}
 			if silent {
 				return "", state.derivation, nil
+			}
+			if step.Name == "buscar_presupuestos" && toolErr == nil && boolResult(toolResult, "encontrados") {
+				return confirmedBudgetDeliveryReply(toolResult, step.Arguments), nil, nil
+			}
+			if step.Name == "crear_reunion" && toolErr == nil && boolResult(toolResult, "exito") {
+				return confirmedMeetingReply(toolResult, step.Arguments), nil, nil
+			}
+			if step.Name == "crear_reunion" && toolErr == nil && stringArg(toolResult, "codigo") == "MEETING_ALREADY_EXISTS" {
+				return existingMeetingReply(), nil, nil
+			}
+			if (step.Name == "editar_reunion" || step.Name == "reagendar_reunion") && toolErr == nil && boolResult(toolResult, "exito") {
+				return confirmedMeetingUpdateReply(toolResult), nil, nil
+			}
+			if step.Name == "cancelar_reunion" && toolErr == nil && boolResult(toolResult, "exito") {
+				return confirmedMeetingCancellationReply(), nil, nil
 			}
 			response, marshalErr := json.Marshal(map[string]any{"type": "function_result", "name": step.Name, "call_id": step.ID, "result": toolResult, "is_error": toolErr != nil})
 			if marshalErr != nil {
@@ -499,12 +554,125 @@ func (s *AgentService) generate(ctx context.Context, phone, messageID string, me
 			if strings.TrimSpace(reply.String()) == "" {
 				return "", nil, &permanentAgentError{cause: fmt.Errorf("gemini completed without output: %s", result.Status)}
 			}
-			return reply.String(), nil, nil
+			return guardedAgentReply(reply.String(), state), nil, nil
 		}
 		steps = append(steps, result.Steps...)
 		steps = append(steps, responses...)
 	}
 	return "", nil, &permanentAgentError{cause: errors.New("gemini tool loop exceeded")}
+}
+
+func currentCustomerTurn(messages []Message) string {
+	current := make([]string, 0, len(messages))
+	for _, message := range messages {
+		if message.Type != MessageTypeCustomer {
+			current = current[:0]
+			continue
+		}
+		if message.Content != nil && strings.TrimSpace(*message.Content) != "" {
+			current = append(current, strings.TrimSpace(*message.Content))
+		}
+	}
+	return strings.Join(current, "\n")
+}
+
+func confirmedBudgetDeliveryReply(result, args map[string]any) string {
+	destination := budgetDestinationLabel(stringArg(args, "destino"))
+	reply := fmt.Sprintf("Te adjunté las cotizaciones y programas disponibles para %s", destination)
+	certificate, _ := result["certificadoSernatur"].(map[string]any)
+	if boolResult(certificate, "enviado") {
+		return reply + ", junto con nuestro certificado Sernatur."
+	}
+	return reply + "."
+}
+
+func budgetDestinationLabel(destination string) string {
+	labels := map[string]string{
+		"bariloche":    "Bariloche",
+		"camboriu":     "Camboriú",
+		"sur_de_chile": "Sur de Chile",
+		"chiloe":       "Chiloé",
+		"pucon":        "Pucón",
+		"valdivia":     "Valdivia",
+		"puerto_varas": "Puerto Varas",
+	}
+	normalized := normalizeSegment(destination)
+	if label := labels[normalized]; label != "" {
+		return label
+	}
+	return strings.TrimSpace(destination)
+}
+
+func confirmedMeetingReply(result, args map[string]any) string {
+	return fmt.Sprintf(
+		"Tu reunión quedó agendada para el %s a las %s a nombre de %s (%s). El enlace de Google Meet es %s.",
+		stringArg(result, "fecha"), stringArg(result, "hora"), stringArg(args, "nombreCliente"), stringArg(args, "emailCliente"), stringArg(result, "meetLink"),
+	)
+}
+
+func confirmedMeetingUpdateReply(result map[string]any) string {
+	return fmt.Sprintf(
+		"Tu reunión quedó reagendada para el %s a las %s. El enlace de Google Meet es %s.",
+		stringArg(result, "fecha"), stringArg(result, "hora"), stringArg(result, "meetLink"),
+	)
+}
+
+func existingMeetingReply() string {
+	return "Ya tienes una reunión futura agendada en este chat. Puedo reagendar la reunión existente o cancelarla, pero no crear una segunda reunión simultánea."
+}
+
+func isMeetingMutationTool(name string) bool {
+	return name == "crear_reunion" || name == "editar_reunion" || name == "reagendar_reunion" || name == "cancelar_reunion"
+}
+
+func invalidMeetingContactReply() string {
+	return "El correo indicado no es válido. Envíame un correo personal con un dominio válido para poder agendar la reunión."
+}
+
+func unavailableMeetingSlotReply(result map[string]any) string {
+	slots, _ := result["horariosDisponibles"].([]string)
+	if len(slots) == 0 {
+		return "Ese horario no está disponible. Indícame otra fecha para consultar sus horarios disponibles."
+	}
+	return "Ese horario no está disponible. Los horarios disponibles para esa fecha son: " + strings.Join(slots, ", ") + "."
+}
+
+func missingMeetingUpdateReply() string {
+	return "No encontré una reunión futura para reagendar. Si quieres crear una nueva, confírmamelo y consultaré los horarios disponibles."
+}
+
+func missingMeetingCancellationReply() string {
+	return "No encontré una reunión futura para cancelar."
+}
+
+func confirmedMeetingCancellationReply() string {
+	return "Tu reunión fue cancelada correctamente."
+}
+
+func meetingProviderFailureReply() string {
+	return "No pude confirmar la operación en Google Calendar. Inténtalo nuevamente en unos minutos."
+}
+
+func guardedAgentReply(reply string, state *agentExecutionState) string {
+	normalized := strings.ToLower(normalizeAgentReply(reply))
+	creationClaims := []string{
+		"he registrado tu reunión", "he registrado la reunión", "reunión quedó agendada", "reunión ha sido agendada",
+		"reunión fue agendada", "reunión está agendada", "reunión confirmada", "agendé tu reunión", "creé tu reunión",
+	}
+	for _, claim := range creationClaims {
+		if strings.Contains(normalizeSegment(normalized), normalizeSegment(claim)) && !state.meetingCreated {
+			return "No pude confirmar la creación de la reunión en Google Calendar. Indícame si quieres que lo intentemos nuevamente."
+		}
+	}
+	if strings.Contains(normalizeSegment(normalized), "enlace_meet_omitido_del_historial") {
+		return "No pude confirmar la creación de la reunión en Google Calendar. Indícame si quieres que lo intentemos nuevamente."
+	}
+	for _, link := range meetLinkPattern.FindAllString(normalized, -1) {
+		if _, verified := state.verifiedMeetLinks[link]; !verified {
+			return "No pude confirmar la creación de la reunión en Google Calendar. Indícame si quieres que lo intentemos nuevamente."
+		}
+	}
+	return reply
 }
 
 func (s *AgentService) doGeminiRequest(ctx context.Context, endpoint string, payload []byte) (*http.Response, error) {
@@ -518,10 +686,14 @@ func (s *AgentService) doGeminiRequest(ctx context.Context, endpoint string, pay
 		req.Header.Set("x-goog-api-key", s.gemini.APIKey)
 		resp, requestErr := s.http.Do(req)
 		if requestErr == nil && resp.StatusCode != http.StatusTooManyRequests && resp.StatusCode < http.StatusInternalServerError {
+			if resp.StatusCode >= http.StatusBadRequest {
+				emitProviderFailure("GeminiFailures", "interactions")
+			}
 			return resp, nil
 		}
 		if requestErr == nil {
 			if attempt == 2 {
+				emitProviderFailure("GeminiFailures", "interactions")
 				return resp, nil
 			}
 			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
@@ -539,6 +711,7 @@ func (s *AgentService) doGeminiRequest(ctx context.Context, endpoint string, pay
 			}
 		}
 	}
+	emitProviderFailure("GeminiFailures", "interactions")
 	return nil, lastErr
 }
 
@@ -561,6 +734,15 @@ func (s *AgentService) agentCollectedData(ctx context.Context, phone string) (Ag
 	var record agentStateRecord
 	if err = attributevalue.UnmarshalMap(output.Item, &record); err != nil {
 		return AgentCollectedData{}, fmt.Errorf("decode agent collected data: %w", err)
+	}
+	meetingUpdatedAt := record.CollectedData.MeetingUpdatedAt
+	if meetingUpdatedAt.IsZero() || s.now().UTC().Before(meetingUpdatedAt) || s.now().UTC().Sub(meetingUpdatedAt) > meetingContactValidity {
+		record.CollectedData.MeetingName = ""
+		record.CollectedData.MeetingMail = ""
+		record.CollectedData.MeetingDate = ""
+		record.CollectedData.MeetingTime = ""
+		record.CollectedData.MeetingUpdatedAt = time.Time{}
+		record.CollectedData.MeetingContactConfirmedAt = time.Time{}
 	}
 	return record.CollectedData, nil
 }

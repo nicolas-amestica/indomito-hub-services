@@ -66,6 +66,7 @@ type whatsAppConfig struct {
 	VerifyToken       string `json:"verifyToken"`
 	AppSecret         string `json:"appSecret"`
 	BusinessAccountID string `json:"businessAccountId"`
+	AppID             string `json:"appId"`
 }
 
 type cursorSecrets struct {
