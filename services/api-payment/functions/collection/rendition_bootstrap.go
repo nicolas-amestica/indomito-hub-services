@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -32,6 +33,35 @@ type renditionConfig struct {
 type renditionS3 struct {
 	client *s3.Client
 	bucket string
+}
+
+const renditionConfigCacheTTL = 5 * time.Minute
+
+type renditionConfigCache struct {
+	mu        sync.Mutex
+	name      string
+	value     renditionConfig
+	expiresAt time.Time
+	loaded    bool
+}
+
+var sharedRenditionConfigCache renditionConfigCache
+
+func (c *renditionConfigCache) get(ctx context.Context, name string, now time.Time, load func(context.Context) (renditionConfig, error)) (renditionConfig, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.loaded && c.name == name && now.Before(c.expiresAt) {
+		return c.value, nil
+	}
+	value, err := load(ctx)
+	if err != nil {
+		return renditionConfig{}, err
+	}
+	c.name = name
+	c.value = value
+	c.expiresAt = now.Add(renditionConfigCacheTTL)
+	c.loaded = true
+	return value, nil
 }
 
 func (s renditionS3) Put(ctx context.Context, key string, b []byte) error {
@@ -71,14 +101,17 @@ func getRenditionApp(ctx context.Context) (*RenditionApp, error) {
 		return nil, err
 	}
 	name := "/indomito/" + stage + "/payments/khipu/renditions/config"
-	out, err := ssm.NewFromConfig(cfg).GetParameter(ctx, &ssm.GetParameterInput{Name: &name, WithDecryption: aws.Bool(true)})
-	if err != nil {
-		return nil, err
-	}
-	if out.Parameter == nil || out.Parameter.Type != types.ParameterTypeSecureString || out.Parameter.Value == nil {
-		return nil, errors.New("configuración requiere SecureString")
-	}
-	c, err := decodeRenditionConfig([]byte(*out.Parameter.Value))
+	client := ssm.NewFromConfig(cfg)
+	c, err := sharedRenditionConfigCache.get(ctx, name, time.Now(), func(loadCtx context.Context) (renditionConfig, error) {
+		out, loadErr := client.GetParameter(loadCtx, &ssm.GetParameterInput{Name: &name, WithDecryption: aws.Bool(true)})
+		if loadErr != nil {
+			return renditionConfig{}, loadErr
+		}
+		if out.Parameter == nil || out.Parameter.Type != types.ParameterTypeSecureString || out.Parameter.Value == nil {
+			return renditionConfig{}, errors.New("configuración requiere SecureString")
+		}
+		return decodeRenditionConfig([]byte(*out.Parameter.Value))
+	})
 	if err != nil {
 		return nil, err
 	}
