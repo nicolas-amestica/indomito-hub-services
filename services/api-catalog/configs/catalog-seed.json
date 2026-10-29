@@ -91,6 +91,6 @@
       "rechargeRate": 5,
       "minUtilityRate": 10
     },
-    "scenarioOffsets": [-10, -5, 0, 5]
+    "scenarioOffsets": [-10, -5, 0, 5, 10]
   }
 }

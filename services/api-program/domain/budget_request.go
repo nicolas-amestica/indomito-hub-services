@@ -55,12 +55,12 @@ const (
 	MinScenarios = 1
 
 	// MaxScenarios es la cantidad máxima de escenarios: el documento tiene
-	// cuatro columnas y una quinta no cabe (Requirements 13.11 y 18.5).
+	// cinco columnas (Requirements 13.11 y 18.5).
 	//
 	// Es el gemelo de MAX_SCENARIOS de `constants/scenario-defaults.ts` del
-	// frontend, que también vale 4. Una divergencia entre ambos es un defecto:
+	// frontend, que también vale 5. Una divergencia entre ambos es un defecto:
 	// el formulario enviaría escenarios que el endpoint rechaza.
-	MaxScenarios = 4
+	MaxScenarios = 5
 
 	// MaxServiceNames acota la lista de nombres de servicios. No es un límite
 	// del formulario sino una cota de sanidad del cuerpo: cien servicios ya
@@ -129,8 +129,8 @@ type BudgetRequest struct {
 	// son las que piden los requisitos: un `scenarios` ausente incumple
 	// `required` y produce REQUIRED_FIELD_MISSING (Requirement 18.4), mientras
 	// que un `scenarios: []` lo cumple —el validador solo comprueba que el
-	// slice no sea nil— e incumple `min`, igual que una lista de cinco
+	// slice no sea nil— e incumple `min`, igual que una lista de seis
 	// incumple `max`, así que ambos producen el VALIDATION_ERROR del
 	// Requirement 18.5.
-	Scenarios []BudgetScenario `json:"scenarios" validate:"required,min=1,max=4,dive"`
+	Scenarios []BudgetScenario `json:"scenarios" validate:"required,min=1,max=5,dive"`
 }

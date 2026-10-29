@@ -400,7 +400,7 @@ func TestBudgetRequestTagsMatchLimits(t *testing.T) {
 // su cota y el backend no, el endpoint rechaza escenarios que el formulario
 // envía; este test deja el acuerdo escrito en un lugar que falla.
 func TestMaxScenariosMatchesFrontend(t *testing.T) {
-	const frontendMaxScenarios = 4
+	const frontendMaxScenarios = 5
 
 	if MaxScenarios != frontendMaxScenarios {
 		t.Errorf("MaxScenarios = %d, want %d (MAX_SCENARIOS de scenario-defaults.ts)",

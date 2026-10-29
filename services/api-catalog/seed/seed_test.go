@@ -152,7 +152,7 @@ func TestValidateManifest(t *testing.T) {
 		{name: "margin ausente", mutate: func(m *Manifest) { m.Settings.Margin = nil }},
 		{name: "incremento fuera de rango", mutate: func(m *Manifest) { m.Settings.Margin.UsdIncreaseCLP = 201 }},
 		{name: "offsets vacíos", mutate: func(m *Manifest) { m.Settings.ScenarioOffsets = nil }},
-		{name: "más de cuatro offsets", mutate: func(m *Manifest) { m.Settings.ScenarioOffsets = []int{-10, -5, 0, 5, 10} }},
+		{name: "más de cinco offsets", mutate: func(m *Manifest) { m.Settings.ScenarioOffsets = []int{-15, -10, -5, 0, 5, 10} }},
 		{name: "id repetido", mutate: func(m *Manifest) { m.Plans = append(m.Plans, Option{ID: "tour", Display: "Otro", Order: 2}) }},
 		{name: "destino sin plantilla", mutate: func(m *Manifest) { m.Destinations[0].BudgetTemplateID = "" }},
 		{name: "plan con plantilla", mutate: func(m *Manifest) { m.Plans[0].BudgetTemplateID = "brochure-brf" }},

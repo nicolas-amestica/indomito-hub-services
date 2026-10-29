@@ -52,7 +52,7 @@ El manifiesto tiene esta forma:
       "rechargeRate": 0,
       "minUtilityRate": 0
     },
-    "scenarioOffsets": [-10, -5, 0, 5]
+    "scenarioOffsets": [-10, -5, 0, 5, 10]
   }
 }
 ```

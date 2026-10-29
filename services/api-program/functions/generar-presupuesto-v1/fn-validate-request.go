@@ -31,7 +31,7 @@ func ValidateRequest(request domain.BudgetRequest, registry templates.Registry) 
 		return validationFailure(
 			reasonScenarioCount,
 			globalValidationScenarioIndex,
-			"La cantidad de escenarios debe estar entre 1 y 4",
+			"La cantidad de escenarios debe estar entre 1 y 5",
 		)
 	}
 

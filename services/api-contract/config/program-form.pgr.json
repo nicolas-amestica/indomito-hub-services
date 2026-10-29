@@ -75,7 +75,7 @@
       "maxServices": 100,
       "nameMinLength": 3
     },
-    "scenarioOffsets": [-10, -5, 0, 5]
+    "scenarioOffsets": [-10, -5, 0, 5, 10]
   },
   "description": "Configuraciones de formulario de creación de programa",
   "id": "01M3B45PF4QDV0XQZWWNQ6A1QA",

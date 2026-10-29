@@ -20,7 +20,7 @@ import (
 	"ind-hub-api-gox-sls-pri-gh/services/api-catalog/domain"
 )
 
-const maxScenarioOffsets = 4
+const maxScenarioOffsets = 5
 
 // Writer es la operación mínima que la siembra necesita de DynamoDB.
 type Writer interface {

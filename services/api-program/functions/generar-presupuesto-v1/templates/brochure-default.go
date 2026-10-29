@@ -151,7 +151,7 @@ func serviceRow(canvas *Canvas, text string) error {
 	return nil
 }
 
-// ScenarioTable presenta hasta cuatro alternativas de pasajeros y precio.
+// ScenarioTable presenta hasta cinco alternativas de pasajeros y precio.
 type ScenarioTable struct {
 	Scenarios []domain.BudgetScenario
 }

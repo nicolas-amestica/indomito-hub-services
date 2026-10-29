@@ -64,13 +64,14 @@ func TestValidateRequest(t *testing.T) {
 			wantScenarioIndex: globalValidationScenarioIndex,
 		},
 		{
-			name: "más de cuatro escenarios",
+			name: "más de cinco escenarios",
 			mutate: func(request *domain.BudgetRequest) {
 				request.Scenarios = append(
 					request.Scenarios,
 					budgetScenario(40, 3, 37, 1_000_000),
 					budgetScenario(45, 3, 42, 950_000),
 					budgetScenario(50, 4, 46, 900_000),
+					budgetScenario(55, 4, 51, 850_000),
 				)
 			},
 			wantCode:          apperr.CodeValidationError,
