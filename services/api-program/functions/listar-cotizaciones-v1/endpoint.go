@@ -275,11 +275,15 @@ func queryFavorites(
 		// palabras reservadas de DynamoDB, pero la expresión queda legible y
 		// deja de importar si alguna vez lo fueran.
 		ExpressionAttributeNames: map[string]string{
-			"#pk":   "pk",
-			"#sk":   "sk",
-			"#name": "name",
+			"#pk":       "pk",
+			"#sk":       "sk",
+			"#name":     "name",
+			"#content":  "content",
+			"#schedule": "schedule",
 		},
-		ProjectionExpression: aws.String("#pk, #sk, #name, createdAt, updatedAt"),
+		ProjectionExpression: aws.String(
+			"#pk, #sk, #name, #content.#schedule, createdAt, updatedAt",
+		),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":pk":       &types.AttributeValueMemberS{Value: partitionKey},
 			":skPrefix": &types.AttributeValueMemberS{Value: sortKeyPrefix},

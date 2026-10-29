@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
+	"ind-hub-api-gox-sls-pri-gh/libs/domain/program"
 	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
 	"ind-hub-api-gox-sls-pri-gh/libs/shared/apperr"
 	"ind-hub-api-gox-sls-pri-gh/services/api-program/domain"
@@ -192,7 +193,9 @@ func favoriteItem(t *testing.T, userID, favoriteID, name string) map[string]type
 	item, err := domain.NewFavoriteItem(
 		domain.FavoriteKey{UserID: userID, Scope: domain.ScopeProgram, ID: favoriteID},
 		name,
-		domain.FavoriteContent{},
+		domain.FavoriteContent{Schedule: program.ScheduleContent{
+			TotalDays: 7, TotalNights: 6, TotalPassengers: 30, FreePassengers: 2,
+		}},
 		createdAt,
 		createdAt,
 	)
@@ -215,11 +218,11 @@ func page(items ...map[string]types.AttributeValue) *dynamodb.QueryOutput {
 
 // decodeFavorites extrae la lista de favoritos del envelope { data } de la
 // respuesta.
-func decodeFavorites(t *testing.T, body string) []domain.Favorite {
+func decodeFavorites(t *testing.T, body string) []domain.FavoriteSummary {
 	t.Helper()
 
 	var envelope struct {
-		Data []domain.Favorite `json:"data"`
+		Data []domain.FavoriteSummary `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(body), &envelope); err != nil {
 		t.Fatalf("la respuesta no es el envelope de exito esperado: %v — %s", err, body)
@@ -245,7 +248,7 @@ func decodeError(t *testing.T, body string) (code string, traceID string) {
 
 // favoriteIDs devuelve los identificadores de los favoritos en el orden en que
 // llegaron.
-func favoriteIDs(favorites []domain.Favorite) []string {
+func favoriteIDs(favorites []domain.FavoriteSummary) []string {
 	ids := make([]string, 0, len(favorites))
 	for _, favorite := range favorites {
 		ids = append(ids, favorite.ID)
@@ -338,6 +341,13 @@ func TestListaFavoritosDelUsuarioDelContexto(t *testing.T) {
 
 	if favorites[0].Scope != domain.ScopeProgram {
 		t.Errorf("scope del favorito = %q, se esperaba %q", favorites[0].Scope, domain.ScopeProgram)
+	}
+
+	if favorites[0].Schedule.TotalDays != 7 ||
+		favorites[0].Schedule.TotalNights != 6 ||
+		favorites[0].Schedule.TotalPassengers != 30 ||
+		favorites[0].Schedule.FreePassengers != 2 {
+		t.Errorf("cantidades del favorito = %+v", favorites[0].Schedule)
 	}
 }
 
