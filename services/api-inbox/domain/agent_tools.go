@@ -151,11 +151,16 @@ func (t *AgentToolbox) execute(ctx context.Context, phone, messageID, name strin
 			now = t.now().UTC()
 		}
 		ambiguousDestination := hasAmbiguousQuoteDestination(state.currentCustomerTurn)
-		if !state.confirmQuoteOrigin(args, now) {
-			return map[string]any{"encontrados": false, "codigo": "QUOTE_CONTEXT_REQUIRED", "origenRequerido": true, "destinoAmbiguo": ambiguousDestination}, false, nil
-		}
 		if ambiguousDestination {
-			return map[string]any{"encontrados": false, "codigo": "QUOTE_CONTEXT_REQUIRED", "origenRequerido": false, "destinoAmbiguo": true}, false, nil
+			originRequired := !state.hasConfirmedQuoteOrigin(now)
+			if region, city, confirmed := quoteOriginFromCustomer(state.currentCustomerTurn, stringArg(args, "ciudad")); confirmed {
+				state.rememberQuoteOrigin(region, city, now)
+				originRequired = false
+			}
+			return map[string]any{"encontrados": false, "codigo": "QUOTE_CONTEXT_REQUIRED", "origenRequerido": originRequired, "destinoAmbiguo": true}, false, nil
+		}
+		if !state.confirmQuoteOrigin(args, now) {
+			return map[string]any{"encontrados": false, "codigo": "QUOTE_CONTEXT_REQUIRED", "origenRequerido": true, "destinoAmbiguo": false}, false, nil
 		}
 		return t.sendBudgets(ctx, phone, messageID, stringArg(args, "destino"), stringArg(args, "codigoRegion"), stringArg(args, "ciudad"), state)
 	case "enviar_certificado_sernatur":
@@ -290,10 +295,19 @@ func (s *agentExecutionState) hasConfirmedMeetingContact(args map[string]any, no
 
 func (s *agentExecutionState) mergeQuote(args map[string]any, now time.Time) {
 	mergeCollectedString(&s.collected.Destination, normalizeSegment(stringArg(args, "destino")), &s.collectedDirty)
-	mergeCollectedString(&s.collected.Region, normalizeSegment(stringArg(args, "codigoRegion")), &s.collectedDirty)
-	mergeCollectedString(&s.collected.City, normalizeSegment(stringArg(args, "ciudad")), &s.collectedDirty)
+	s.rememberQuoteOrigin(normalizeSegment(stringArg(args, "codigoRegion")), normalizeSegment(stringArg(args, "ciudad")), now)
+}
+
+func (s *agentExecutionState) rememberQuoteOrigin(region, city string, now time.Time) {
+	mergeCollectedString(&s.collected.Region, region, &s.collectedDirty)
+	mergeCollectedString(&s.collected.City, city, &s.collectedDirty)
 	s.collected.QuoteOriginConfirmedAt = now
 	s.collectedDirty = true
+}
+
+func (s *agentExecutionState) hasConfirmedQuoteOrigin(now time.Time) bool {
+	confirmedAt := s.collected.QuoteOriginConfirmedAt
+	return !confirmedAt.IsZero() && !now.Before(confirmedAt) && now.Sub(confirmedAt) <= quoteOriginValidity && s.collected.Region != ""
 }
 
 func (s *agentExecutionState) confirmQuoteOrigin(args map[string]any, now time.Time) bool {
@@ -310,13 +324,12 @@ func (s *agentExecutionState) confirmQuoteOrigin(args map[string]any, now time.T
 		s.mergeQuote(args, now)
 		return true
 	}
-	confirmedAt := s.collected.QuoteOriginConfirmedAt
-	if confirmedAt.IsZero() || now.Before(confirmedAt) || now.Sub(confirmedAt) > quoteOriginValidity || s.collected.Region == "" {
+	if !s.hasConfirmedQuoteOrigin(now) {
 		return false
 	}
 	args["codigoRegion"] = s.collected.Region
 	args["ciudad"] = s.collected.City
-	s.mergeQuote(args, confirmedAt)
+	s.mergeQuote(args, s.collected.QuoteOriginConfirmedAt)
 	return true
 }
 
@@ -371,21 +384,21 @@ var quoteRegionEvidence = []struct {
 	region  string
 	aliases []string
 }{
-	{region: "i", aliases: []string{"region_i", "primera_region", "tarapaca"}},
-	{region: "ii", aliases: []string{"region_ii", "segunda_region", "antofagasta"}},
-	{region: "iii", aliases: []string{"region_iii", "tercera_region", "atacama"}},
-	{region: "iv", aliases: []string{"region_iv", "cuarta_region", "coquimbo"}},
-	{region: "v", aliases: []string{"region_v", "quinta_region", "valparaiso"}},
-	{region: "vi", aliases: []string{"region_vi", "sexta_region", "ohiggins", "o_higgins"}},
-	{region: "vii", aliases: []string{"region_vii", "septima_region", "maule"}},
-	{region: "viii", aliases: []string{"region_viii", "octava_region", "biobio", "bio_bio"}},
-	{region: "ix", aliases: []string{"region_ix", "novena_region", "araucania"}},
-	{region: "x", aliases: []string{"region_x", "decima_region", "los_lagos"}},
-	{region: "xi", aliases: []string{"region_xi", "undecima_region", "aysen"}},
-	{region: "xii", aliases: []string{"region_xii", "duodecima_region", "magallanes"}},
-	{region: "xiv", aliases: []string{"region_xiv", "region_de_los_rios", "los_rios"}},
-	{region: "xv", aliases: []string{"region_xv", "arica_y_parinacota"}},
-	{region: "xvi", aliases: []string{"region_xvi", "nuble"}},
+	{region: "i", aliases: []string{"region_i", "i_region", "primera_region", "tarapaca"}},
+	{region: "ii", aliases: []string{"region_ii", "ii_region", "segunda_region", "antofagasta"}},
+	{region: "iii", aliases: []string{"region_iii", "iii_region", "tercera_region", "atacama"}},
+	{region: "iv", aliases: []string{"region_iv", "iv_region", "cuarta_region", "coquimbo"}},
+	{region: "v", aliases: []string{"region_v", "v_region", "quinta_region", "valparaiso"}},
+	{region: "vi", aliases: []string{"region_vi", "vi_region", "sexta_region", "ohiggins", "o_higgins"}},
+	{region: "vii", aliases: []string{"region_vii", "vii_region", "septima_region", "maule"}},
+	{region: "viii", aliases: []string{"region_viii", "viii_region", "octava_region", "biobio", "bio_bio"}},
+	{region: "ix", aliases: []string{"region_ix", "ix_region", "novena_region", "araucania"}},
+	{region: "x", aliases: []string{"region_x", "x_region", "decima_region", "los_lagos"}},
+	{region: "xi", aliases: []string{"region_xi", "xi_region", "undecima_region", "aysen"}},
+	{region: "xii", aliases: []string{"region_xii", "xii_region", "duodecima_region", "magallanes"}},
+	{region: "xiv", aliases: []string{"region_xiv", "xiv_region", "region_de_los_rios", "los_rios"}},
+	{region: "xv", aliases: []string{"region_xv", "xv_region", "arica_y_parinacota"}},
+	{region: "xvi", aliases: []string{"region_xvi", "xvi_region", "nuble"}},
 	{region: "rm", aliases: []string{"region_metropolitana", "metropolitana", "region_rm"}},
 }
 

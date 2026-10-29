@@ -196,6 +196,7 @@ func TestQuoteOriginMustComeFromCustomerEvidence(t *testing.T) {
 	}{
 		{name: "rejects invented region", message: "Información de viajes a Bariloche para febrero", args: map[string]any{"destino": "bariloche", "codigoRegion": "viii"}},
 		{name: "accepts explicit roman region", message: "Salimos desde la Región VIII", args: map[string]any{"destino": "bariloche", "codigoRegion": "v"}, wantOK: true, wantRegion: "viii"},
+		{name: "accepts reversed roman region", message: "El curso es de la VIII Región", args: map[string]any{"destino": "bariloche", "codigoRegion": "v"}, wantOK: true, wantRegion: "viii"},
 		{name: "maps explicit city", message: "El grupo sale desde Concepción", args: map[string]any{"destino": "bariloche", "codigoRegion": "v"}, wantOK: true, wantRegion: "viii", wantCity: "concepcion"},
 		{name: "accepts previously confirmed origin", message: "Envíame los programas", args: map[string]any{"destino": "bariloche", "codigoRegion": "i"}, collected: AgentCollectedData{Region: "vi", City: "rancagua", QuoteOriginConfirmedAt: now.Add(-time.Hour)}, wantOK: true, wantRegion: "vi", wantCity: "rancagua"},
 		{name: "rejects legacy unconfirmed state", message: "Envíame los programas", args: map[string]any{"destino": "bariloche", "codigoRegion": "viii"}, collected: AgentCollectedData{Region: "viii"}},
@@ -221,6 +222,24 @@ func TestQuoteDestinationAmbiguityRequiresClarification(t *testing.T) {
 	}
 	if hasAmbiguousQuoteDestination("Quiero viajar a Bariloche desde la Región VIII") {
 		t.Fatal("single destination was marked ambiguous")
+	}
+}
+
+func TestBudgetToolRejectsUnconfirmedOriginBeforeAnySideEffect(t *testing.T) {
+	t.Parallel()
+	toolbox := &AgentToolbox{now: func() time.Time { return time.Date(2026, time.October, 29, 3, 23, 0, 0, time.UTC) }}
+	state := &agentExecutionState{currentCustomerTurn: "Información de viajes a Bariloche o Sur de Chile para febrero"}
+	result, silent, err := toolbox.execute(context.Background(), "56982791253", "wamid-1", "buscar_presupuestos", map[string]any{
+		"destino": "bariloche", "codigoRegion": "viii",
+	}, state)
+	if err != nil || silent {
+		t.Fatalf("unexpected result silent=%v err=%v", silent, err)
+	}
+	if stringArg(result, "codigo") != "QUOTE_CONTEXT_REQUIRED" || !boolResult(result, "origenRequerido") || !boolResult(result, "destinoAmbiguo") {
+		t.Fatalf("unexpected rejection result: %#v", result)
+	}
+	if state.collectedDirty || state.collected.Region != "" || state.collected.Destination != "" {
+		t.Fatalf("unconfirmed model arguments were persisted: %#v", state.collected)
 	}
 }
 

@@ -8,7 +8,7 @@ import (
 
 func TestAgentPromptUsesAIPersonaAndCurrentCommercialRules(t *testing.T) {
 	prompt := agentSystemPrompt("56911112222", false, time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC), AgentCollectedData{})
-	for _, expected := range []string{"Agente IA de Giras Indómito", "No existe descuento por pago en efectivo", "cantidad o combinación de actividades", "pide explícitamente hablar con una persona", "Nunca termines un turno prometiendo", "Nunca uses como correo del cliente un correo interno", "Nunca afirmes que se enviaron por correo"} {
+	for _, expected := range []string{"Agente IA de Giras Indómito", "en el mismo mensaje, responde la consulta concreta", "La presentación nunca puede reemplazar la respuesta", "No existe descuento por pago en efectivo", "cantidad o combinación de actividades", "pide explícitamente hablar con una persona", "Nunca termines un turno prometiendo", "Nunca uses como correo del cliente un correo interno", "Nunca afirmes que se enviaron por correo"} {
 		if !strings.Contains(prompt, expected) {
 			t.Fatalf("prompt is missing %q", expected)
 		}

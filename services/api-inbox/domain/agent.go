@@ -442,6 +442,7 @@ func (s *AgentService) generate(ctx context.Context, phone, messageID string, me
 	}
 	steps := []json.RawMessage{initialStep}
 	endpoint := "https://generativelanguage.googleapis.com/v1beta/interactions"
+	firstTurnCorrectionSent := false
 	for round := 0; round < 8; round++ {
 		payload := map[string]any{"model": s.gemini.Model, "input": steps, "system_instruction": agentSystemPromptWithConfig(phone, len(messages) > 1, s.now(), state.collected, s.managed), "generation_config": map[string]any{"temperature": s.gemini.Temperature, "top_p": s.gemini.TopP}, "tools": agentInteractionTools(), "store": false}
 		raw, err := json.Marshal(payload)
@@ -557,12 +558,47 @@ func (s *AgentService) generate(ctx context.Context, phone, messageID string, me
 			if strings.TrimSpace(reply.String()) == "" {
 				return "", nil, &permanentAgentError{cause: fmt.Errorf("gemini completed without output: %s", result.Status)}
 			}
-			return finalizeAgentReply(reply.String(), state), nil, nil
+			candidate := finalizeAgentReply(reply.String(), state)
+			if !firstTurnCorrectionSent && len(messages) == 1 && requiresFirstTurnAnswer(state.latestCustomerMessage) && isGreetingOnlyReply(candidate, configuredAgentGreeting(s.managed)) {
+				correction, marshalErr := json.Marshal(map[string]any{"type": "user_input", "content": []map[string]string{{"type": "text", "text": "El saludo ya fue realizado. Responde ahora la consulta original en el mismo turno. Si falta información, formula una pregunta concreta para obtenerla. No vuelvas a saludar ni te limites a preguntar cómo puedes ayudar."}}})
+				if marshalErr != nil {
+					return "", nil, marshalErr
+				}
+				steps = append(steps, result.Steps...)
+				steps = append(steps, correction)
+				firstTurnCorrectionSent = true
+				continue
+			}
+			return candidate, nil, nil
 		}
 		steps = append(steps, result.Steps...)
 		steps = append(steps, responses...)
 	}
 	return "", nil, &permanentAgentError{cause: errors.New("gemini tool loop exceeded")}
+}
+
+func configuredAgentGreeting(managed *AgentManagedConfig) string {
+	if managed != nil && strings.TrimSpace(managed.Personality.Greeting) != "" {
+		return managed.Personality.Greeting
+	}
+	return DefaultAgentManagedConfig().Personality.Greeting
+}
+
+func requiresFirstTurnAnswer(message string) bool {
+	normalized := normalizeQuoteEvidence(message)
+	simpleGreetings := map[string]struct{}{
+		"hola": {}, "holi": {}, "hey": {}, "buenos_dias": {}, "buenas_tardes": {}, "buenas_noches": {},
+	}
+	_, greetingOnly := simpleGreetings[normalized]
+	return normalized != "" && !greetingOnly
+}
+
+func isGreetingOnlyReply(reply, configuredGreeting string) bool {
+	normalized := normalizeQuoteEvidence(reply)
+	if normalized == normalizeQuoteEvidence(configuredGreeting) {
+		return true
+	}
+	return len([]rune(reply)) <= 220 && strings.Contains(normalized, "soy_el_agente_ia") && strings.Contains(normalized, "como_puedo_ayudarte")
 }
 
 func currentCustomerTurn(messages []Message) string {

@@ -13,7 +13,7 @@ func agentSystemPrompt(phone string, hasHistory bool, now time.Time, collected A
 }
 
 func agentSystemPromptWithConfig(phone string, hasHistory bool, now time.Time, collected AgentCollectedData, managed *AgentManagedConfig) string {
-	greetingRule := "Es el primer turno. Preséntate exactamente como Agente IA de Giras Indómito."
+	greetingRule := "Es el primer turno. Preséntate brevemente como Agente IA de Giras Indómito y, en el mismo mensaje, responde la consulta concreta. La presentación nunca puede reemplazar la respuesta; si falta contexto, pregunta de inmediato el dato específico que necesitas."
 	if hasHistory {
 		greetingRule = "La conversación ya está en curso: no saludes ni vuelvas a presentarte."
 	}
@@ -72,7 +72,7 @@ func agentSystemPromptWithConfig(phone string, hasHistory bool, now time.Time, c
 			destinations = append(destinations, destination)
 		}
 		sort.Strings(destinations)
-		managedInstructions = fmt.Sprintf("\nConfiguracion editorial publicada:\n- Saludo sugerido: %s\n- Cierre sugerido: %s\n- Frases prohibidas: %s\n- Instrucciones adicionales: %s\n- Ofrecer reuniones: %t\n- Derivacion humana habilitada: %t\n- Explicar diferencias entre programas: %t\nPoliticas comerciales administradas:\n%s\nConocimiento administrado:\n%s\nCatalogo administrado: %d PDF activos para los destinos %s. Usa buscar_presupuestos para resolver los documentos exactos; no enumeres ni inventes programas.\n", managed.Personality.Greeting, managed.Personality.Closing, strings.Join(managed.Personality.ForbiddenPhrases, "; "), managed.Personality.AdditionalInstructions, managed.Policies.OfferMeetings, managed.Policies.HumanHandoffEnabled, managed.Policies.ExplainProgramDifferences, strings.Join(commercialPolicies, "\n"), strings.Join(knowledge, "\n"), activePrograms, strings.Join(destinations, ", "))
+		managedInstructions = fmt.Sprintf("\nConfiguracion editorial publicada:\n- Saludo sugerido para abrir el primer mensaje, nunca como respuesta completa: %s\n- Cierre sugerido: %s\n- Frases prohibidas: %s\n- Instrucciones adicionales: %s\n- Ofrecer reuniones: %t\n- Derivacion humana habilitada: %t\n- Explicar diferencias entre programas: %t\nPoliticas comerciales administradas:\n%s\nConocimiento administrado:\n%s\nCatalogo administrado: %d PDF activos para los destinos %s. Usa buscar_presupuestos para resolver los documentos exactos; no enumeres ni inventes programas.\n", managed.Personality.Greeting, managed.Personality.Closing, strings.Join(managed.Personality.ForbiddenPhrases, "; "), managed.Personality.AdditionalInstructions, managed.Policies.OfferMeetings, managed.Policies.HumanHandoffEnabled, managed.Policies.ExplainProgramDifferences, strings.Join(commercialPolicies, "\n"), strings.Join(knowledge, "\n"), activePrograms, strings.Join(destinations, ", "))
 	}
 	return fmt.Sprintf(`%s Nunca afirmes ser una persona ni uses el nombre Susana Guevara.
 

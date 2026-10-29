@@ -160,6 +160,55 @@ func TestAgentRejectsUnverifiedMeetingConfirmationFromModel(t *testing.T) {
 	}
 }
 
+func TestAgentFirstTurnGreetingDoesNotReplaceCustomerAnswer(t *testing.T) {
+	t.Parallel()
+	interactionCalls := 0
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host != "generativelanguage.googleapis.com" {
+			t.Fatalf("unexpected host %q", request.URL.Host)
+		}
+		interactionCalls++
+		var payload struct {
+			Input []json.RawMessage `json:"input"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if interactionCalls == 1 {
+			return jsonResponse(http.StatusOK, `{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"Hola, soy el Agente IA de Giras Indómito. Como puedo ayudarte?"}]}]}`), nil
+		}
+		foundCorrection := false
+		for _, step := range payload.Input {
+			if strings.Contains(string(step), "Responde ahora la consulta original") {
+				foundCorrection = true
+			}
+		}
+		if !foundCorrection {
+			t.Fatal("second interaction omitted the first-turn correction")
+		}
+		return jsonResponse(http.StatusOK, `{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"Para indicarte exactamente qué incluye, cuéntame a qué destino o programa de aventura te refieres."}]}]}`), nil
+	})}
+	service := &AgentService{gemini: GeminiConfig{APIKey: "api-key", Model: "model"}, http: client, tools: &AgentToolbox{}, now: time.Now}
+	content := "Qué incluye el paquete de aventura?"
+	reply, _, err := service.generate(context.Background(), "56998218330", "wamid-1", []Message{{Type: MessageTypeCustomer, Content: &content}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if interactionCalls != 2 || !strings.Contains(reply, "destino o programa de aventura") || strings.Contains(reply, "Como puedo ayudarte") {
+		t.Fatalf("reply=%q calls=%d", reply, interactionCalls)
+	}
+}
+
+func TestFirstTurnGreetingDetectionIgnoresSimpleGreetingFromCustomer(t *testing.T) {
+	t.Parallel()
+	if requiresFirstTurnAnswer("Hola") {
+		t.Fatal("simple greeting should not force a second model interaction")
+	}
+	if !requiresFirstTurnAnswer("Hola, qué incluye el paquete de aventura?") {
+		t.Fatal("substantive first message was treated as a simple greeting")
+	}
+}
+
 func TestCurrentCustomerTurnKeepsConsecutivePartialContactMessages(t *testing.T) {
 	t.Parallel()
 	oldAgentReply := "Indícame nombre y correo"
