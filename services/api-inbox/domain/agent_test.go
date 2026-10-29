@@ -249,6 +249,27 @@ func TestConfirmedBudgetDeliveryReplyDoesNotClaimMissingCertificate(t *testing.T
 	}
 }
 
+func TestFinalizeBudgetReplyPreservesManagedDetailsAndRemovesFalseEmailClaim(t *testing.T) {
+	t.Parallel()
+	state := &agentExecutionState{budgetConfirmations: []string{
+		"Te adjunté las cotizaciones y programas disponibles para Bariloche, junto con nuestro certificado Sernatur.",
+	}}
+	modelReply := "Hemos enviado a tu correo las cotizaciones y programas disponibles para Bariloche, junto con nuestro certificado Sernatur. La diferencia principal entre los programas está en la cantidad y combinación de actividades. Además, cada pasajero cuenta con tres talonarios de rifa y existe un 10% de descuento por hermano."
+	got := finalizeAgentReply(modelReply, state)
+	wantPrefix := "Te adjunté las cotizaciones y programas disponibles para Bariloche, junto con nuestro certificado Sernatur."
+	if !strings.HasPrefix(got, wantPrefix) {
+		t.Fatalf("budget reply omitted exact confirmation: %q", got)
+	}
+	if strings.Contains(strings.ToLower(got), "correo") || strings.Contains(strings.ToLower(got), "email") {
+		t.Fatalf("budget reply retained false delivery channel: %q", got)
+	}
+	for _, expected := range []string{"diferencia principal", "tres talonarios", "10% de descuento"} {
+		if !strings.Contains(got, expected) {
+			t.Fatalf("budget reply lost managed detail %q: %q", expected, got)
+		}
+	}
+}
+
 func TestConfirmedMeetingUpdateReplyUsesOnlyToolResult(t *testing.T) {
 	t.Parallel()
 	reply := confirmedMeetingUpdateReply(map[string]any{"fecha": "2026-10-29", "hora": "19:00", "meetLink": "https://meet.google.com/new-link"})

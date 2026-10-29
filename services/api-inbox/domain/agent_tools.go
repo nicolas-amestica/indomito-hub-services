@@ -74,6 +74,7 @@ func (t *AgentToolbox) SetManagedConfig(config *AgentManagedConfig) { t.managed 
 
 type agentExecutionState struct {
 	certificateSent       bool
+	budgetConfirmations   []string
 	derivation            *AgentDerivation
 	latestCustomerMessage string
 	currentCustomerTurn   string

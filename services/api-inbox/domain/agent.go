@@ -530,7 +530,8 @@ func (s *AgentService) generate(ctx context.Context, phone, messageID string, me
 				return "", state.derivation, nil
 			}
 			if step.Name == "buscar_presupuestos" && toolErr == nil && boolResult(toolResult, "encontrados") {
-				return confirmedBudgetDeliveryReply(toolResult, step.Arguments), nil, nil
+				state.budgetConfirmations = append(state.budgetConfirmations, confirmedBudgetDeliveryReply(toolResult, step.Arguments))
+				toolResult["confirmacionGestionadaPorSistema"] = true
 			}
 			if step.Name == "crear_reunion" && toolErr == nil && boolResult(toolResult, "exito") {
 				return confirmedMeetingReply(toolResult, step.Arguments), nil, nil
@@ -554,7 +555,7 @@ func (s *AgentService) generate(ctx context.Context, phone, messageID string, me
 			if strings.TrimSpace(reply.String()) == "" {
 				return "", nil, &permanentAgentError{cause: fmt.Errorf("gemini completed without output: %s", result.Status)}
 			}
-			return guardedAgentReply(reply.String(), state), nil, nil
+			return finalizeAgentReply(reply.String(), state), nil, nil
 		}
 		steps = append(steps, result.Steps...)
 		steps = append(steps, responses...)
@@ -584,6 +585,40 @@ func confirmedBudgetDeliveryReply(result, args map[string]any) string {
 		return reply + ", junto con nuestro certificado Sernatur."
 	}
 	return reply + "."
+}
+
+func finalizeAgentReply(reply string, state *agentExecutionState) string {
+	guarded := guardedAgentReply(reply, state)
+	if len(state.budgetConfirmations) == 0 {
+		return guarded
+	}
+	confirmation := strings.Join(state.budgetConfirmations, " ")
+	detail := stripBudgetDeliveryClaims(guarded)
+	if detail == "" {
+		return confirmation
+	}
+	return confirmation + "\n\n" + detail
+}
+
+func stripBudgetDeliveryClaims(reply string) string {
+	parts := regexp.MustCompile(`(?s)[^.!?]+[.!?]?`).FindAllString(reply, -1)
+	kept := make([]string, 0, len(parts))
+	for _, part := range parts {
+		sentence := strings.TrimSpace(part)
+		if sentence == "" || isBudgetDeliveryClaim(sentence) {
+			continue
+		}
+		kept = append(kept, sentence)
+	}
+	return strings.Join(kept, " ")
+}
+
+func isBudgetDeliveryClaim(sentence string) bool {
+	normalized := normalizeSegment(sentence)
+	hasSubject := strings.Contains(normalized, "cotizacion") || strings.Contains(normalized, "presupuesto") || strings.Contains(normalized, "programa") || strings.Contains(normalized, "certificado") || strings.Contains(normalized, "documento") || strings.Contains(normalized, "archivo")
+	hasDelivery := strings.Contains(normalized, "adjunt") || strings.Contains(normalized, "envi") || strings.Contains(normalized, "mand") || strings.Contains(normalized, "compart")
+	hasEmailChannel := strings.Contains(normalized, "correo") || strings.Contains(normalized, "email")
+	return hasSubject && (hasDelivery || hasEmailChannel)
 }
 
 func budgetDestinationLabel(destination string) string {
