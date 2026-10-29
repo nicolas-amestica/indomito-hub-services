@@ -32,6 +32,7 @@ type InboundMetaMessage struct {
 	SHA256    string
 	FileName  string
 	Rich      *MessageRichContent
+	Referral  *MetaReferral
 }
 
 // InboundMetaStatus is a delivery receipt emitted by WhatsApp Cloud API.
@@ -323,6 +324,15 @@ func DecodeInboundMetaMessages(raw []byte) ([]InboundMetaMessage, error) {
 							ButtonReply struct{ ID, Title string }              `json:"button_reply"`
 							ListReply   struct{ ID, Title, Description string } `json:"list_reply"`
 						} `json:"interactive"`
+						Referral struct {
+							SourceURL  string `json:"source_url"`
+							SourceID   string `json:"source_id"`
+							SourceType string `json:"source_type"`
+							Headline   string `json:"headline"`
+							Body       string `json:"body"`
+							MediaType  string `json:"media_type"`
+							CtwaClid   string `json:"ctwa_clid"`
+						} `json:"referral"`
 					} `json:"messages"`
 				} `json:"value"`
 			} `json:"changes"`
@@ -388,7 +398,8 @@ func DecodeInboundMetaMessages(raw []byte) ([]InboundMetaMessage, error) {
 					}
 					text = "[Contenido de WhatsApp no compatible: " + kind + "]"
 				}
-				result = append(result, InboundMetaMessage{MessageID: message.ID, Phone: message.From, Type: message.Type, Timestamp: message.Timestamp, Text: text, MediaID: mediaID, MIMEType: mimeType, SHA256: checksum, FileName: fileName, Rich: rich})
+				referral := normalizeMetaReferral(&MetaReferral{SourceURL: message.Referral.SourceURL, SourceID: message.Referral.SourceID, SourceType: message.Referral.SourceType, Headline: message.Referral.Headline, Body: message.Referral.Body, MediaType: message.Referral.MediaType, CtwaClid: message.Referral.CtwaClid})
+				result = append(result, InboundMetaMessage{MessageID: message.ID, Phone: message.From, Type: message.Type, Timestamp: message.Timestamp, Text: text, MediaID: mediaID, MIMEType: mimeType, SHA256: checksum, FileName: fileName, Rich: rich, Referral: referral})
 			}
 		}
 	}
@@ -448,6 +459,13 @@ func (s *WebhookService) Reserve(ctx context.Context, message InboundMetaMessage
 			return fmt.Errorf("encode rich inbound message: %w", marshalErr)
 		}
 		meta["rich"] = encoded
+	}
+	if message.Referral != nil {
+		encoded, marshalErr := attributevalue.Marshal(message.Referral)
+		if marshalErr != nil {
+			return fmt.Errorf("encode Meta referral: %w", marshalErr)
+		}
+		meta["referral"] = encoded
 	}
 	shard := conversationShard(message.MessageID)
 	outbox := map[string]types.AttributeValue{

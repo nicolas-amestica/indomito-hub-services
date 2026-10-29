@@ -197,7 +197,10 @@ func normalizeSearch(value string) string {
 }
 
 func matchesSearch(summary ConversationSummary, search string) bool {
-	return search == "" || strings.Contains(normalizeSearch(summary.Alias), search) || strings.Contains(normalizeSearch(summary.Phone), search)
+	if search == "" || strings.Contains(normalizeSearch(summary.Alias), search) || strings.Contains(normalizeSearch(summary.Phone), search) {
+		return true
+	}
+	return summary.Referral != nil && (strings.Contains(normalizeSearch(summary.Referral.Headline), search) || strings.Contains(normalizeSearch(summary.Referral.SourceID), search))
 }
 
 func conversationActivity(summary ConversationSummary) time.Time {

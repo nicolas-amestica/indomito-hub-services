@@ -13,6 +13,20 @@
       }
     },
     "schemas": {
+      "MetaReferral": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sourceUrl", "sourceId", "sourceType", "headline", "body", "mediaType", "attributedAt"],
+        "properties": {
+          "sourceUrl": { "type": "string", "maxLength": 2048 },
+          "sourceId": { "type": "string", "maxLength": 200 },
+          "sourceType": { "type": "string", "maxLength": 40 },
+          "headline": { "type": "string", "maxLength": 500 },
+          "body": { "type": "string", "maxLength": 2000 },
+          "mediaType": { "type": "string", "maxLength": 40 },
+          "attributedAt": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
       "ConversationSummary": {
         "type": "object",
         "additionalProperties": false,
@@ -33,7 +47,8 @@
           "serviceWindowExpiresAt": { "type": ["string", "null"], "format": "date-time" },
           "createdAt": { "type": ["string", "null"], "format": "date-time" },
           "updatedAt": { "type": ["string", "null"], "format": "date-time" },
-          "generation": { "type": "integer", "minimum": 0 }
+          "generation": { "type": "integer", "minimum": 0 },
+          "referral": { "$ref": "#/components/schemas/MetaReferral" }
         }
       },
       "PageInfo": {
@@ -85,7 +100,8 @@
           "whatsappMessageId": { "type": ["string", "null"], "maxLength": 256 }, "deliveryStatus": { "type": ["string", "null"], "enum": ["sent", "delivered", "read", "failed", null] },
           "deliveryError": { "type": ["string", "null"], "maxLength": 200 }, "attachments": { "type": "array", "maxItems": 20, "items": { "$ref": "#/components/schemas/MessageAttachment" } },
           "replyTo": { "anyOf": [{ "$ref": "#/components/schemas/MessageReference" }, { "type": "null" }] }, "reactions": { "type": "array", "maxItems": 2, "items": { "$ref": "#/components/schemas/MessageReaction" } },
-          "rich": { "$ref": "#/components/schemas/MessageRichContent" }
+          "rich": { "$ref": "#/components/schemas/MessageRichContent" },
+          "referral": { "$ref": "#/components/schemas/MetaReferral" }
         }
       },
       "MessageReference": { "type": "object", "additionalProperties": false, "required": ["id", "type", "content", "whatsappMessageId"], "properties": { "id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" }, "type": { "type": "string", "enum": ["customer", "ai_agent", "team"] }, "content": { "type": ["string", "null"], "maxLength": 4096 }, "whatsappMessageId": { "type": "string", "minLength": 1, "maxLength": 256 } } },

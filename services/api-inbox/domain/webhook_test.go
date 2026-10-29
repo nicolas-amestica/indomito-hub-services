@@ -48,6 +48,19 @@ func TestDecodeInboundMetaMessagesPreservesRichContent(t *testing.T) {
 	}
 }
 
+func TestDecodeInboundMetaMessagesPreservesAdReferral(t *testing.T) {
+	t.Parallel()
+	raw := []byte(`{"entry":[{"changes":[{"value":{"messages":[{"id":"wamid.ad","from":"56912345678","type":"text","timestamp":"1","text":{"body":"Hola"},"referral":{"source_url":"https://fb.me/ad","source_id":"1200001","source_type":"ad","headline":"Gira a Bariloche","body":"Cotiza hoy","media_type":"image","ctwa_clid":"click-secret"}}]}}]}]}`)
+	messages, err := DecodeInboundMetaMessages(raw)
+	if err != nil || len(messages) != 1 {
+		t.Fatalf("unexpected messages %#v err=%v", messages, err)
+	}
+	referral := messages[0].Referral
+	if referral == nil || referral.SourceID != "1200001" || referral.SourceType != "ad" || referral.Headline != "Gira a Bariloche" || referral.CtwaClid != "click-secret" {
+		t.Fatalf("unexpected referral %#v", referral)
+	}
+}
+
 func TestDecodeInboundMetaMessagesMakesUnsupportedContentVisible(t *testing.T) {
 	raw := []byte(`{"entry":[{"changes":[{"value":{"messages":[{"id":"wamid.unsupported","from":"56912345678","type":"order","timestamp":"1"}]}}]}]}`)
 	messages, err := DecodeInboundMetaMessages(raw)

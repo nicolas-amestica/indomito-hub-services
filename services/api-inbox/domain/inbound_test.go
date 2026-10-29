@@ -27,7 +27,7 @@ func (f *inboundFake) TransactWriteItems(_ context.Context, input *dynamodb.Tran
 
 func TestInboundProcessorMaterializesNewConversationAtomically(t *testing.T) {
 	fixed := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
-	reservation, err := attributevalue.MarshalMap(inboundRecord{MessageID: "wamid.1", Phone: "56912345678", MessageType: "text", ProviderTimestamp: "1791980000", Text: "Hola", State: "reserved"})
+	reservation, err := attributevalue.MarshalMap(inboundRecord{MessageID: "wamid.1", Phone: "56912345678", MessageType: "text", ProviderTimestamp: "1791980000", Text: "Hola", State: "reserved", Referral: &MetaReferral{SourceID: "1200001", SourceType: "ad", Headline: "Gira a Bariloche", CtwaClid: "click-secret"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,6 +52,52 @@ func TestInboundProcessorMaterializesNewConversationAtomically(t *testing.T) {
 	if !hasServiceWindowExpiry(fake.writes[0], expiresAt) {
 		t.Fatalf("conversation must expose service window expiry %s", expiresAt)
 	}
+	if !hasMetaReferral(fake.writes[0], "1200001", "click-secret") {
+		t.Fatal("conversation and message must preserve Meta ad attribution")
+	}
+	if outboxContainsMetaClickID(fake.writes[0]) {
+		t.Fatal("realtime payload must not expose ctwa_clid")
+	}
+}
+
+func hasMetaReferral(writes []types.TransactWriteItem, sourceID, ctwaClid string) bool {
+	found := 0
+	for _, write := range writes {
+		if write.Put == nil {
+			continue
+		}
+		value, ok := write.Put.Item["referral"].(*types.AttributeValueMemberM)
+		if !ok {
+			continue
+		}
+		id, idOK := value.Value["sourceId"].(*types.AttributeValueMemberS)
+		click, clickOK := value.Value["ctwaClid"].(*types.AttributeValueMemberS)
+		if idOK && clickOK && id.Value == sourceID && click.Value == ctwaClid {
+			found++
+		}
+	}
+	return found >= 2
+}
+
+func outboxContainsMetaClickID(writes []types.TransactWriteItem) bool {
+	for _, write := range writes {
+		if write.Put == nil {
+			continue
+		}
+		payload, ok := write.Put.Item["payload"].(*types.AttributeValueMemberM)
+		if !ok {
+			continue
+		}
+		conversation, ok := payload.Value["conversation"].(*types.AttributeValueMemberM)
+		if !ok {
+			continue
+		}
+		referral, ok := conversation.Value["referral"].(*types.AttributeValueMemberM)
+		if ok && referral.Value["ctwaClid"] != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func hasServiceWindowExpiry(writes []types.TransactWriteItem, expected time.Time) bool {

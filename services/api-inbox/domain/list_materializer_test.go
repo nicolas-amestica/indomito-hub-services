@@ -110,6 +110,19 @@ func TestMaterializeConversationListSelectsFiltersAndSorts(t *testing.T) {
 	assertShardQueries(t, fake)
 }
 
+func TestMaterializeConversationListSearchesMetaAdAttribution(t *testing.T) {
+	fake := newFakeListReader()
+	fake.items["LIST_VERSION#00"] = []ListVersion{{Phone: "+56911111111", ValidFromSequence: 1, Operation: "upsert", Summary: ConversationSummary{Phone: "+56911111111", Alias: "Ana", Referral: &MetaReferral{SourceID: "1200001", Headline: "Gira a Bariloche"}}}}
+
+	items, err := MaterializeConversationList(context.Background(), fake, "inbox-table", 1, "bariloche", 100)
+	if err != nil {
+		t.Fatalf("MaterializeConversationList() error = %v", err)
+	}
+	if len(items) != 1 || items[0].Referral == nil || items[0].Referral.SourceID != "1200001" {
+		t.Fatalf("items = %#v", items)
+	}
+}
+
 func TestMaterializeConversationListLimitsConcurrencyAndCapacity(t *testing.T) {
 	fake := newFakeListReader()
 	fake.delay = 5 * time.Millisecond

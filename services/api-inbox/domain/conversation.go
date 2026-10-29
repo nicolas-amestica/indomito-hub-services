@@ -37,6 +37,7 @@ type ConversationSummary struct {
 	CreatedAt              *time.Time         `json:"createdAt" dynamodbav:"createdAt"`
 	UpdatedAt              *time.Time         `json:"updatedAt" dynamodbav:"updatedAt"`
 	Generation             int                `json:"generation" dynamodbav:"generation"`
+	Referral               *MetaReferral      `json:"referral,omitempty" dynamodbav:"referral,omitempty"`
 }
 
 // PageInfo describe una página materializada de la bandeja.

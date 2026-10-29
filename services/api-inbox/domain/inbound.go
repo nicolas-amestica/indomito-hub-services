@@ -34,6 +34,7 @@ type inboundRecord struct {
 	MediaSHA256       string              `dynamodbav:"mediaSha256"`
 	FileName          string              `dynamodbav:"fileName"`
 	Rich              *MessageRichContent `dynamodbav:"rich,omitempty"`
+	Referral          *MetaReferral       `dynamodbav:"referral,omitempty"`
 }
 
 type InboundMediaStore interface {
@@ -101,6 +102,12 @@ func (p *InboundProcessor) Process(ctx context.Context, messageID string) error 
 		if !found {
 			summary = ConversationSummary{ID: record.Phone, Phone: record.Phone, Alias: record.Phone, Channel: "whatsapp", Status: ConversationStatusBot, CreatedAt: &occurredAt}
 		}
+		if record.Referral != nil {
+			referral := *record.Referral
+			referral.AttributedAt = &occurredAt
+			record.Referral = &referral
+			summary.Referral = &referral
+		}
 		summary.UnreadCount++
 		summary.LastMessageAt, summary.UpdatedAt, summary.LastMessagePreview = &occurredAt, &occurredAt, &preview
 		serviceWindowExpiresAt := occurredAt.Add(24 * time.Hour)
@@ -121,7 +128,7 @@ func (p *InboundProcessor) Process(ctx context.Context, messageID string) error 
 			return fmt.Errorf("create inbound message id: %w", err)
 		}
 		content := record.Text
-		message := Message{ID: messageULID.String(), MessageSK: "MSG#" + messageULID.String(), Phone: record.Phone, Type: MessageTypeCustomer, Content: &content, CreatedAt: occurredAt, WhatsAppMessageID: &record.MessageID, Attachments: attachments, Reactions: []MessageReaction{}, Rich: record.Rich}
+		message := Message{ID: messageULID.String(), MessageSK: "MSG#" + messageULID.String(), Phone: record.Phone, Type: MessageTypeCustomer, Content: &content, CreatedAt: occurredAt, WhatsAppMessageID: &record.MessageID, Attachments: attachments, Reactions: []MessageReaction{}, Rich: record.Rich, Referral: record.Referral}
 		messageItem, err := attributevalue.MarshalMap(message)
 		if err != nil {
 			return fmt.Errorf("encode inbound message: %w", err)

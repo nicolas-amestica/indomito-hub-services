@@ -58,4 +58,5 @@ type Message struct {
 	Reactions         []MessageReaction    `json:"reactions" dynamodbav:"reactions"`
 	ReactionUpdatedAt map[string]time.Time `json:"-" dynamodbav:"reactionUpdatedAt,omitempty"`
 	Rich              *MessageRichContent  `json:"rich,omitempty" dynamodbav:"rich,omitempty"`
+	Referral          *MetaReferral        `json:"referral,omitempty" dynamodbav:"referral,omitempty"`
 }

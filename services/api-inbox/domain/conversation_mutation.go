@@ -367,7 +367,7 @@ func (s *ConversationMutationService) visibleWrites(summary ConversationSummary,
 		listEventType = "conversation.deleted"
 	}
 	listEventItem := map[string]types.AttributeValue{"pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("WORK_DUE#OUTBOX#%02X", shard)}, "sk": &types.AttributeValueMemberS{Value: now.Format(time.RFC3339Nano) + "#" + listEventID}, "eventId": &types.AttributeValueMemberS{Value: listEventID}, "eventType": &types.AttributeValueMemberS{Value: listEventType}, "phone": &types.AttributeValueMemberS{Value: summary.Phone}, "generation": &types.AttributeValueMemberN{Value: fmt.Sprint(summary.Generation)}, "stream": &types.AttributeValueMemberS{Value: "list"}, "sequence": &types.AttributeValueMemberN{Value: fmt.Sprint(nextList)}, "state": &types.AttributeValueMemberS{Value: "pending"}, "nextAttemptAt": &types.AttributeValueMemberS{Value: now.Format(time.RFC3339Nano)}, "expiresAt": &types.AttributeValueMemberN{Value: fmt.Sprint(now.Add(14 * 24 * time.Hour).Unix())}}
-	payload, err := attributevalue.MarshalMap(map[string]any{"phone": summary.Phone, "generation": summary.Generation, "conversation": summary})
+	payload, err := attributevalue.MarshalMap(map[string]any{"phone": summary.Phone, "generation": summary.Generation, "conversation": withoutMetaClickID(summary)})
 	if err != nil {
 		return nil, fmt.Errorf("encode conversation event payload: %w", err)
 	}
