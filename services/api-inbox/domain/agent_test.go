@@ -354,6 +354,26 @@ func TestDeterministicMeetingFailureReplies(t *testing.T) {
 	}
 }
 
+func TestMissingQuoteContextRepliesAreDeterministic(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		result map[string]any
+		want   string
+	}{
+		{name: "origin and destination", result: map[string]any{"origenRequerido": true, "destinoAmbiguo": true}, want: "región o comuna sale el grupo y qué destino"},
+		{name: "origin", result: map[string]any{"origenRequerido": true}, want: "región o comuna sale el grupo"},
+		{name: "destination", result: map[string]any{"destinoAmbiguo": true}, want: "qué destino quieres revisar primero"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := missingQuoteContextReply(test.result); !strings.Contains(got, test.want) {
+				t.Fatalf("reply %q does not contain %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestGeminiStatusErrorIncludesSafeProviderDetail(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

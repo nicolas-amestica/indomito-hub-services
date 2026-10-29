@@ -182,6 +182,48 @@ func TestBudgetRegionByCityMatchesLegacyFallbacks(t *testing.T) {
 	}
 }
 
+func TestQuoteOriginMustComeFromCustomerEvidence(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, time.October, 29, 3, 23, 0, 0, time.UTC)
+	tests := []struct {
+		name       string
+		message    string
+		args       map[string]any
+		collected  AgentCollectedData
+		wantOK     bool
+		wantRegion string
+		wantCity   string
+	}{
+		{name: "rejects invented region", message: "Información de viajes a Bariloche para febrero", args: map[string]any{"destino": "bariloche", "codigoRegion": "viii"}},
+		{name: "accepts explicit roman region", message: "Salimos desde la Región VIII", args: map[string]any{"destino": "bariloche", "codigoRegion": "v"}, wantOK: true, wantRegion: "viii"},
+		{name: "maps explicit city", message: "El grupo sale desde Concepción", args: map[string]any{"destino": "bariloche", "codigoRegion": "v"}, wantOK: true, wantRegion: "viii", wantCity: "concepcion"},
+		{name: "accepts previously confirmed origin", message: "Envíame los programas", args: map[string]any{"destino": "bariloche", "codigoRegion": "i"}, collected: AgentCollectedData{Region: "vi", City: "rancagua", QuoteOriginConfirmedAt: now.Add(-time.Hour)}, wantOK: true, wantRegion: "vi", wantCity: "rancagua"},
+		{name: "rejects legacy unconfirmed state", message: "Envíame los programas", args: map[string]any{"destino": "bariloche", "codigoRegion": "viii"}, collected: AgentCollectedData{Region: "viii"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			state := &agentExecutionState{currentCustomerTurn: test.message, collected: test.collected}
+			got := state.confirmQuoteOrigin(test.args, now)
+			if got != test.wantOK {
+				t.Fatalf("confirmQuoteOrigin() = %v, want %v", got, test.wantOK)
+			}
+			if got && (stringArg(test.args, "codigoRegion") != test.wantRegion || stringArg(test.args, "ciudad") != test.wantCity) {
+				t.Fatalf("resolved origin = %q/%q, want %q/%q", stringArg(test.args, "codigoRegion"), stringArg(test.args, "ciudad"), test.wantRegion, test.wantCity)
+			}
+		})
+	}
+}
+
+func TestQuoteDestinationAmbiguityRequiresClarification(t *testing.T) {
+	t.Parallel()
+	if !hasAmbiguousQuoteDestination("Información de viajes a Bariloche o Sur de Chile") {
+		t.Fatal("alternative destinations were not detected")
+	}
+	if hasAmbiguousQuoteDestination("Quiero viajar a Bariloche desde la Región VIII") {
+		t.Fatal("single destination was marked ambiguous")
+	}
+}
+
 func TestAvailableSlotsHonorsScheduleAdvanceAndOverlap(t *testing.T) {
 	t.Parallel()
 	location, err := time.LoadLocation("America/Santiago")
@@ -248,7 +290,7 @@ func TestAgentExecutionStateMergesPartialDataAndClearsMeetingOnly(t *testing.T) 
 	t.Parallel()
 	state := &agentExecutionState{}
 	now := time.Date(2026, time.October, 23, 12, 0, 0, 0, time.UTC)
-	state.mergeQuote(map[string]any{"destino": "Bariloche", "codigoRegion": "V", "ciudad": "Viña del Mar"})
+	state.mergeQuote(map[string]any{"destino": "Bariloche", "codigoRegion": "V", "ciudad": "Viña del Mar"}, time.Now().UTC())
 	state.mergeMeeting(map[string]any{"nombreCliente": "Ana", "emailCliente": "ANA@EXAMPLE.COM"}, "Soy Ana y mi correo es ana@example.com", now)
 	state.mergeMeeting(map[string]any{"fechaSugerida": "2026-10-24", "horaSugerida": "10:00"}, "El 24 a las 10", now)
 	if !state.collectedDirty || state.collected.Destination != "bariloche" || state.collected.Region != "v" || state.collected.City != "vina_del_mar" {

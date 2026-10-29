@@ -521,6 +521,8 @@ func (s *AgentService) generate(ctx context.Context, phone, messageID string, me
 						return missingMeetingCancellationReply(), nil, nil
 					}
 					return missingMeetingUpdateReply(), nil, nil
+				case "QUOTE_CONTEXT_REQUIRED":
+					return missingQuoteContextReply(toolResult), nil, nil
 				}
 			}
 			if toolErr != nil {
@@ -678,6 +680,18 @@ func missingMeetingUpdateReply() string {
 
 func missingMeetingCancellationReply() string {
 	return "No encontré una reunión futura para cancelar."
+}
+
+func missingQuoteContextReply(result map[string]any) string {
+	originRequired := boolResult(result, "origenRequerido")
+	destinationAmbiguous := boolResult(result, "destinoAmbiguo")
+	if originRequired && destinationAmbiguous {
+		return "Para enviarte los programas correctos, indícame desde qué región o comuna sale el grupo y qué destino quieres revisar primero."
+	}
+	if originRequired {
+		return "Para enviarte los programas correctos, indícame desde qué región o comuna sale el grupo."
+	}
+	return "Indícame qué destino quieres revisar primero para enviarte los programas correctos."
 }
 
 func confirmedMeetingCancellationReply() string {

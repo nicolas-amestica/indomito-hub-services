@@ -12,6 +12,7 @@ import (
 	"net/mail"
 	"net/url"
 	"path"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -90,6 +91,7 @@ type AgentCollectedData struct {
 	Destination               string    `json:"destino,omitempty" dynamodbav:"destino,omitempty"`
 	Region                    string    `json:"region,omitempty" dynamodbav:"region,omitempty"`
 	City                      string    `json:"ciudad,omitempty" dynamodbav:"ciudad,omitempty"`
+	QuoteOriginConfirmedAt    time.Time `json:"-" dynamodbav:"quoteOriginConfirmedAt,omitempty"`
 	MeetingName               string    `json:"nombreCliente,omitempty" dynamodbav:"nombreCliente,omitempty"`
 	MeetingMail               string    `json:"emailCliente,omitempty" dynamodbav:"emailCliente,omitempty"`
 	MeetingDate               string    `json:"fechaSugerida,omitempty" dynamodbav:"fechaSugerida,omitempty"`
@@ -98,7 +100,10 @@ type AgentCollectedData struct {
 	MeetingContactConfirmedAt time.Time `json:"-" dynamodbav:"meetingContactConfirmedAt,omitempty"`
 }
 
-const meetingContactValidity = 2 * time.Hour
+const (
+	meetingContactValidity = 2 * time.Hour
+	quoteOriginValidity    = 30 * 24 * time.Hour
+)
 
 // AgentDerivation describes a persistent handoff requested by the model.
 type AgentDerivation struct {
@@ -141,7 +146,17 @@ func (t *AgentToolbox) execute(ctx context.Context, phone, messageID, name strin
 		state.mergeMeeting(args, state.currentCustomerTurn, t.now().UTC())
 		return map[string]any{"guardado": true, "datos": state.collected}, false, nil
 	case "buscar_presupuestos":
-		state.mergeQuote(args)
+		now := time.Now().UTC()
+		if t.now != nil {
+			now = t.now().UTC()
+		}
+		ambiguousDestination := hasAmbiguousQuoteDestination(state.currentCustomerTurn)
+		if !state.confirmQuoteOrigin(args, now) {
+			return map[string]any{"encontrados": false, "codigo": "QUOTE_CONTEXT_REQUIRED", "origenRequerido": true, "destinoAmbiguo": ambiguousDestination}, false, nil
+		}
+		if ambiguousDestination {
+			return map[string]any{"encontrados": false, "codigo": "QUOTE_CONTEXT_REQUIRED", "origenRequerido": false, "destinoAmbiguo": true}, false, nil
+		}
 		return t.sendBudgets(ctx, phone, messageID, stringArg(args, "destino"), stringArg(args, "codigoRegion"), stringArg(args, "ciudad"), state)
 	case "enviar_certificado_sernatur":
 		result, err := t.sendCertificate(ctx, phone, messageID, "explicito")
@@ -273,10 +288,36 @@ func (s *agentExecutionState) hasConfirmedMeetingContact(args map[string]any, no
 		s.collected.MeetingMail == strings.ToLower(stringArg(args, "emailCliente"))
 }
 
-func (s *agentExecutionState) mergeQuote(args map[string]any) {
+func (s *agentExecutionState) mergeQuote(args map[string]any, now time.Time) {
 	mergeCollectedString(&s.collected.Destination, normalizeSegment(stringArg(args, "destino")), &s.collectedDirty)
 	mergeCollectedString(&s.collected.Region, normalizeSegment(stringArg(args, "codigoRegion")), &s.collectedDirty)
 	mergeCollectedString(&s.collected.City, normalizeSegment(stringArg(args, "ciudad")), &s.collectedDirty)
+	s.collected.QuoteOriginConfirmedAt = now
+	s.collectedDirty = true
+}
+
+func (s *agentExecutionState) confirmQuoteOrigin(args map[string]any, now time.Time) bool {
+	destination := normalizeSegment(stringArg(args, "destino"))
+	if destination == "camboriu" || destination == "brasil" {
+		args["codigoRegion"] = "brasil"
+		args["ciudad"] = ""
+		s.mergeQuote(args, now)
+		return true
+	}
+	if region, city, confirmed := quoteOriginFromCustomer(s.currentCustomerTurn, stringArg(args, "ciudad")); confirmed {
+		args["codigoRegion"] = region
+		args["ciudad"] = city
+		s.mergeQuote(args, now)
+		return true
+	}
+	confirmedAt := s.collected.QuoteOriginConfirmedAt
+	if confirmedAt.IsZero() || now.Before(confirmedAt) || now.Sub(confirmedAt) > quoteOriginValidity || s.collected.Region == "" {
+		return false
+	}
+	args["codigoRegion"] = s.collected.Region
+	args["ciudad"] = s.collected.City
+	s.mergeQuote(args, confirmedAt)
+	return true
 }
 
 func (s *agentExecutionState) clearMeeting() {
@@ -322,6 +363,83 @@ var budgetRegionByCity = map[string]string{
 	"osorno": "x", "puerto_montt": "x", "castro": "x", "ancud": "x", "puerto_varas": "x", "frutillar": "x", "fresia": "x",
 	"coyhaique": "xi", "puerto_aysen": "xi", "aysen": "xi", "chile_chico": "xi", "cochrane": "xi", "puerto_cisnes": "xi", "cisnes": "xi", "lago_verde": "xi", "tortel": "xi", "caleta_tortel": "xi", "rio_ibanez": "xi",
 	"puerto_natales": "xii", "punta_arenas": "xii", "santiago": "rm", "maipu": "rm", "puente_alto": "rm", "nunoa": "rm", "las_condes": "rm", "providencia": "rm", "vitacura": "rm", "la_florida": "rm", "penalolen": "rm", "huechuraba": "rm", "recoleta": "rm", "independencia": "rm", "estacion_central": "rm", "cerrillos": "rm", "pudahuel": "rm", "quilicura": "rm", "colina": "rm", "lampa": "rm", "melipilla": "rm", "talagante": "rm", "san_bernardo": "rm", "la_pintana": "rm", "el_bosque": "rm", "la_granja": "rm", "san_miguel": "rm",
+}
+
+var quoteEvidenceCleanupPattern = regexp.MustCompile(`[^a-z0-9_]+`)
+
+var quoteRegionEvidence = []struct {
+	region  string
+	aliases []string
+}{
+	{region: "i", aliases: []string{"region_i", "primera_region", "tarapaca"}},
+	{region: "ii", aliases: []string{"region_ii", "segunda_region", "antofagasta"}},
+	{region: "iii", aliases: []string{"region_iii", "tercera_region", "atacama"}},
+	{region: "iv", aliases: []string{"region_iv", "cuarta_region", "coquimbo"}},
+	{region: "v", aliases: []string{"region_v", "quinta_region", "valparaiso"}},
+	{region: "vi", aliases: []string{"region_vi", "sexta_region", "ohiggins", "o_higgins"}},
+	{region: "vii", aliases: []string{"region_vii", "septima_region", "maule"}},
+	{region: "viii", aliases: []string{"region_viii", "octava_region", "biobio", "bio_bio"}},
+	{region: "ix", aliases: []string{"region_ix", "novena_region", "araucania"}},
+	{region: "x", aliases: []string{"region_x", "decima_region", "los_lagos"}},
+	{region: "xi", aliases: []string{"region_xi", "undecima_region", "aysen"}},
+	{region: "xii", aliases: []string{"region_xii", "duodecima_region", "magallanes"}},
+	{region: "xiv", aliases: []string{"region_xiv", "region_de_los_rios", "los_rios"}},
+	{region: "xv", aliases: []string{"region_xv", "arica_y_parinacota"}},
+	{region: "xvi", aliases: []string{"region_xvi", "nuble"}},
+	{region: "rm", aliases: []string{"region_metropolitana", "metropolitana", "region_rm"}},
+}
+
+func quoteOriginFromCustomer(message, requestedCity string) (string, string, bool) {
+	text := normalizeQuoteEvidence(message)
+	city := normalizeSegment(requestedCity)
+	if city != "" && containsQuoteEvidence(text, city) {
+		region := budgetRegionByCity[city]
+		if region == "" {
+			region = "unknown"
+		}
+		return region, city, true
+	}
+	bestCity := ""
+	for candidate := range budgetRegionByCity {
+		if len(candidate) > len(bestCity) && containsQuoteEvidence(text, candidate) {
+			bestCity = candidate
+		}
+	}
+	if bestCity != "" {
+		return budgetRegionByCity[bestCity], bestCity, true
+	}
+	for _, entry := range quoteRegionEvidence {
+		for _, alias := range entry.aliases {
+			if containsQuoteEvidence(text, alias) {
+				return entry.region, "", true
+			}
+		}
+	}
+	return "", "", false
+}
+
+func normalizeQuoteEvidence(value string) string {
+	value = quoteEvidenceCleanupPattern.ReplaceAllString(normalizeSegment(value), "_")
+	return strings.Trim(value, "_")
+}
+
+func containsQuoteEvidence(text, phrase string) bool {
+	return strings.Contains("_"+text+"_", "_"+normalizeQuoteEvidence(phrase)+"_")
+}
+
+func hasAmbiguousQuoteDestination(message string) bool {
+	text := normalizeQuoteEvidence(message)
+	if !containsQuoteEvidence(text, "o") {
+		return false
+	}
+	destinations := []string{"bariloche", "camboriu", "brasil", "sur_de_chile", "chiloe", "pucon", "valdivia", "puerto_varas"}
+	seen := make(map[string]struct{})
+	for _, destination := range destinations {
+		if containsQuoteEvidence(text, destination) {
+			seen[destination] = struct{}{}
+		}
+	}
+	return len(seen) > 1
 }
 
 func fileContainsDestination(key, destination string) bool {
