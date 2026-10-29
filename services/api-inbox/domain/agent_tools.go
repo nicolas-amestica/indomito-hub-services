@@ -859,7 +859,7 @@ func (t *AgentToolbox) createMeeting(ctx context.Context, phone string, args map
 		"start": map[string]string{"dateTime": date + "T" + clockValue + ":00", "timeZone": t.meeting.Timezone},
 		"end":   map[string]string{"dateTime": t.endDateTime(date, clockValue), "timeZone": t.meeting.Timezone}, "attendees": attendees,
 		"reminders":          map[string]any{"useDefault": false, "overrides": []map[string]any{{"method": "popup", "minutes": 60}, {"method": "popup", "minutes": 15}}},
-		"extendedProperties": map[string]any{"private": map[string]string{"phoneNumber": strings.TrimPrefix(phone, "+"), "eventCode": code}, "shared": map[string]string{"createdBy": "indomito-inbox-agent", "defaultHostSk": t.meeting.DefaultHostSK, "defaultHostName": t.meeting.DefaultHostName}},
+		"extendedProperties": map[string]any{"private": map[string]string{"phoneNumber": strings.TrimPrefix(phone, "+"), "eventCode": code, "agent": "true"}, "shared": map[string]string{"createdBy": "indomito-inbox-agent", "defaultHostSk": t.meeting.DefaultHostSK, "defaultHostName": t.meeting.DefaultHostName}},
 		"conferenceData":     map[string]any{"createRequest": map[string]any{"requestId": code + "-" + strconv.FormatInt(t.now().UnixNano(), 10), "conferenceSolutionKey": map[string]string{"type": "hangoutsMeet"}}},
 	}
 	var event calendarEvent

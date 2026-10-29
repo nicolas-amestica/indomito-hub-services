@@ -42,6 +42,20 @@ func TestAllDayEventHasCalendarDate(t *testing.T) {
 	}
 }
 
+func TestToViewRecognizesHistoricalInboxAgentMeeting(t *testing.T) {
+	var event calendarEvent
+	event.ExtendedProperties.Private = map[string]string{"phoneNumber": "56911111111"}
+	event.ExtendedProperties.Shared = map[string]string{"createdBy": "indomito-inbox-agent"}
+
+	view := toView(event)
+	if agent, ok := view["agent"].(bool); !ok || !agent {
+		t.Fatalf("agent = %v, want true", view["agent"])
+	}
+	if phone := view["phoneNumber"]; phone != "56911111111" {
+		t.Fatalf("phoneNumber = %v, want 56911111111", phone)
+	}
+}
+
 func TestSantiagoTimezoneIsAvailable(t *testing.T) {
 	loc := santiago()
 	if loc == time.UTC {

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -143,6 +144,21 @@ func TestCreateMeetingAcceptsContactExplicitInLatestMessage(t *testing.T) {
 			return jsonResponse(http.StatusOK, `{"access_token":"token"}`), nil
 		case "www.googleapis.com":
 			if request.Method == http.MethodPost {
+				var body struct {
+					ExtendedProperties struct {
+						Private map[string]string `json:"private"`
+						Shared  map[string]string `json:"shared"`
+					} `json:"extendedProperties"`
+				}
+				if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+					t.Fatal(err)
+				}
+				if body.ExtendedProperties.Private["agent"] != "true" || body.ExtendedProperties.Private["phoneNumber"] != "56959139687" {
+					t.Fatalf("unexpected private meeting metadata %#v", body.ExtendedProperties.Private)
+				}
+				if body.ExtendedProperties.Shared["createdBy"] != "indomito-inbox-agent" {
+					t.Fatalf("unexpected shared meeting metadata %#v", body.ExtendedProperties.Shared)
+				}
 				return jsonResponse(http.StatusOK, `{"id":"event-1","status":"confirmed","hangoutLink":"https://meet.google.com/new-link"}`), nil
 			}
 			if strings.HasSuffix(request.URL.Path, "/events/event-1") {
