@@ -50,6 +50,17 @@ type TaxDocumentRequest struct {
 	Status          string             `json:"status" dynamodbav:"status"`
 	ManualIssuance  *ManualTaxIssuance `json:"manualIssuance,omitempty" dynamodbav:"manualIssuance,omitempty"`
 	SIIIssuance     *SIIIssuance       `json:"siiIssuance,omitempty" dynamodbav:"siiIssuance,omitempty"`
+	Items           []TaxDocumentItem  `json:"items,omitempty" dynamodbav:"items,omitempty"`
+	Reference       string             `json:"reference,omitempty" dynamodbav:"reference,omitempty"`
+	CustomerRUT     string             `json:"customerRut,omitempty" dynamodbav:"customerRut,omitempty"`
+}
+
+type TaxDocumentItem struct {
+	Description string `json:"description" dynamodbav:"description"`
+	Quantity    int64  `json:"quantity" dynamodbav:"quantity"`
+	UnitPrice   int64  `json:"unitPrice" dynamodbav:"unitPrice"`
+	Exempt      bool   `json:"exempt" dynamodbav:"exempt"`
+	Unit        string `json:"unit,omitempty" dynamodbav:"unit,omitempty"`
 }
 
 // SIIIssuance conserva el folio reservado y el seguimiento del envio oficial.
@@ -81,6 +92,14 @@ type ManualTaxIssuanceRequest struct {
 	PDFBase64 string `json:"pdfBase64"`
 }
 
+type CreateTaxDocumentRequest struct {
+	CommandID   string            `json:"commandId"`
+	IssueDate   string            `json:"issueDate"`
+	CustomerRUT string            `json:"customerRut"`
+	Reference   string            `json:"reference"`
+	Items       []TaxDocumentItem `json:"items"`
+}
+
 type TaxDocumentStorage interface {
 	PutObject(context.Context, *s3.PutObjectInput, ...func(*s3.Options)) (*s3.PutObjectOutput, error)
 	HeadObject(context.Context, *s3.HeadObjectInput, ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
@@ -96,6 +115,7 @@ type TaxDocumentsApp struct {
 	Signer   TaxDocumentSigner
 	Bucket   string
 	Now      func() time.Time
+	IssueNow func(context.Context, string) error
 }
 
 func newManualSalesReceiptRequest(receiptID string, event domain.Event) TaxDocumentRequest {
@@ -108,6 +128,9 @@ func (a TaxDocumentsApp) Handle(ctx context.Context, req events.APIGatewayV2HTTP
 		return *denied, nil
 	}
 	requestID := req.PathParameters["requestId"]
+	if requestID == "" && req.RequestContext.HTTP.Method == "POST" {
+		return a.create(ctx, req, actor)
+	}
 	if requestID == "" && req.RequestContext.HTTP.Method == "GET" {
 		return a.list(ctx, req)
 	}
@@ -117,10 +140,73 @@ func (a TaxDocumentsApp) Handle(ctx context.Context, req events.APIGatewayV2HTTP
 	if req.PathParameters["action"] == "descarga" && req.RequestContext.HTTP.Method == "GET" {
 		return a.download(ctx, req, requestID)
 	}
+	if req.PathParameters["action"] == "emision" && req.RequestContext.HTTP.Method == "POST" {
+		if a.IssueNow == nil {
+			return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
+		}
+		if err := a.IssueNow(ctx, requestID); err != nil {
+			return adminFailure(req, 409, "PAYMENT_STATE_CONFLICT")
+		}
+		row, err := a.Accounts.read(ctx, "TAX_REQUEST#"+requestID, "META")
+		if err != nil || row.TaxRequest == nil {
+			return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
+		}
+		return lambdautil.SuccessResponseWithHeaders(200, row.TaxRequest, map[string]string{"cache-control": "no-store"})
+	}
 	if req.RequestContext.HTTP.Method != "POST" {
 		return adminFailure(req, 405, "METHOD_NOT_ALLOWED")
 	}
 	return a.recordManualIssuance(ctx, req, requestID, actor)
+}
+
+func (a TaxDocumentsApp) create(ctx context.Context, req events.APIGatewayV2HTTPRequest, actor string) (events.APIGatewayV2HTTPResponse, error) {
+	var body CreateTaxDocumentRequest
+	if a.Now == nil || decodeAdmin(req, &body) != nil || !validPortalID(body.CommandID) || len(body.Items) == 0 || len(body.Items) > 20 {
+		return adminFailure(req, 400, "INVALID_REQUEST")
+	}
+	issueDate, err := time.Parse(time.DateOnly, body.IssueDate)
+	if err != nil || issueDate.After(a.Now().UTC().Add(24*time.Hour)) || len(strings.TrimSpace(body.Reference)) > 90 || len(strings.TrimSpace(body.CustomerRUT)) > 12 {
+		return adminFailure(req, 400, "INVALID_REQUEST")
+	}
+	var total int64
+	for index := range body.Items {
+		item := &body.Items[index]
+		item.Description = strings.TrimSpace(item.Description)
+		item.Unit = strings.TrimSpace(item.Unit)
+		if item.Description == "" || len(item.Description) > 80 || item.Quantity <= 0 || item.Quantity > 100000 || item.UnitPrice <= 0 || item.UnitPrice > 100000000 || len(item.Unit) > 4 {
+			return adminFailure(req, 400, "INVALID_REQUEST")
+		}
+		line := item.Quantity * item.UnitPrice
+		if line <= 0 || total > 999999999-line {
+			return adminFailure(req, 400, "INVALID_REQUEST")
+		}
+		total += line
+	}
+	requestID := body.CommandID
+	if prior, readErr := a.Accounts.read(ctx, "COMMAND#"+requestID, "META"); readErr == nil && prior.TaxRequest != nil {
+		return lambdautil.SuccessResponseWithHeaders(200, prior.TaxRequest, map[string]string{"cache-control": "no-store"})
+	}
+	now := a.Now().UTC()
+	tax := TaxDocumentRequest{SchemaVersion: 3, RequestID: requestID, SourceEventID: requestID, Currency: "CLP", GrossAmount: total, EffectiveDate: issueDate.Format(time.DateOnly), RequestedAt: now, DocumentKind: "BOLETA", DocumentSubtype: manualSalesReceiptKind, IssuanceMode: "SII_DIRECT", Status: taxStatusReady, Items: body.Items, Reference: strings.TrimSpace(body.Reference), CustomerRUT: strings.TrimSpace(body.CustomerRUT)}
+	canonical, err := a.Accounts.put(record{PK: "TAX_REQUEST#" + requestID, SK: "META", TaxRequest: &tax, Status: tax.Status}, "attribute_not_exists(pk)", nil)
+	if err != nil {
+		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
+	}
+	queue, err := a.Accounts.put(record{PK: "TAX_QUEUE#PENDING", SK: now.Format(time.RFC3339Nano) + "#" + requestID, TaxRequest: &tax, Status: tax.Status}, "attribute_not_exists(pk)", nil)
+	if err != nil {
+		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
+	}
+	command, err := a.Accounts.put(record{PK: "COMMAND#" + requestID, SK: "META", TaxRequest: &tax, Status: tax.Status, RequestedBy: actor}, "attribute_not_exists(pk)", nil)
+	if err != nil {
+		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
+	}
+	if _, err = a.Accounts.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{canonical, queue, command}}); err != nil {
+		if saved, readErr := a.Accounts.read(ctx, "COMMAND#"+requestID, "META"); readErr == nil && saved.TaxRequest != nil {
+			return lambdautil.SuccessResponseWithHeaders(200, saved.TaxRequest, map[string]string{"cache-control": "no-store"})
+		}
+		return adminFailure(req, 409, "PAYMENT_STATE_CONFLICT")
+	}
+	return lambdautil.SuccessResponseWithHeaders(202, tax, map[string]string{"cache-control": "no-store"})
 }
 
 func (a TaxDocumentsApp) list(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {

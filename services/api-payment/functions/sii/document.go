@@ -24,6 +24,16 @@ type Sale struct {
 	IssueDate   time.Time
 	CustomerRUT string
 	Description string
+	Items       []SaleItem
+	Reference   string
+}
+
+type SaleItem struct {
+	Description string
+	Quantity    int64
+	UnitPrice   int64
+	Exempt      bool
+	Unit        string
 }
 
 type Document struct {
@@ -34,7 +44,29 @@ type Document struct {
 }
 
 func BuildDocument(credentials Credentials, sale Sale, now time.Time) (Document, error) {
-	if sale.RequestID == "" || sale.Folio < credentials.FolioFrom || sale.Folio > credentials.FolioTo || sale.Amount <= 0 || sale.IssueDate.IsZero() || strings.TrimSpace(sale.Description) == "" || now.IsZero() {
+	if sale.RequestID == "" || sale.Folio < credentials.FolioFrom || sale.Folio > credentials.FolioTo || sale.Amount <= 0 || sale.IssueDate.IsZero() || now.IsZero() {
+		return Document{}, ErrInvalidConfiguration
+	}
+	items := sale.Items
+	if len(items) == 0 {
+		items = []SaleItem{{Description: sale.Description, Quantity: 1, UnitPrice: sale.Amount}}
+	}
+	var netAmount, vatAmount, exemptAmount, total int64
+	for _, item := range items {
+		if strings.TrimSpace(item.Description) == "" || item.Quantity <= 0 || item.UnitPrice <= 0 {
+			return Document{}, ErrInvalidConfiguration
+		}
+		lineTotal := item.Quantity * item.UnitPrice
+		total += lineTotal
+		if item.Exempt {
+			exemptAmount += lineTotal
+		} else {
+			lineNet := (lineTotal*100 + 59) / 119
+			netAmount += lineNet
+			vatAmount += lineTotal - lineNet
+		}
+	}
+	if total != sale.Amount {
 		return Document{}, ErrInvalidConfiguration
 	}
 	documentID := "B39F" + strconv.FormatInt(sale.Folio, 10)
@@ -49,7 +81,7 @@ func BuildDocument(credentials Credentials, sale Sale, now time.Time) (Document,
 	add(idDoc, "TipoDTE", "39")
 	add(idDoc, "Folio", strconv.FormatInt(sale.Folio, 10))
 	add(idDoc, "FchEmis", sale.IssueDate.Format(time.DateOnly))
-	add(idDoc, "IndServicio", "3")
+	add(idDoc, "IndServicio", "1")
 	add(idDoc, "MedioPago", "3")
 	emitter := header.CreateElement("Emisor")
 	add(emitter, "RUTEmisor", credentials.IssuerRUT)
@@ -62,16 +94,34 @@ func BuildDocument(credentials Credentials, sale Sale, now time.Time) (Document,
 	add(receiver, "RUTRecep", receiverRUT(sale.CustomerRUT))
 	add(receiver, "RznSocRecep", "CONSUMIDOR FINAL")
 	totals := header.CreateElement("Totales")
-	netAmount := (sale.Amount*100 + 59) / 119
-	add(totals, "MntNeto", strconv.FormatInt(netAmount, 10))
-	add(totals, "IVA", strconv.FormatInt(sale.Amount-netAmount, 10))
+	if netAmount > 0 {
+		add(totals, "MntNeto", strconv.FormatInt(netAmount, 10))
+		add(totals, "IVA", strconv.FormatInt(vatAmount, 10))
+	}
+	if exemptAmount > 0 {
+		add(totals, "MntExe", strconv.FormatInt(exemptAmount, 10))
+	}
 	add(totals, "MntTotal", strconv.FormatInt(sale.Amount, 10))
-	detail := document.CreateElement("Detalle")
-	add(detail, "NroLinDet", "1")
-	add(detail, "NmbItem", strings.TrimSpace(sale.Description))
-	add(detail, "QtyItem", "1")
-	add(detail, "PrcItem", strconv.FormatInt(sale.Amount, 10))
-	add(detail, "MontoItem", strconv.FormatInt(sale.Amount, 10))
+	for index, item := range items {
+		detail := document.CreateElement("Detalle")
+		add(detail, "NroLinDet", strconv.Itoa(index+1))
+		if item.Exempt {
+			add(detail, "IndExe", "1")
+		}
+		add(detail, "NmbItem", strings.TrimSpace(item.Description))
+		add(detail, "QtyItem", strconv.FormatInt(item.Quantity, 10))
+		if strings.TrimSpace(item.Unit) != "" {
+			add(detail, "UnmdItem", strings.TrimSpace(item.Unit))
+		}
+		add(detail, "PrcItem", strconv.FormatInt(item.UnitPrice, 10))
+		add(detail, "MontoItem", strconv.FormatInt(item.Quantity*item.UnitPrice, 10))
+	}
+	if strings.TrimSpace(sale.Reference) != "" {
+		reference := document.CreateElement("Referencia")
+		add(reference, "NroLinRef", "1")
+		add(reference, "CodRef", "SET")
+		add(reference, "RazonRef", strings.TrimSpace(sale.Reference))
+	}
 
 	timestamp := now.UTC().Format("2006-01-02T15:04:05")
 	dd := etree.NewElement("DD")
@@ -82,7 +132,7 @@ func BuildDocument(credentials Credentials, sale Sale, now time.Time) (Document,
 	add(dd, "RR", receiverRUT(sale.CustomerRUT))
 	add(dd, "RSR", "CONSUMIDOR FINAL")
 	add(dd, "MNT", strconv.FormatInt(sale.Amount, 10))
-	add(dd, "IT1", truncate(strings.TrimSpace(sale.Description), 40))
+	add(dd, "IT1", truncate(strings.TrimSpace(items[0].Description), 40))
 	dd.AddChild(credentials.CAF.Copy())
 	add(dd, "TSTED", timestamp)
 	ddBytes, err := elementBytes(dd)

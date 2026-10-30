@@ -24,7 +24,7 @@ func TestBuildDocumentUsesReservedFolioAndExactReconciledAmount(t *testing.T) {
 	if err = parsed.ReadFromBytes(document.XML); err != nil {
 		t.Fatalf("parse result: %v", err)
 	}
-	want := map[string]string{"//TipoDTE": "39", "//Folio": "7", "//MedioPago": "3", "//RUTRecep": "66666666-6", "//MntNeto": "241597", "//IVA": "45903", "//MntTotal": "287500", "//MontoItem": "287500", "//DD/MNT": "287500"}
+	want := map[string]string{"//TipoDTE": "39", "//Folio": "7", "//IndServicio": "1", "//MedioPago": "3", "//RUTRecep": "66666666-6", "//MntNeto": "241597", "//IVA": "45903", "//MntTotal": "287500", "//MontoItem": "287500", "//DD/MNT": "287500"}
 	for path, expected := range want {
 		element := parsed.FindElement(path)
 		if element == nil || element.Text() != expected {
@@ -33,6 +33,35 @@ func TestBuildDocumentUsesReservedFolioAndExactReconciledAmount(t *testing.T) {
 	}
 	if parsed.FindElement("//TED/FRMT") == nil || parsed.FindElement("//Signature") == nil || strings.Contains(string(document.XML), "certificatePassword") {
 		t.Fatal("missing tax signatures or leaked configuration")
+	}
+}
+
+func TestBuildDocumentSupportsCertificationSetItems(t *testing.T) {
+	now := time.Date(2026, 10, 29, 21, 30, 0, 0, time.UTC)
+	document, err := BuildDocument(testCredentials(t, now), Sale{
+		RequestID: "01K8R8TV0J6V3N3V5W9Z6B8A7D", Folio: 8, Amount: 14720,
+		IssueDate: now, Reference: "CASO-4",
+		Items: []SaleItem{
+			{Description: "item afecto 1", Quantity: 8, UnitPrice: 1590},
+			{Description: "item exento 2", Quantity: 2, UnitPrice: 1000, Exempt: true},
+		},
+	}, now)
+	if err != nil {
+		t.Fatalf("build certification document: %v", err)
+	}
+	parsed := etree.NewDocument()
+	if err = parsed.ReadFromBytes(document.XML); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"//MntNeto": "10689", "//IVA": "2031", "//MntExe": "2000", "//MntTotal": "14720", "//Referencia/CodRef": "SET", "//Referencia/RazonRef": "CASO-4"}
+	for path, expected := range want {
+		if element := parsed.FindElement(path); element == nil || element.Text() != expected {
+			t.Fatalf("%s = %v, want %s", path, element, expected)
+		}
+	}
+	details := parsed.FindElements("//Detalle")
+	if len(details) != 2 || details[1].FindElement("IndExe") == nil {
+		t.Fatalf("unexpected details: %d", len(details))
 	}
 }
 

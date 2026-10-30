@@ -8,6 +8,8 @@ SERVICES=(
   api-program
   api-payment
   api-meet
+  api-inbox
+  payment-monitoring
   payment-receipts
 )
 

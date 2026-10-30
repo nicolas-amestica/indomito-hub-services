@@ -38,14 +38,14 @@ func (a TaxDocumentWorkerApp) Handle(ctx context.Context, event events.DynamoDBE
 			continue
 		}
 		requestID, idOK := streamTaxRequestID(change.Change.NewImage)
-		if !idOK || a.process(ctx, requestID) != nil {
+		if !idOK || a.Process(ctx, requestID) != nil {
 			response.BatchItemFailures = append(response.BatchItemFailures, events.DynamoDBBatchItemFailure{ItemIdentifier: change.EventID})
 		}
 	}
 	return response
 }
 
-func (a TaxDocumentWorkerApp) process(ctx context.Context, requestID string) error {
+func (a TaxDocumentWorkerApp) Process(ctx context.Context, requestID string) error {
 	now := a.Now().UTC()
 	credentials, err := a.Config.Load(ctx, now)
 	if err != nil {
@@ -106,10 +106,10 @@ func (a TaxDocumentWorkerApp) reserveFolio(ctx context.Context, requestID string
 	}
 	_, err = a.Accounts.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{canonical, folio}})
 	if err != nil {
-		if saved, readErr := a.Accounts.read(ctx, "TAX_REQUEST#"+requestID, "META"); readErr == nil && saved.TaxRequest != nil && saved.TaxRequest.SIIIssuance != nil {
+		if saved, readErr := a.Accounts.read(ctx, "TAX_REQUEST#"+requestID, "META"); readErr == nil && saved.TaxRequest != nil && saved.TaxRequest.Status == taxStatusSubmitted {
 			return *saved.TaxRequest, nil
 		}
-		return TaxDocumentRequest{}, err
+		return TaxDocumentRequest{}, fmt.Errorf("tax issuance already in progress: %w", err)
 	}
 	return request, nil
 }
@@ -151,7 +151,15 @@ func (d directSIIssuer) Issue(ctx context.Context, credentials sii.Credentials, 
 	if err != nil {
 		return sii.Submission{}, err
 	}
-	document, err := sii.BuildDocument(credentials, sii.Sale{RequestID: request.RequestID, Folio: folio, Amount: request.GrossAmount, IssueDate: issuedAt, Description: "Cuota de gira de estudios"}, now)
+	items := make([]sii.SaleItem, 0, len(request.Items))
+	for _, item := range request.Items {
+		items = append(items, sii.SaleItem{Description: item.Description, Quantity: item.Quantity, UnitPrice: item.UnitPrice, Exempt: item.Exempt, Unit: item.Unit})
+	}
+	description := "Cuota de gira de estudios"
+	if len(items) > 0 {
+		description = items[0].Description
+	}
+	document, err := sii.BuildDocument(credentials, sii.Sale{RequestID: request.RequestID, Folio: folio, Amount: request.GrossAmount, IssueDate: issuedAt, CustomerRUT: request.CustomerRUT, Description: description, Items: items, Reference: request.Reference}, now)
 	if err != nil {
 		return sii.Submission{}, err
 	}
