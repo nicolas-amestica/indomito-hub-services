@@ -23,6 +23,7 @@
     {"name":"fn-listar-solicitudes-tributarias-v1","entrypoint":"./cmd/fn-listar-solicitudes-tributarias-v1"},
     {"name":"fn-registrar-boleta-manual-v1","entrypoint":"./cmd/fn-registrar-boleta-manual-v1"},
     {"name":"fn-descargar-boleta-manual-v1","entrypoint":"./cmd/fn-descargar-boleta-manual-v1"},
+    {"name":"fn-emitir-boleta-electronica-v1","entrypoint":"./cmd/fn-emitir-boleta-electronica-v1"},
     {"name":"fn-obtener-cuenta-portal-v1","entrypoint":"./cmd/fn-obtener-cuenta-portal-v1"},
     {"name":"fn-reenviar-comprobante-portal-v1","entrypoint":"./cmd/fn-reenviar-comprobante-portal-v1"},
     {"name":"fn-reenviar-comprobante-cuenta-v1","entrypoint":"./cmd/fn-reenviar-comprobante-cuenta-v1"},

@@ -21,6 +21,8 @@ type checkoutGatewayFake struct {
 }
 
 func (f *checkoutGatewayFake) DevelopmentBank(context.Context) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.bankCalls++
 	return "demo", f.bankErr
 }

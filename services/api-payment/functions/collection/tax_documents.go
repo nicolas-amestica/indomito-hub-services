@@ -25,6 +25,9 @@ import (
 const (
 	taxStatusPending        = "PENDING_MANUAL_ISSUE"
 	taxStatusManualRecorded = "MANUAL_RECORDED"
+	taxStatusReady          = "READY"
+	taxStatusIssuing        = "ISSUING"
+	taxStatusSubmitted      = "SUBMITTED"
 	manualSalesReceiptKind  = "BOLETA_VENTA_ELECTRONICA"
 	maxManualTaxBodyBytes   = 7 * 1024 * 1024
 )
@@ -46,6 +49,14 @@ type TaxDocumentRequest struct {
 	IssuanceMode    string             `json:"issuanceMode" dynamodbav:"issuanceMode"`
 	Status          string             `json:"status" dynamodbav:"status"`
 	ManualIssuance  *ManualTaxIssuance `json:"manualIssuance,omitempty" dynamodbav:"manualIssuance,omitempty"`
+	SIIIssuance     *SIIIssuance       `json:"siiIssuance,omitempty" dynamodbav:"siiIssuance,omitempty"`
+}
+
+// SIIIssuance conserva el folio reservado y el seguimiento del envio oficial.
+type SIIIssuance struct {
+	Folio       int64      `json:"folio" dynamodbav:"folio"`
+	TrackID     string     `json:"trackId,omitempty" dynamodbav:"trackId,omitempty"`
+	SubmittedAt *time.Time `json:"submittedAt,omitempty" dynamodbav:"submittedAt,omitempty"`
 }
 
 // ManualTaxIssuance registra lo ingresado por un operador, sin afirmar aceptación automática del SII.
@@ -88,7 +99,7 @@ type TaxDocumentsApp struct {
 }
 
 func newManualSalesReceiptRequest(receiptID string, event domain.Event) TaxDocumentRequest {
-	return TaxDocumentRequest{SchemaVersion: 2, RequestID: receiptID, SourceEventID: event.CommandID, ReceiptID: receiptID, AccountID: event.AccountID, TripID: event.TripID, Currency: "CLP", GrossAmount: event.Amount, EffectiveDate: event.EffectiveDate, RequestedAt: event.RecordedAt.UTC(), DocumentKind: "BOLETA", DocumentSubtype: manualSalesReceiptKind, IssuanceMode: "MANUAL_SII", Status: taxStatusPending}
+	return TaxDocumentRequest{SchemaVersion: 2, RequestID: receiptID, SourceEventID: event.CommandID, ReceiptID: receiptID, AccountID: event.AccountID, TripID: event.TripID, Currency: "CLP", GrossAmount: event.Amount, EffectiveDate: event.EffectiveDate, RequestedAt: event.RecordedAt.UTC(), DocumentKind: "BOLETA", DocumentSubtype: manualSalesReceiptKind, IssuanceMode: "SII_DIRECT", Status: taxStatusReady}
 }
 
 func (a TaxDocumentsApp) Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -168,7 +179,7 @@ func (a TaxDocumentsApp) recordManualIssuance(ctx context.Context, req events.AP
 	if err != nil || current.TaxRequest == nil || current.TaxRequest.RequestID != requestID {
 		return domainFailure(req, err)
 	}
-	if current.TaxRequest.Status != taxStatusPending || current.TaxRequest.ManualIssuance != nil {
+	if (current.TaxRequest.Status != taxStatusPending && current.TaxRequest.Status != taxStatusReady) || current.TaxRequest.ManualIssuance != nil || current.TaxRequest.SIIIssuance != nil {
 		return adminFailure(req, 409, "PAYMENT_STATE_CONFLICT")
 	}
 	if issueDate.Format(time.DateOnly) < current.TaxRequest.EffectiveDate {
@@ -188,12 +199,12 @@ func (a TaxDocumentsApp) recordManualIssuance(ctx context.Context, req events.AP
 	issued := *current.TaxRequest
 	issued.Status = taxStatusManualRecorded
 	issued.ManualIssuance = &ManualTaxIssuance{Folio: strings.TrimSpace(body.Folio), IssueDate: issueDate.Format(time.DateOnly), DocumentKey: documentKey, DocumentSHA256: digest, Audit: audit}
-	canonical, err := a.Accounts.put(record{PK: "TAX_REQUEST#" + requestID, SK: "META", TaxRequest: &issued, Status: issued.Status, AccountID: issued.AccountID, TripID: issued.TripID}, "#status = :pending", map[string]types.AttributeValue{":pending": &types.AttributeValueMemberS{Value: taxStatusPending}})
+	canonical, err := a.Accounts.put(record{PK: "TAX_REQUEST#" + requestID, SK: "META", TaxRequest: &issued, Status: issued.Status, AccountID: issued.AccountID, TripID: issued.TripID}, "#status = :pending", map[string]types.AttributeValue{":pending": &types.AttributeValueMemberS{Value: current.TaxRequest.Status}})
 	if err != nil {
 		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
 	}
 	queueSK := current.TaxRequest.RequestedAt.UTC().Format(time.RFC3339Nano) + "#" + requestID
-	deleteQueue := types.TransactWriteItem{Delete: &types.Delete{TableName: &a.Accounts.Table, Key: key("TAX_QUEUE#PENDING", queueSK), ConditionExpression: aws.String("#status = :pending"), ExpressionAttributeNames: map[string]string{"#status": "status"}, ExpressionAttributeValues: map[string]types.AttributeValue{":pending": &types.AttributeValueMemberS{Value: taxStatusPending}}}}
+	deleteQueue := types.TransactWriteItem{Delete: &types.Delete{TableName: &a.Accounts.Table, Key: key("TAX_QUEUE#PENDING", queueSK), ConditionExpression: aws.String("#status = :pending"), ExpressionAttributeNames: map[string]string{"#status": "status"}, ExpressionAttributeValues: map[string]types.AttributeValue{":pending": &types.AttributeValueMemberS{Value: current.TaxRequest.Status}}}}
 	command, err := a.Accounts.put(record{PK: "COMMAND#" + commandID, SK: "META", TaxRequest: &issued, Status: issued.Status}, "attribute_not_exists(pk)", nil)
 	if err != nil {
 		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")

@@ -112,7 +112,7 @@ func TestProviderConfirmationExactlyOnce(t *testing.T) {
 			}
 			taxID := paymentOperationID("khipu:abcdefghijkl")
 			tax, taxErr := s.read(context.Background(), "TAX_REQUEST#"+taxID, "META")
-			if taxErr != nil || tax.TaxRequest == nil || tax.TaxRequest.Status != taxStatusPending || tax.TaxRequest.GrossAmount != 20000 || tax.TaxRequest.SourceEventID != taxID {
+			if taxErr != nil || tax.TaxRequest == nil || tax.TaxRequest.Status != taxStatusReady || tax.TaxRequest.IssuanceMode != "SII_DIRECT" || tax.TaxRequest.GrossAmount != 20000 || tax.TaxRequest.SourceEventID != taxID {
 				t.Fatalf("missing idempotent tax request: %+v %v", tax.TaxRequest, taxErr)
 			}
 			if db.items["TAX_QUEUE#PENDING/"+tax.TaxRequest.RequestedAt.UTC().Format(time.RFC3339Nano)+"#"+taxID] == nil {
