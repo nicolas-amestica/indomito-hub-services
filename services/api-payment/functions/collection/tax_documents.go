@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -145,6 +146,7 @@ func (a TaxDocumentsApp) Handle(ctx context.Context, req events.APIGatewayV2HTTP
 			return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
 		}
 		if err := a.IssueNow(ctx, requestID); err != nil {
+			log.Printf("manual tax document issuance failed: requestId=%s error=%v", requestID, err)
 			return adminFailure(req, 409, "PAYMENT_STATE_CONFLICT")
 		}
 		row, err := a.Accounts.read(ctx, "TAX_REQUEST#"+requestID, "META")

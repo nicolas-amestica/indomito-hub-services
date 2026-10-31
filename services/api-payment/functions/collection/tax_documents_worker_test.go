@@ -55,6 +55,24 @@ func TestTaxDocumentWorkerReservesOneFolioAndPreservesReconciledAmount(t *testin
 	}
 }
 
+func TestTaxDocumentWorkerReservesNextFolioWhenCounterExists(t *testing.T) {
+	service, db := serviceFixture(t)
+	now := time.Date(2026, 10, 30, 22, 0, 0, 0, time.UTC)
+	request := newManualSalesReceiptRequest("01M67QR2H4ASTR6TAZH1CRHFY7", testPaymentEvent(now, 2040))
+	saveLookupRow(t, db, record{PK: "TAX_REQUEST#" + request.RequestID, SK: "META", TaxRequest: &request, Status: request.Status})
+	saveLookupRow(t, db, record{PK: "TAX_QUEUE#PENDING", SK: request.RequestedAt.UTC().Format(time.RFC3339Nano) + "#" + request.RequestID, TaxRequest: &request, Status: request.Status})
+	saveLookupRow(t, db, record{PK: "TAX_FOLIO#39", SK: "META", Count: 1, Status: "RESERVED"})
+	issuer := &taxIssuerFake{}
+	app := TaxDocumentWorkerApp{Accounts: service, Config: taxConfigFake{credentials: sii.Credentials{FolioFrom: 1, FolioTo: 30}}, Issuer: issuer, Now: func() time.Time { return now }}
+
+	if err := app.Process(context.Background(), request.RequestID); err != nil {
+		t.Fatalf("process next folio: %v", err)
+	}
+	if len(issuer.folios) != 1 || issuer.folios[0] != 2 {
+		t.Fatalf("expected folio 2, got %v", issuer.folios)
+	}
+}
+
 func testPaymentEvent(now time.Time, amount int64) domain.Event {
 	return domain.Event{Audit: domain.Audit{CommandID: approvedID, RecordedAt: now}, AccountID: "account", TripID: "trip", Amount: amount, EffectiveDate: now.Format(time.DateOnly)}
 }

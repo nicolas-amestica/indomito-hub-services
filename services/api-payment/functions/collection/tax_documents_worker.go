@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 
@@ -38,7 +39,13 @@ func (a TaxDocumentWorkerApp) Handle(ctx context.Context, event events.DynamoDBE
 			continue
 		}
 		requestID, idOK := streamTaxRequestID(change.Change.NewImage)
-		if !idOK || a.Process(ctx, requestID) != nil {
+		if !idOK {
+			log.Printf("tax document stream record rejected: eventId=%s", change.EventID)
+			response.BatchItemFailures = append(response.BatchItemFailures, events.DynamoDBBatchItemFailure{ItemIdentifier: change.EventID})
+			continue
+		}
+		if err := a.Process(ctx, requestID); err != nil {
+			log.Printf("tax document issuance failed: requestId=%s error=%v", requestID, err)
 			response.BatchItemFailures = append(response.BatchItemFailures, events.DynamoDBBatchItemFailure{ItemIdentifier: change.EventID})
 		}
 	}
@@ -83,10 +90,11 @@ func (a TaxDocumentWorkerApp) reserveFolio(ctx context.Context, requestID string
 	folioState, stateErr := a.Accounts.read(ctx, "TAX_FOLIO#39", "META")
 	nextFolio := credentials.FolioFrom
 	condition := "attribute_not_exists(pk)"
-	values := map[string]types.AttributeValue{}
+	var values map[string]types.AttributeValue
 	if stateErr == nil {
 		nextFolio = folioState.Count + 1
 		condition = "#count = :previous"
+		values = map[string]types.AttributeValue{}
 		values[":previous"] = &types.AttributeValueMemberN{Value: strconv.FormatInt(folioState.Count, 10)}
 	} else if !errors.Is(stateErr, ErrNotFound) {
 		return TaxDocumentRequest{}, stateErr

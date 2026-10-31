@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/beevik/etree"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -28,19 +30,23 @@ func TestClientSubmitsSignedBoletaThroughCertificationFlow(t *testing.T) {
 		}
 		switch step {
 		case 1:
-			if request.Method != http.MethodGet || request.URL.Host != "apicert.sii.cl" {
+			body, readErr := io.ReadAll(request.Body)
+			if readErr != nil || request.Method != http.MethodPost || request.URL.Host != "maullin.sii.cl" || !strings.Contains(string(body), "getSeed") {
 				t.Fatalf("unexpected seed request: %s %s", request.Method, request.URL)
 			}
-			return response("application/xml", `<RESPUESTA><SEMILLA>1234567890</SEMILLA></RESPUESTA>`), nil
+			return response("text/xml", `<Envelope><Body><getSeedResponse><getSeedReturn>&lt;RESPUESTA&gt;&lt;SEMILLA&gt;1234567890&lt;/SEMILLA&gt;&lt;/RESPUESTA&gt;</getSeedReturn></getSeedResponse></Body></Envelope>`), nil
 		case 2:
 			body, readErr := io.ReadAll(request.Body)
-			if readErr != nil || request.Method != http.MethodPost || request.URL.Host != "apicert.sii.cl" || !strings.Contains(string(body), "Signature") {
+			contents := string(body)
+			if readErr != nil || request.Method != http.MethodPost || request.URL.Host != "maullin.sii.cl" ||
+				!strings.Contains(contents, "<ns1:getToken") || !strings.Contains(contents, "&lt;Signature") ||
+				!strings.Contains(contents, "&lt;RSAKeyValue&gt;") || !strings.Contains(contents, "&lt;X509Certificate&gt;") {
 				t.Fatal("invalid token request")
 			}
-			return response("application/xml", `<RESPUESTA><TOKEN>TOKEN-DE-PRUEBA</TOKEN></RESPUESTA>`), nil
+			return response("text/xml", `<Envelope><Body><getTokenResponse><getTokenReturn>&lt;RESPUESTA&gt;&lt;TOKEN&gt;TOKEN-DE-PRUEBA&lt;/TOKEN&gt;&lt;/RESPUESTA&gt;</getTokenReturn></getTokenResponse></Body></Envelope>`), nil
 		case 3:
 			body, readErr := io.ReadAll(request.Body)
-			if readErr != nil || request.URL.Host != "pangal.sii.cl" || request.Header.Get("Cookie") != "TOKEN=TOKEN-DE-PRUEBA" || !strings.Contains(string(body), "EnvioBOLETA") || !strings.Contains(request.Header.Get("Content-Type"), "multipart/form-data") {
+			if readErr != nil || request.URL.Host != "maullin.sii.cl" || request.URL.Path != "/cgi_dte/UPL/DTEUpload" || request.Header.Get("Cookie") != "TOKEN=TOKEN-DE-PRUEBA" || !strings.Contains(string(body), "EnvioBOLETA") || !strings.Contains(request.Header.Get("Content-Type"), "multipart/form-data") {
 				t.Fatal("invalid upload request")
 			}
 			return response("application/json", `{"trackid":123456}`), nil
@@ -67,5 +73,37 @@ func TestClientRejectsSuccessfulHTTPUploadWithoutTrackID(t *testing.T) {
 	_, err := client.upload(context.Background(), credentials, "TOKEN", []byte("invalid"))
 	if err == nil {
 		t.Fatal("expected rejected upload")
+	}
+}
+
+func TestBuildEnvelopeAcceptsLatin1DTE(t *testing.T) {
+	now := time.Date(2026, 10, 30, 18, 0, 0, 0, time.UTC)
+	credentials := testCredentials(t, now)
+	credentials.IssuerActivity = "Actividades de agencias de viaje y operador turístico"
+	document, err := BuildDocument(credentials, Sale{RequestID: "CASO-1", Folio: 1, Amount: 28900, IssueDate: now, Description: "Cuota de gira de estudios"}, now)
+	if err != nil {
+		t.Fatalf("build document: %v", err)
+	}
+	envelope, err := buildEnvelope(credentials, document.XML, now)
+	if err != nil {
+		t.Fatalf("build envelope with Latin-1 DTE: %v", err)
+	}
+	decoded, err := decodeLatin1(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(decoded), `<?xml version="1.0" encoding="ISO-8859-1"?>`) {
+		t.Fatal("envelope XML declaration must be the first node")
+	}
+	parsed := etree.NewDocument()
+	if err = parsed.ReadFromBytes(decoded); err != nil {
+		t.Fatal(err)
+	}
+	children := parsed.Root().ChildElements()
+	if len(children) != 2 || children[0].Tag != "SetDTE" || children[1].Tag != "Signature" || children[0].FindElement("Signature") != nil {
+		t.Fatal("envelope signature must be a sibling of SetDTE")
+	}
+	if parsed.FindElement("//Signature/KeyInfo/KeyValue/RSAKeyValue") == nil {
+		t.Fatal("envelope signature is missing RSAKeyValue")
 	}
 }

@@ -24,7 +24,7 @@ func TestBuildDocumentUsesReservedFolioAndExactReconciledAmount(t *testing.T) {
 	if err = parsed.ReadFromBytes(document.XML); err != nil {
 		t.Fatalf("parse result: %v", err)
 	}
-	want := map[string]string{"//TipoDTE": "39", "//Folio": "7", "//IndServicio": "1", "//MedioPago": "3", "//RUTRecep": "66666666-6", "//MntNeto": "241597", "//IVA": "45903", "//MntTotal": "287500", "//MontoItem": "287500", "//DD/MNT": "287500"}
+	want := map[string]string{"//TipoDTE": "39", "//Folio": "7", "//IndServicio": "3", "//RUTRecep": "66666666-6", "//MntNeto": "241597", "//IVA": "45903", "//MntTotal": "287500", "//MontoItem": "287500", "//DD/MNT": "287500"}
 	for path, expected := range want {
 		element := parsed.FindElement(path)
 		if element == nil || element.Text() != expected {
@@ -33,6 +33,16 @@ func TestBuildDocumentUsesReservedFolioAndExactReconciledAmount(t *testing.T) {
 	}
 	if parsed.FindElement("//TED/FRMT") == nil || parsed.FindElement("//Signature") == nil || strings.Contains(string(document.XML), "certificatePassword") {
 		t.Fatal("missing tax signatures or leaked configuration")
+	}
+	if parsed.FindElement("//Signature/KeyInfo/KeyValue/RSAKeyValue") == nil {
+		t.Fatal("DTE signature is missing RSAKeyValue")
+	}
+	if !strings.HasPrefix(string(document.XML), `<?xml version="1.0" encoding="ISO-8859-1"?>`) {
+		t.Fatal("DTE XML declaration must be the first node")
+	}
+	children := parsed.Root().ChildElements()
+	if len(children) != 2 || children[0].Tag != "Documento" || children[1].Tag != "Signature" || children[0].FindElement("Signature") != nil {
+		t.Fatal("DTE signature must be a sibling of Documento")
 	}
 }
 
@@ -62,6 +72,20 @@ func TestBuildDocumentSupportsCertificationSetItems(t *testing.T) {
 	details := parsed.FindElements("//Detalle")
 	if len(details) != 2 || details[1].FindElement("IndExe") == nil {
 		t.Fatalf("unexpected details: %d", len(details))
+	}
+}
+
+func TestBuildDocumentSupportsLegacySII512BitCAFKey(t *testing.T) {
+	t.Setenv("GODEBUG", "rsa1024min=0")
+	now := time.Date(2026, 10, 29, 21, 30, 0, 0, time.UTC)
+	credentials := testCredentials(t, now)
+	legacyKey, err := rsa.GenerateKey(rand.Reader, 512) // #nosec G401 -- tamaño fijado por el CAF de certificacion del SII.
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials.CAFPrivateKey = legacyKey
+	if _, err = BuildDocument(credentials, Sale{RequestID: "01K8R8TV0J6V3N3V5W9Z6B8A7E", Folio: 9, Amount: 1000, IssueDate: now, Description: "Caso SII"}, now); err != nil {
+		t.Fatalf("legacy SII CAF key was rejected: %v", err)
 	}
 }
 

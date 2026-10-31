@@ -265,6 +265,8 @@ func (s Service) put(r record, condition string, values map[string]types.Attribu
 	p := &types.Put{TableName: &s.Table, Item: item, ConditionExpression: &condition, ExpressionAttributeValues: values}
 	if condition == "#version = :previous" {
 		p.ExpressionAttributeNames = map[string]string{"#version": "version"}
+	} else if condition == "#count = :previous" {
+		p.ExpressionAttributeNames = map[string]string{"#count": "count"}
 	} else if strings.Contains(condition, "#status") {
 		p.ExpressionAttributeNames = map[string]string{"#status": "status"}
 	}

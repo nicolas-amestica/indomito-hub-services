@@ -71,6 +71,7 @@ func BuildDocument(credentials Credentials, sale Sale, now time.Time) (Document,
 	}
 	documentID := "B39F" + strconv.FormatInt(sale.Folio, 10)
 	doc := etree.NewDocument()
+	doc.CreateProcInst("xml", `version="1.0" encoding="ISO-8859-1"`)
 	dte := doc.CreateElement("DTE")
 	dte.CreateAttr("version", "1.0")
 	dte.CreateAttr("xmlns", "http://www.sii.cl/SiiDte")
@@ -81,15 +82,13 @@ func BuildDocument(credentials Credentials, sale Sale, now time.Time) (Document,
 	add(idDoc, "TipoDTE", "39")
 	add(idDoc, "Folio", strconv.FormatInt(sale.Folio, 10))
 	add(idDoc, "FchEmis", sale.IssueDate.Format(time.DateOnly))
-	add(idDoc, "IndServicio", "1")
-	add(idDoc, "MedioPago", "3")
+	add(idDoc, "IndServicio", "3")
 	emitter := header.CreateElement("Emisor")
 	add(emitter, "RUTEmisor", credentials.IssuerRUT)
 	add(emitter, "RznSocEmisor", credentials.IssuerName)
 	add(emitter, "GiroEmisor", credentials.IssuerActivity)
 	add(emitter, "DirOrigen", credentials.IssuerAddress)
 	add(emitter, "CmnaOrigen", credentials.IssuerCommune)
-	add(emitter, "RutProvSW", credentials.IssuerRUT)
 	receiver := header.CreateElement("Receptor")
 	add(receiver, "RUTRecep", receiverRUT(sale.CustomerRUT))
 	add(receiver, "RznSocRecep", "CONSUMIDOR FINAL")
@@ -165,13 +164,14 @@ func BuildDocument(credentials Credentials, sale Sale, now time.Time) (Document,
 	if err = context.SetSignatureMethod(dsig.RSASHA1SignatureMethod); err != nil {
 		return Document{}, err
 	}
-	signed, err := context.SignEnveloped(document)
+	signatureElement, err := context.ConstructSignature(document, false)
 	if err != nil {
 		return Document{}, fmt.Errorf("sign DTE: %w", err)
 	}
-	dte.RemoveChild(document)
-	dte.AddChild(signed)
-	doc.CreateProcInst("xml", `version="1.0" encoding="ISO-8859-1"`)
+	if err = addRSAKeyValue(signatureElement, credentials.SigningKey); err != nil {
+		return Document{}, err
+	}
+	dte.AddChild(signatureElement)
 	doc.Indent(2)
 	contents, err := doc.WriteToBytes()
 	if err != nil {
@@ -186,6 +186,11 @@ func BuildDocument(credentials Credentials, sale Sale, now time.Time) (Document,
 
 func latin1(input []byte) ([]byte, error) {
 	output, _, err := transform.Bytes(charmap.ISO8859_1.NewEncoder(), input)
+	return output, err
+}
+
+func decodeLatin1(input []byte) ([]byte, error) {
+	output, _, err := transform.Bytes(charmap.ISO8859_1.NewDecoder(), input)
 	return output, err
 }
 

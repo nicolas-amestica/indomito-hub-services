@@ -114,6 +114,9 @@ func (d *transactionDB) TransactWriteItems(ctx context.Context, in *dynamodb.Tra
 			}
 			continue
 		}
+		if w.Put != nil && w.Put.ExpressionAttributeValues != nil && len(w.Put.ExpressionAttributeValues) == 0 {
+			return nil, errors.New("DynamoDB rejects empty ExpressionAttributeValues")
+		}
 		old := d.items[itemKey(w.Put.Item)]
 		switch *w.Put.ConditionExpression {
 		case "attribute_exists(pk) OR attribute_not_exists(pk)":
@@ -166,6 +169,10 @@ func (d *transactionDB) TransactWriteItems(ctx context.Context, in *dynamodb.Tra
 			}
 		case "#version = :previous":
 			if old == nil || old["version"].(*types.AttributeValueMemberN).Value != w.Put.ExpressionAttributeValues[":previous"].(*types.AttributeValueMemberN).Value {
+				return nil, &types.TransactionCanceledException{}
+			}
+		case "#count = :previous":
+			if old == nil || old["count"].(*types.AttributeValueMemberN).Value != w.Put.ExpressionAttributeValues[":previous"].(*types.AttributeValueMemberN).Value {
 				return nil, &types.TransactionCanceledException{}
 			}
 		default:
