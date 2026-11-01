@@ -1,0 +1,14 @@
+{
+  "paths": {
+    "/pagos/documentos-tributarios/configuracion": {
+      "get": { "summary": "Obtiene el resumen de configuración tributaria", "responses": { "200": { "description": "Configuración sin secretos" } } },
+      "put": { "summary": "Actualiza metadatos del emisor", "responses": { "200": { "description": "Configuración actualizada" } } }
+    },
+    "/pagos/documentos-tributarios/configuracion/caf": {
+      "post": { "summary": "Carga un CAF DTE tipo 39", "responses": { "200": { "description": "CAF validado y almacenado" } } }
+    },
+    "/pagos/documentos-tributarios/configuracion/pfx": {
+      "post": { "summary": "Carga un certificado PFX", "responses": { "200": { "description": "Certificado validado y almacenado" } } }
+    }
+  }
+}

@@ -41,10 +41,15 @@ const receiptDownload:IamStatement={Effect:'Allow',Action:['s3:GetObject'],Resou
 const taxDocumentRead:IamStatement={Effect:'Allow',Action:['dynamodb:GetItem','dynamodb:Query'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['TAX_REQUEST#*','TAX_QUEUE#PENDING','TAX_QUEUE#RECORDED','TAX_FOLIO#39','COMMAND#*']}}};
 const taxDocumentWrite:IamStatement={Effect:'Allow',Action:['dynamodb:PutItem','dynamodb:DeleteItem','dynamodb:TransactWriteItems'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['TAX_REQUEST#*','TAX_QUEUE#PENDING','TAX_QUEUE#RECORDED','TAX_FOLIO#*','COMMAND#*']}}};
 const siiConfig:IamStatement={Effect:'Allow',Action:['secretsmanager:GetSecretValue'],Resource:{'Fn::Sub':`arn:\${AWS::Partition}:secretsmanager:${REGION}:\${AWS::AccountId}:secret:indomito/${STAGE}/payments/sii/boleta-config-*`}};
+const taxConfigurationActiveSecret:IamStatement={Effect:'Allow',Action:['secretsmanager:GetSecretValue','secretsmanager:PutSecretValue'],Resource:{'Fn::Sub':`arn:\${AWS::Partition}:secretsmanager:${REGION}:\${AWS::AccountId}:secret:indomito/${STAGE}/payments/sii/boleta-config-*`}};
 const taxDocumentObjects:IamStatement={Effect:'Allow',Action:['s3:PutObject','s3:GetObject'],Resource:`${receiptsBucketArn}/tax-documents/manual/*`};
 const endpoints: GoHttpEndpoint[] = [
   ...renditionEndpoints(),
 	{name:'fn-verificar-comprobante-publico-v1',method:'POST',path:'/pagos/comprobantes/verificaciones',public:true,timeout:10,policies:[{Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['RECEIPT#*','ATTEMPT#*','RATE#*']}}},rateWrite,lookupSecret]},
+	{name:'fn-sii-config-get-v1',method:'GET',path:'/pagos/documentos-tributarios/configuracion',public:false,timeout:10,policies:[taxConfigurationActiveSecret,{Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringEquals':{'dynamodb:LeadingKeys':['TAX_FOLIO#39']}}}]},
+	{name:'fn-sii-config-put-v1',method:'PUT',path:'/pagos/documentos-tributarios/configuracion',public:false,timeout:10,policies:[taxConfigurationActiveSecret]},
+	{name:'fn-sii-config-caf-v1',method:'POST',path:'/pagos/documentos-tributarios/configuracion/caf',public:false,timeout:15,policies:[taxConfigurationActiveSecret]},
+	{name:'fn-sii-config-pfx-v1',method:'POST',path:'/pagos/documentos-tributarios/configuracion/pfx',public:false,timeout:15,policies:[taxConfigurationActiveSecret]},
 	{name:'fn-listar-solicitudes-tributarias-v1',method:'GET',path:'/pagos/documentos-tributarios/pendientes',public:false,timeout:10,policies:[taxDocumentRead]},
 	{name:'fn-crear-boleta-electronica-v1',method:'POST',path:'/pagos/documentos-tributarios/emisiones',public:false,timeout:10,policies:[taxDocumentRead,taxDocumentWrite]},
 	{name:'fn-emitir-boleta-pendiente-v1',method:'POST',path:'/pagos/documentos-tributarios/{requestId}/{action}',public:false,timeout:29,env:{GODEBUG:'rsa1024min=0'},policies:[taxDocumentRead,taxDocumentWrite,siiConfig]},
