@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +30,9 @@ const (
 	taxStatusReady          = "READY"
 	taxStatusIssuing        = "ISSUING"
 	taxStatusSubmitted      = "SUBMITTED"
+	taxStatusAccepted       = "ACCEPTED"
+	taxStatusAcceptedRepair = "ACCEPTED_WITH_REPAIRS"
+	taxStatusRejected       = "REJECTED"
 	manualSalesReceiptKind  = "BOLETA_VENTA_ELECTRONICA"
 	maxManualTaxBodyBytes   = 7 * 1024 * 1024
 )
@@ -54,6 +58,8 @@ type TaxDocumentRequest struct {
 	Items           []TaxDocumentItem  `json:"items,omitempty" dynamodbav:"items,omitempty"`
 	Reference       string             `json:"reference,omitempty" dynamodbav:"reference,omitempty"`
 	CustomerRUT     string             `json:"customerRut,omitempty" dynamodbav:"customerRut,omitempty"`
+	ReissuesRequest string             `json:"reissuesRequest,omitempty" dynamodbav:"reissuesRequest,omitempty"`
+	ReissuedBy      string             `json:"reissuedBy,omitempty" dynamodbav:"reissuedBy,omitempty"`
 }
 
 type TaxDocumentItem struct {
@@ -69,6 +75,10 @@ type SIIIssuance struct {
 	Folio       int64      `json:"folio" dynamodbav:"folio"`
 	TrackID     string     `json:"trackId,omitempty" dynamodbav:"trackId,omitempty"`
 	SubmittedAt *time.Time `json:"submittedAt,omitempty" dynamodbav:"submittedAt,omitempty"`
+	ProcessedAt *time.Time `json:"processedAt,omitempty" dynamodbav:"processedAt,omitempty"`
+	Status      string     `json:"status,omitempty" dynamodbav:"status,omitempty"`
+	Detail      string     `json:"detail,omitempty" dynamodbav:"detail,omitempty"`
+	DocumentKey string     `json:"documentKey,omitempty" dynamodbav:"documentKey,omitempty"`
 }
 
 // ManualTaxIssuance registra lo ingresado por un operador, sin afirmar aceptación automática del SII.
@@ -99,6 +109,10 @@ type CreateTaxDocumentRequest struct {
 	CustomerRUT string            `json:"customerRut"`
 	Reference   string            `json:"reference"`
 	Items       []TaxDocumentItem `json:"items"`
+}
+
+type ReissueTaxDocumentRequest struct {
+	CommandID string `json:"commandId"`
 }
 
 type TaxDocumentStorage interface {
@@ -155,10 +169,50 @@ func (a TaxDocumentsApp) Handle(ctx context.Context, req events.APIGatewayV2HTTP
 		}
 		return lambdautil.SuccessResponseWithHeaders(200, row.TaxRequest, map[string]string{"cache-control": "no-store"})
 	}
+	if req.PathParameters["action"] == "reemision" && req.RequestContext.HTTP.Method == "POST" {
+		return a.reissue(ctx, req, requestID, actor)
+	}
 	if req.RequestContext.HTTP.Method != "POST" {
 		return adminFailure(req, 405, "METHOD_NOT_ALLOWED")
 	}
 	return a.recordManualIssuance(ctx, req, requestID, actor)
+}
+
+func (a TaxDocumentsApp) reissue(ctx context.Context, req events.APIGatewayV2HTTPRequest, requestID, actor string) (events.APIGatewayV2HTTPResponse, error) {
+	var body ReissueTaxDocumentRequest
+	if a.Now == nil || decodeAdmin(req, &body) != nil || !validPortalID(body.CommandID) || body.CommandID == requestID {
+		return adminFailure(req, 400, "INVALID_REQUEST")
+	}
+	originalRow, err := a.Accounts.read(ctx, "TAX_REQUEST#"+requestID, "META")
+	if err != nil || originalRow.TaxRequest == nil || originalRow.TaxRequest.Status != taxStatusRejected || len(originalRow.TaxRequest.Items) == 0 {
+		return adminFailure(req, 409, "PAYMENT_STATE_CONFLICT")
+	}
+	if originalRow.TaxRequest.ReissuedBy != "" {
+		if replacement, readErr := a.Accounts.read(ctx, "TAX_REQUEST#"+originalRow.TaxRequest.ReissuedBy, "META"); readErr == nil && replacement.TaxRequest != nil {
+			return lambdautil.SuccessResponseWithHeaders(200, replacement.TaxRequest, map[string]string{"cache-control": "no-store"})
+		}
+		return adminFailure(req, 409, "PAYMENT_STATE_CONFLICT")
+	}
+	now := a.Now().UTC()
+	replacement := *originalRow.TaxRequest
+	replacement.SchemaVersion++
+	replacement.RequestID = body.CommandID
+	replacement.SourceEventID = body.CommandID
+	replacement.RequestedAt = now
+	replacement.Status = taxStatusReady
+	replacement.SIIIssuance = nil
+	replacement.ReissuesRequest = requestID
+	replacement.ReissuedBy = ""
+	original := *originalRow.TaxRequest
+	original.ReissuedBy = replacement.RequestID
+	updateOriginal, _ := a.Accounts.put(record{PK: originalRow.PK, SK: originalRow.SK, TaxRequest: &original, Status: original.Status, AccountID: original.AccountID, TripID: original.TripID}, "#status = :rejected AND attribute_not_exists(taxRequest.reissuedBy)", map[string]types.AttributeValue{":rejected": &types.AttributeValueMemberS{Value: taxStatusRejected}})
+	canonical, _ := a.Accounts.put(record{PK: "TAX_REQUEST#" + replacement.RequestID, SK: "META", TaxRequest: &replacement, Status: replacement.Status, AccountID: replacement.AccountID, TripID: replacement.TripID}, "attribute_not_exists(pk)", nil)
+	queue, _ := a.Accounts.put(record{PK: "TAX_QUEUE#PENDING", SK: now.Format(time.RFC3339Nano) + "#" + replacement.RequestID, TaxRequest: &replacement, Status: replacement.Status, AccountID: replacement.AccountID, TripID: replacement.TripID}, "attribute_not_exists(pk)", nil)
+	command, _ := a.Accounts.put(record{PK: "COMMAND#" + replacement.RequestID, SK: "META", TaxRequest: &replacement, Status: replacement.Status, RequestedBy: actor}, "attribute_not_exists(pk)", nil)
+	if _, err = a.Accounts.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{updateOriginal, canonical, queue, command}}); err != nil {
+		return adminFailure(req, 409, "PAYMENT_STATE_CONFLICT")
+	}
+	return lambdautil.SuccessResponseWithHeaders(202, replacement, map[string]string{"cache-control": "no-store"})
 }
 
 func (a TaxDocumentsApp) create(ctx context.Context, req events.APIGatewayV2HTTPRequest, actor string) (events.APIGatewayV2HTTPResponse, error) {
@@ -361,15 +415,27 @@ func (a TaxDocumentsApp) putTaxPDF(ctx context.Context, key, digest string, pdf 
 
 func (a TaxDocumentsApp) download(ctx context.Context, req events.APIGatewayV2HTTPRequest, requestID string) (events.APIGatewayV2HTTPResponse, error) {
 	row, err := a.Accounts.read(ctx, "TAX_REQUEST#"+requestID, "META")
-	if err != nil || row.TaxRequest == nil || row.TaxRequest.ManualIssuance == nil || a.Signer == nil {
+	if err != nil || row.TaxRequest == nil || a.Signer == nil {
 		return adminFailure(req, 404, "PAYMENT_ACCOUNT_NOT_FOUND")
 	}
-	issuance := row.TaxRequest.ManualIssuance
-	expectedPrefix := "tax-documents/manual/" + requestID + "/"
-	if !strings.HasPrefix(issuance.DocumentKey, expectedPrefix) || !receiptSHA.MatchString(issuance.DocumentSHA256) {
-		return adminFailure(req, 409, "PAYMENT_STATE_CONFLICT")
+	documentKey := ""
+	if row.TaxRequest.ManualIssuance != nil {
+		issuance := row.TaxRequest.ManualIssuance
+		expectedPrefix := "tax-documents/manual/" + requestID + "/"
+		if !strings.HasPrefix(issuance.DocumentKey, expectedPrefix) || !receiptSHA.MatchString(issuance.DocumentSHA256) {
+			return adminFailure(req, 409, "PAYMENT_STATE_CONFLICT")
+		}
+		documentKey = issuance.DocumentKey
+	} else if (row.TaxRequest.Status == taxStatusSubmitted || row.TaxRequest.Status == taxStatusAccepted || row.TaxRequest.Status == taxStatusAcceptedRepair) && row.TaxRequest.SIIIssuance != nil {
+		expected := "tax-documents/39/" + strconv.FormatInt(row.TaxRequest.SIIIssuance.Folio, 10) + ".pdf"
+		if row.TaxRequest.SIIIssuance.DocumentKey != expected {
+			return adminFailure(req, 409, "PAYMENT_STATE_CONFLICT")
+		}
+		documentKey = expected
+	} else {
+		return adminFailure(req, 404, "PAYMENT_ACCOUNT_NOT_FOUND")
 	}
-	url, err := a.Signer.Download(ctx, issuance.DocumentKey)
+	url, err := a.Signer.Download(ctx, documentKey)
 	if err != nil {
 		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
 	}

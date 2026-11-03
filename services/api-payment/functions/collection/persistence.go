@@ -105,6 +105,8 @@ type record struct {
 	Roster               *RosterProjection              `dynamodbav:"roster,omitempty"`
 	Attempt              *collection.Attempt            `dynamodbav:"attempt,omitempty"`
 	ReceiptID            string                         `dynamodbav:"receiptId,omitempty"`
+	TaxRequestID         string                         `dynamodbav:"taxRequestId,omitempty"`
+	TaxFolio             int64                          `dynamodbav:"taxFolio,omitempty"`
 	Status               string                         `dynamodbav:"status,omitempty"`
 	Prepared             int64                          `dynamodbav:"prepared,omitempty"`
 	Applied              int64                          `dynamodbav:"applied,omitempty"`
@@ -120,6 +122,7 @@ type record struct {
 	CodeVersion          int64                          `dynamodbav:"codeVersion,omitempty"`
 	AccessAudit          *collection.Audit              `dynamodbav:"accessAudit,omitempty"`
 	TaxRequest           *TaxDocumentRequest            `dynamodbav:"taxRequest,omitempty"`
+	PublicTaxDocument    *PublicTaxDocument             `dynamodbav:"publicTaxDocument,omitempty"`
 }
 
 type PaymentTerms struct {

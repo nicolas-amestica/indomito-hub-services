@@ -41,9 +41,10 @@ func loadDependencies(ctx context.Context) (dependencies, error) {
 	db := dynamodb.NewFromConfig(awsConfig)
 	table := os.Getenv("PAYMENTS_TABLE_NAME")
 	root := store{client: db, table: table, now: time.Now}
+	objectClient := s3.NewFromConfig(awsConfig)
 	deps := dependencies{store: root, deliveryStore: func(receiptID string) receiptStore {
 		return store{client: db, table: table, parentReceiptID: receiptID, now: time.Now}
-	}, documents: documents{client: s3.NewFromConfig(awsConfig), bucket: os.Getenv("RECEIPTS_BUCKET_NAME")}, mail: mailer{config: smtpSettings}}
+	}, documents: documents{client: objectClient, bucket: os.Getenv("RECEIPTS_BUCKET_NAME")}, mail: mailer{config: smtpSettings}, tax: taxDeliveryDependencies{db: db, table: table, objects: objectClient, bucket: os.Getenv("RECEIPTS_BUCKET_NAME"), mail: mailer{config: smtpSettings}, now: time.Now}}
 	cached.deps, cached.until = deps, time.Now().Add(5*time.Minute)
 	return deps, nil
 }

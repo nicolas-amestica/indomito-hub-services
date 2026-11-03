@@ -209,6 +209,10 @@ func (m mailer) send(ctx context.Context, to, receiptID, deliveryID string, docu
 	if err != nil {
 		return err
 	}
+	return m.sendMessage(ctx, message)
+}
+
+func (m mailer) sendMessage(ctx context.Context, message *gomail.Msg) error {
 	options := []gomail.Option{
 		gomail.WithPort(m.config.Port),
 		gomail.WithUsername(m.config.User),
@@ -226,7 +230,7 @@ func (m mailer) send(ctx context.Context, to, receiptID, deliveryID string, docu
 	if err != nil {
 		return fmt.Errorf("configurar SMTP: %w", err)
 	}
-	if err = client.DialAndSendWithContext(ctx, message); err != nil {
+	if err := client.DialAndSendWithContext(ctx, message); err != nil {
 		return fmt.Errorf("enviar SMTP: %w", err)
 	}
 	return nil

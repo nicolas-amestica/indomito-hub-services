@@ -120,21 +120,9 @@ func (a taxConfigurationApp) summary(ctx context.Context, req events.APIGatewayV
 	if err != nil {
 		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
 	}
-	lastReserved := int64(0)
-	if a.payments != nil && a.paymentsTable != "" {
-		result, getErr := a.payments.GetItem(ctx, &dynamodb.GetItemInput{TableName: &a.paymentsTable, Key: map[string]ddbtypes.AttributeValue{"pk": &ddbtypes.AttributeValueMemberS{Value: "TAX_FOLIO#39"}, "sk": &ddbtypes.AttributeValueMemberS{Value: "META"}}, ConsistentRead: aws.Bool(true)})
-		if getErr != nil {
-			return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
-		}
-		if len(result.Item) != 0 {
-			var item struct {
-				Count int64 `dynamodbav:"count"`
-			}
-			if attributevalue.UnmarshalMap(result.Item, &item) != nil {
-				return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
-			}
-			lastReserved = item.Count
-		}
+	lastReserved, reserveErr := a.lastReservedFolio(ctx)
+	if reserveErr != nil {
+		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
 	}
 	used := int64(0)
 	if lastReserved >= credentials.FolioFrom {
@@ -143,6 +131,19 @@ func (a taxConfigurationApp) summary(ctx context.Context, req events.APIGatewayV
 	available := credentials.FolioTo - credentials.FolioFrom + 1 - used
 	if available < 0 {
 		available = 0
+	}
+	next := any(nil)
+	if available > 0 {
+		nextFolio := credentials.FolioFrom
+		if lastReserved >= credentials.FolioFrom {
+			nextFolio = lastReserved + 1
+		}
+		next = nextFolio
+	}
+	total := credentials.FolioTo - credentials.FolioFrom + 1
+	usagePercentage := int64(0)
+	if total > 0 {
+		usagePercentage = used * 100 / total
 	}
 	cafSeverity := "OK"
 	if available == 0 {
@@ -163,9 +164,26 @@ func (a taxConfigurationApp) summary(ctx context.Context, req events.APIGatewayV
 		"issuerCommune": config.IssuerCommune, "environment": config.Environment,
 		"resolutionDate": config.ResolutionDate, "resolutionNumber": config.ResolutionNumber,
 		"enabled": config.Enabled, "certificationApproved": false,
-		"caf":         map[string]any{"from": credentials.FolioFrom, "to": credentials.FolioTo, "used": used, "available": available, "severity": cafSeverity},
+		"caf":         map[string]any{"from": credentials.FolioFrom, "to": credentials.FolioTo, "used": used, "available": available, "next": next, "usagePercentage": usagePercentage, "authorizationDate": credentials.AuthorizationAt, "severity": cafSeverity},
 		"certificate": map[string]any{"subject": credentials.Certificate.Subject.String(), "validFrom": credentials.Certificate.NotBefore.UTC().Format(time.RFC3339), "validTo": credentials.Certificate.NotAfter.UTC().Format(time.RFC3339), "daysUntilExpiry": days, "severity": certificateSeverity},
 	}, map[string]string{"cache-control": "no-store"})
+}
+
+func (a taxConfigurationApp) lastReservedFolio(ctx context.Context) (int64, error) {
+	if a.payments == nil || a.paymentsTable == "" {
+		return 0, nil
+	}
+	result, err := a.payments.GetItem(ctx, &dynamodb.GetItemInput{TableName: &a.paymentsTable, Key: map[string]ddbtypes.AttributeValue{"pk": &ddbtypes.AttributeValueMemberS{Value: "TAX_FOLIO#39"}, "sk": &ddbtypes.AttributeValueMemberS{Value: "META"}}, ConsistentRead: aws.Bool(true)})
+	if err != nil || len(result.Item) == 0 {
+		return 0, err
+	}
+	var item struct {
+		Count int64 `dynamodbav:"count"`
+	}
+	if attributevalue.UnmarshalMap(result.Item, &item) != nil {
+		return 0, sii.ErrInvalidConfiguration
+	}
+	return item.Count, nil
 }
 
 func (a taxConfigurationApp) save(ctx context.Context, config sii.Config) error {
@@ -179,7 +197,7 @@ func (a taxConfigurationApp) save(ctx context.Context, config sii.Config) error 
 
 func (a taxConfigurationApp) update(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	var input taxConfigurationInput
-	if decodeAdmin(req, &input) != nil || input.Environment != sii.EnvironmentCertification || strings.TrimSpace(input.IssuerName) == "" {
+	if decodeAdmin(req, &input) != nil || (input.Environment != sii.EnvironmentCertification && input.Environment != sii.EnvironmentProduction) || strings.TrimSpace(input.IssuerName) == "" {
 		return adminFailure(req, 400, "INVALID_REQUEST")
 	}
 	config, credentials, err := a.load(ctx)
@@ -213,12 +231,17 @@ func (a taxConfigurationApp) uploadCAF(ctx context.Context, req events.APIGatewa
 	if err != nil || len(raw) == 0 || len(raw) > 512*1024 {
 		return adminFailure(req, 400, "INVALID_REQUEST")
 	}
-	if _, err = sii.ValidateCAF(raw); err != nil {
+	info, err := sii.ValidateCAF(raw)
+	if err != nil {
 		return adminFailure(req, 400, "INVALID_CAF")
 	}
-	config, _, err := a.load(ctx)
+	config, current, err := a.load(ctx)
 	if err != nil {
 		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
+	}
+	lastReserved, err := a.lastReservedFolio(ctx)
+	if err != nil || info.IssuerRUT != current.IssuerRUT || info.To <= lastReserved || (lastReserved >= current.FolioFrom && lastReserved < current.FolioTo) {
+		return adminFailure(req, 409, "CAF_RANGE_CONFLICT")
 	}
 	config.CAFXMLBase64 = base64.StdEncoding.EncodeToString(raw)
 	if _, err = sii.ParseConfig(mustJSON(config), a.now().UTC()); err != nil {

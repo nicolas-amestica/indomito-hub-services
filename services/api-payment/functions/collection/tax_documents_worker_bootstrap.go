@@ -20,6 +20,18 @@ type secretsManagerSIIConfigLoader struct {
 	Stage  string
 }
 
+func loadTaxDocumentWorker(ctx context.Context) (TaxDocumentWorkerApp, error) {
+	stage, err := currentStage()
+	if err != nil || os.Getenv("PAYMENTS_TABLE_NAME") == "" {
+		return TaxDocumentWorkerApp{}, errors.New("configuración tributaria incompleta")
+	}
+	cfg, err := bootstrap.LoadAWSConfig(ctx, bootstrap.LoadConfig())
+	if err != nil {
+		return TaxDocumentWorkerApp{}, err
+	}
+	return TaxDocumentWorkerApp{Accounts: Service{DB: dynamodb.NewFromConfig(cfg), Table: os.Getenv("PAYMENTS_TABLE_NAME")}, Config: secretsManagerSIIConfigLoader{Reader: secretsmanager.NewFromConfig(cfg), Stage: stage}, Issuer: directSIIssuer{Client: sii.Client{HTTP: &http.Client{Timeout: 20 * time.Second}, Now: time.Now}}, Now: time.Now}, nil
+}
+
 func (l secretsManagerSIIConfigLoader) Load(ctx context.Context, now time.Time) (sii.Credentials, error) {
 	name := "indomito/" + l.Stage + "/payments/sii/boleta-config"
 	result, err := l.Reader.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: aws.String(name)})
@@ -31,19 +43,9 @@ func (l secretsManagerSIIConfigLoader) Load(ctx context.Context, now time.Time) 
 
 // TaxDocumentWorkerHandler emite solo solicitudes creadas por pagos Khipu conciliados.
 func TaxDocumentWorkerHandler(ctx context.Context, event events.DynamoDBEvent) (events.DynamoDBEventResponse, error) {
-	stage, err := currentStage()
-	if err != nil || os.Getenv("PAYMENTS_TABLE_NAME") == "" {
-		return events.DynamoDBEventResponse{}, errors.New("configuración tributaria incompleta")
-	}
-	cfg, err := bootstrap.LoadAWSConfig(ctx, bootstrap.LoadConfig())
+	worker, err := loadTaxDocumentWorker(ctx)
 	if err != nil {
 		return events.DynamoDBEventResponse{}, err
-	}
-	worker := TaxDocumentWorkerApp{
-		Accounts: Service{DB: dynamodb.NewFromConfig(cfg), Table: os.Getenv("PAYMENTS_TABLE_NAME")},
-		Config:   secretsManagerSIIConfigLoader{Reader: secretsmanager.NewFromConfig(cfg), Stage: stage},
-		Issuer:   directSIIssuer{Client: sii.Client{HTTP: &http.Client{Timeout: 20 * time.Second}, Now: time.Now}},
-		Now:      time.Now,
 	}
 	result := worker.Handle(ctx, event)
 	if len(result.BatchItemFailures) == len(event.Records) && len(event.Records) > 0 {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
+	"strconv"
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -31,6 +32,7 @@ type dependencies struct {
 	deliveryStore func(string) receiptStore
 	documents     documentStore
 	mail          receiptMailer
+	tax           taxDeliveryDependencies
 }
 
 func processReceipt(ctx context.Context, receiptID string, deps dependencies) (string, error) {
@@ -128,7 +130,22 @@ func processStream(ctx context.Context, event events.DynamoDBEvent, deps depende
 		pk, pkOK := streamString(change.Change.NewImage, "pk")
 		sk, skOK := streamString(change.Change.NewImage, "sk")
 		status, statusOK := streamString(change.Change.NewImage, "status")
-		if change.EventName != "INSERT" && change.EventName != "MODIFY" || !pkOK || !skOK || !statusOK || !strings.HasPrefix(pk, "JOB#") || !strings.HasPrefix(sk, "PENDING#") || status != "PENDING" {
+		if change.EventName != "INSERT" && change.EventName != "MODIFY" || !pkOK || !skOK || !statusOK || !strings.HasPrefix(sk, "PENDING#") || status != "PENDING" {
+			continue
+		}
+		if strings.HasPrefix(pk, "TAX_JOB#") {
+			requestID, _ := streamString(change.Change.NewImage, "taxRequestId")
+			folio, _ := streamNumber(change.Change.NewImage, "taxFolio")
+			if err := processTaxDelivery(ctx, taxDeliveryJob{PK: pk, SK: sk, RequestID: requestID, Folio: folio}, deps.tax); err != nil {
+				identifier := change.Change.SequenceNumber
+				if identifier == "" {
+					identifier = change.EventID
+				}
+				response.BatchItemFailures = append(response.BatchItemFailures, events.DynamoDBBatchItemFailure{ItemIdentifier: identifier})
+			}
+			continue
+		}
+		if !strings.HasPrefix(pk, "JOB#") {
 			continue
 		}
 		receiptID, _ := streamString(change.Change.NewImage, "receiptId")
@@ -143,6 +160,15 @@ func processStream(ctx context.Context, event events.DynamoDBEvent, deps depende
 		}
 	}
 	return response
+}
+
+func streamNumber(image map[string]events.DynamoDBAttributeValue, name string) (int64, bool) {
+	value, ok := image[name]
+	if !ok || value.DataType() != events.DataTypeNumber {
+		return 0, false
+	}
+	number, err := strconv.ParseInt(value.Number(), 10, 64)
+	return number, err == nil
 }
 
 func streamString(image map[string]events.DynamoDBAttributeValue, name string) (string, bool) {

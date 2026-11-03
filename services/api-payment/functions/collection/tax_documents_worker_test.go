@@ -2,6 +2,7 @@ package collection
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -21,10 +22,11 @@ type taxIssuerFake struct {
 	folios   []int64
 }
 
-func (f *taxIssuerFake) Issue(_ context.Context, _ sii.Credentials, request TaxDocumentRequest, folio int64, _ time.Time) (sii.Submission, error) {
+func (f *taxIssuerFake) Issue(_ context.Context, _ sii.Credentials, request TaxDocumentRequest, folio int64, _ time.Time) (TaxIssuanceResult, error) {
 	f.requests = append(f.requests, request)
 	f.folios = append(f.folios, folio)
-	return sii.Submission{TrackID: "123456789", Status: taxStatusSubmitted}, nil
+	xml := []byte(`<?xml version="1.0" encoding="ISO-8859-1"?><DTE><Documento><Encabezado><Totales><MntNeto>` + fmt.Sprint(request.GrossAmount) + `</MntNeto><IVA>0</IVA><MntTotal>` + fmt.Sprint(request.GrossAmount) + `</MntTotal></Totales></Encabezado><TED><DD><F>` + fmt.Sprint(folio) + `</F></DD></TED></Documento></DTE>`)
+	return TaxIssuanceResult{Submission: sii.Submission{TrackID: "123456789", Status: taxStatusSubmitted}, Document: sii.Document{XML: xml, Folio: folio, IssuerRUT: "77654796-4", Amount: request.GrossAmount}}, nil
 }
 
 func TestTaxDocumentWorkerReservesOneFolioAndPreservesReconciledAmount(t *testing.T) {
@@ -53,6 +55,10 @@ func TestTaxDocumentWorkerReservesOneFolioAndPreservesReconciledAmount(t *testin
 	if _, exists := db.items["TAX_QUEUE#PENDING/"+queueSK]; exists {
 		t.Fatal("tax queue entry was not removed")
 	}
+	public, err := service.read(context.Background(), "TAX_PUBLIC#39#1", "META")
+	if err != nil || public.PublicTaxDocument == nil || public.PublicTaxDocument.TotalAmount != 287500 || public.PublicTaxDocument.TED == "" {
+		t.Fatalf("public tax document was not materialized: %+v %v", public.PublicTaxDocument, err)
+	}
 }
 
 func TestTaxDocumentWorkerReservesNextFolioWhenCounterExists(t *testing.T) {
@@ -70,6 +76,24 @@ func TestTaxDocumentWorkerReservesNextFolioWhenCounterExists(t *testing.T) {
 	}
 	if len(issuer.folios) != 1 || issuer.folios[0] != 2 {
 		t.Fatalf("expected folio 2, got %v", issuer.folios)
+	}
+}
+
+func TestTaxDocumentWorkerStartsAtNewCAFRangeAfterRotation(t *testing.T) {
+	service, db := serviceFixture(t)
+	now := time.Date(2026, 10, 31, 23, 0, 0, 0, time.UTC)
+	request := newManualSalesReceiptRequest("01M68000000000000000000070", testPaymentEvent(now, 29800))
+	saveLookupRow(t, db, record{PK: "TAX_REQUEST#" + request.RequestID, SK: "META", TaxRequest: &request, Status: request.Status})
+	saveLookupRow(t, db, record{PK: "TAX_QUEUE#PENDING", SK: request.RequestedAt.UTC().Format(time.RFC3339Nano) + "#" + request.RequestID, TaxRequest: &request, Status: request.Status})
+	saveLookupRow(t, db, record{PK: "TAX_FOLIO#39", SK: "META", Count: 24, Status: "RESERVED"})
+	issuer := &taxIssuerFake{}
+	app := TaxDocumentWorkerApp{Accounts: service, Config: taxConfigFake{credentials: sii.Credentials{FolioFrom: 31, FolioTo: 80}}, Issuer: issuer, Now: func() time.Time { return now }}
+
+	if err := app.Process(context.Background(), request.RequestID); err != nil {
+		t.Fatalf("process rotated CAF: %v", err)
+	}
+	if len(issuer.folios) != 1 || issuer.folios[0] != 31 {
+		t.Fatalf("expected first folio 31 from rotated CAF, got %v", issuer.folios)
 	}
 }
 

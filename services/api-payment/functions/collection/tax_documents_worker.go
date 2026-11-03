@@ -20,7 +20,12 @@ type SIIConfigLoader interface {
 }
 
 type SIIDocumentIssuer interface {
-	Issue(context.Context, sii.Credentials, TaxDocumentRequest, int64, time.Time) (sii.Submission, error)
+	Issue(context.Context, sii.Credentials, TaxDocumentRequest, int64, time.Time) (TaxIssuanceResult, error)
+}
+
+type TaxIssuanceResult struct {
+	Submission sii.Submission
+	Document   sii.Document
 }
 
 type TaxDocumentWorkerApp struct {
@@ -68,11 +73,15 @@ func (a TaxDocumentWorkerApp) Process(ctx context.Context, requestID string) err
 	if request.SIIIssuance == nil || request.SIIIssuance.Folio < credentials.FolioFrom || request.SIIIssuance.Folio > credentials.FolioTo {
 		return errors.New("invalid reserved tax folio")
 	}
-	submission, err := a.Issuer.Issue(ctx, credentials, request, request.SIIIssuance.Folio, now)
+	result, err := a.Issuer.Issue(ctx, credentials, request, request.SIIIssuance.Folio, now)
 	if err != nil {
 		return fmt.Errorf("submit SII document: %w", err)
 	}
-	return a.recordSubmission(ctx, request, submission, now)
+	publicDocument, err := buildPublicTaxDocument(credentials, request, result.Document)
+	if err != nil {
+		return fmt.Errorf("build public tax document: %w", err)
+	}
+	return a.recordSubmission(ctx, request, result.Submission, publicDocument, now)
 }
 
 func (a TaxDocumentWorkerApp) reserveFolio(ctx context.Context, requestID string, credentials sii.Credentials) (TaxDocumentRequest, error) {
@@ -93,6 +102,9 @@ func (a TaxDocumentWorkerApp) reserveFolio(ctx context.Context, requestID string
 	var values map[string]types.AttributeValue
 	if stateErr == nil {
 		nextFolio = folioState.Count + 1
+		if nextFolio < credentials.FolioFrom {
+			nextFolio = credentials.FolioFrom
+		}
 		condition = "#count = :previous"
 		values = map[string]types.AttributeValue{}
 		values[":previous"] = &types.AttributeValueMemberN{Value: strconv.FormatInt(folioState.Count, 10)}
@@ -122,13 +134,15 @@ func (a TaxDocumentWorkerApp) reserveFolio(ctx context.Context, requestID string
 	return request, nil
 }
 
-func (a TaxDocumentWorkerApp) recordSubmission(ctx context.Context, request TaxDocumentRequest, submission sii.Submission, now time.Time) error {
+func (a TaxDocumentWorkerApp) recordSubmission(ctx context.Context, request TaxDocumentRequest, submission sii.Submission, publicDocument PublicTaxDocument, now time.Time) error {
 	if submission.TrackID == "" || request.SIIIssuance == nil {
 		return errors.New("invalid SII submission")
 	}
 	request.Status = taxStatusSubmitted
 	request.SIIIssuance.TrackID = submission.TrackID
 	request.SIIIssuance.SubmittedAt = &now
+	request.SIIIssuance.Status = taxStatusSubmitted
+	request.SIIIssuance.DocumentKey = fmt.Sprintf("tax-documents/39/%d.pdf", request.SIIIssuance.Folio)
 	canonical, err := a.Accounts.put(record{PK: "TAX_REQUEST#" + request.RequestID, SK: "META", TaxRequest: &request, Status: request.Status, AccountID: request.AccountID, TripID: request.TripID}, "#status = :pending", map[string]types.AttributeValue{":pending": &types.AttributeValueMemberS{Value: taxStatusIssuing}})
 	if err != nil {
 		return err
@@ -139,7 +153,19 @@ func (a TaxDocumentWorkerApp) recordSubmission(ctx context.Context, request TaxD
 	if err != nil {
 		return err
 	}
-	_, err = a.Accounts.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{canonical, deleteQueue, recorded}})
+	submitted, err := a.Accounts.put(record{PK: "TAX_QUEUE#SUBMITTED", SK: now.Format(time.RFC3339Nano) + "#" + request.RequestID, TaxRequest: &request, Status: request.Status, AccountID: request.AccountID, TripID: request.TripID}, "attribute_not_exists(pk)", nil)
+	if err != nil {
+		return err
+	}
+	publicProjection, err := a.Accounts.put(record{PK: "TAX_PUBLIC#39#" + strconv.FormatInt(publicDocument.Folio, 10), SK: "META", PublicTaxDocument: &publicDocument, Status: request.Status}, "attribute_not_exists(pk)", nil)
+	if err != nil {
+		return err
+	}
+	delivery, err := a.Accounts.put(record{PK: "TAX_JOB#" + now.Format(time.DateOnly), SK: "PENDING#" + request.RequestID, TaxRequest: &request, TaxRequestID: request.RequestID, TaxFolio: request.SIIIssuance.Folio, ReceiptID: request.ReceiptID, Status: "PENDING"}, "attribute_not_exists(pk)", nil)
+	if err != nil {
+		return err
+	}
+	_, err = a.Accounts.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{canonical, deleteQueue, recorded, submitted, publicProjection, delivery}})
 	return err
 }
 
@@ -154,10 +180,10 @@ func streamTaxRequestID(image map[string]events.DynamoDBAttributeValue) (string,
 
 type directSIIssuer struct{ Client sii.Client }
 
-func (d directSIIssuer) Issue(ctx context.Context, credentials sii.Credentials, request TaxDocumentRequest, folio int64, now time.Time) (sii.Submission, error) {
+func (d directSIIssuer) Issue(ctx context.Context, credentials sii.Credentials, request TaxDocumentRequest, folio int64, now time.Time) (TaxIssuanceResult, error) {
 	issuedAt, err := time.Parse(time.DateOnly, request.EffectiveDate)
 	if err != nil {
-		return sii.Submission{}, err
+		return TaxIssuanceResult{}, err
 	}
 	items := make([]sii.SaleItem, 0, len(request.Items))
 	for _, item := range request.Items {
@@ -169,9 +195,10 @@ func (d directSIIssuer) Issue(ctx context.Context, credentials sii.Credentials, 
 	}
 	document, err := sii.BuildDocument(credentials, sii.Sale{RequestID: request.RequestID, Folio: folio, Amount: request.GrossAmount, IssueDate: issuedAt, CustomerRUT: request.CustomerRUT, Description: description, Items: items, Reference: request.Reference}, now)
 	if err != nil {
-		return sii.Submission{}, err
+		return TaxIssuanceResult{}, err
 	}
-	return d.Client.Submit(ctx, credentials, document)
+	submission, err := d.Client.Submit(ctx, credentials, document)
+	return TaxIssuanceResult{Submission: submission, Document: document}, err
 }
 
 var _ SIIDocumentIssuer = directSIIssuer{}

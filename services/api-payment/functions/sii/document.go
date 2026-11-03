@@ -43,6 +43,45 @@ type Document struct {
 	Amount    int64
 }
 
+// PublicDocumentData contiene solo los datos tributarios publicables de un DTE firmado.
+type PublicDocumentData struct {
+	NetAmount    int64
+	VATAmount    int64
+	ExemptAmount int64
+	TED          string
+}
+
+// ExtractPublicDocumentData obtiene totales y TED sin exponer llaves ni configuracion.
+func ExtractPublicDocumentData(document Document) (PublicDocumentData, error) {
+	decoded, err := decodeLatin1(document.XML)
+	if err != nil {
+		return PublicDocumentData{}, err
+	}
+	parsed := etree.NewDocument()
+	if err = parsed.ReadFromBytes(decoded); err != nil {
+		return PublicDocumentData{}, ErrInvalidConfiguration
+	}
+	readAmount := func(path string) (int64, error) {
+		element := parsed.FindElement(path)
+		if element == nil {
+			return 0, nil
+		}
+		return strconv.ParseInt(strings.TrimSpace(element.Text()), 10, 64)
+	}
+	netAmount, netErr := readAmount("//Totales/MntNeto")
+	vatAmount, vatErr := readAmount("//Totales/IVA")
+	exemptAmount, exemptErr := readAmount("//Totales/MntExe")
+	ted := parsed.FindElement("//TED")
+	if netErr != nil || vatErr != nil || exemptErr != nil || ted == nil {
+		return PublicDocumentData{}, ErrInvalidConfiguration
+	}
+	tedBytes, err := elementBytes(ted)
+	if err != nil {
+		return PublicDocumentData{}, err
+	}
+	return PublicDocumentData{NetAmount: netAmount, VATAmount: vatAmount, ExemptAmount: exemptAmount, TED: string(tedBytes)}, nil
+}
+
 func BuildDocument(credentials Credentials, sale Sale, now time.Time) (Document, error) {
 	if sale.RequestID == "" || sale.Folio < credentials.FolioFrom || sale.Folio > credentials.FolioTo || sale.Amount <= 0 || sale.IssueDate.IsZero() || now.IsZero() {
 		return Document{}, ErrInvalidConfiguration
@@ -75,6 +114,10 @@ func BuildDocument(credentials Credentials, sale Sale, now time.Time) (Document,
 	dte := doc.CreateElement("DTE")
 	dte.CreateAttr("version", "1.0")
 	dte.CreateAttr("xmlns", "http://www.sii.cl/SiiDte")
+	// EnvioBOLETA declara xsi en su raíz. La canonicalización inclusiva del SII
+	// hereda ese namespace al Documento; debe existir también al firmar el DTE
+	// aislado para que el digest no cambie al insertarlo en el sobre.
+	dte.CreateAttr("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
 	document := dte.CreateElement("Documento")
 	document.CreateAttr("ID", documentID)
 	header := document.CreateElement("Encabezado")
@@ -95,10 +138,12 @@ func BuildDocument(credentials Credentials, sale Sale, now time.Time) (Document,
 	totals := header.CreateElement("Totales")
 	if netAmount > 0 {
 		add(totals, "MntNeto", strconv.FormatInt(netAmount, 10))
-		add(totals, "IVA", strconv.FormatInt(vatAmount, 10))
 	}
 	if exemptAmount > 0 {
 		add(totals, "MntExe", strconv.FormatInt(exemptAmount, 10))
+	}
+	if netAmount > 0 {
+		add(totals, "IVA", strconv.FormatInt(vatAmount, 10))
 	}
 	add(totals, "MntTotal", strconv.FormatInt(sale.Amount, 10))
 	for index, item := range items {
@@ -121,8 +166,15 @@ func BuildDocument(credentials Credentials, sale Sale, now time.Time) (Document,
 		add(reference, "CodRef", "SET")
 		add(reference, "RazonRef", strings.TrimSpace(sale.Reference))
 	}
+	// El SII exige que el string firmado del TED sea DD compacto. Se puede
+	// indentar el resto del DTE, pero debe hacerse antes de incorporar DD.
+	doc.Indent(2)
 
-	timestamp := now.UTC().Format("2006-01-02T15:04:05")
+	location, err := time.LoadLocation("America/Santiago")
+	if err != nil {
+		return Document{}, fmt.Errorf("load Chile timezone: %w", err)
+	}
+	timestamp := now.In(location).Format("2006-01-02T15:04:05")
 	dd := etree.NewElement("DD")
 	add(dd, "RE", credentials.IssuerRUT)
 	add(dd, "TD", "39")
@@ -132,8 +184,16 @@ func BuildDocument(credentials Credentials, sale Sale, now time.Time) (Document,
 	add(dd, "RSR", "CONSUMIDOR FINAL")
 	add(dd, "MNT", strconv.FormatInt(sale.Amount, 10))
 	add(dd, "IT1", truncate(strings.TrimSpace(items[0].Description), 40))
-	dd.AddChild(credentials.CAF.Copy())
+	caf := credentials.CAF.Copy()
+	removeFormattingWhitespace(caf)
+	dd.AddChild(caf)
 	add(dd, "TSTED", timestamp)
+	ted := document.CreateElement("TED")
+	ted.CreateAttr("version", "1.0")
+	ted.AddChild(dd)
+	frmt := add(ted, "FRMT", "")
+	frmt.CreateAttr("algoritmo", "SHA1withRSA")
+	add(document, "TmstFirma", timestamp)
 	ddBytes, err := elementBytes(dd)
 	if err != nil {
 		return Document{}, err
@@ -147,12 +207,7 @@ func BuildDocument(credentials Credentials, sale Sale, now time.Time) (Document,
 	if err != nil {
 		return Document{}, fmt.Errorf("sign TED: %w", err)
 	}
-	ted := document.CreateElement("TED")
-	ted.CreateAttr("version", "1.0")
-	ted.AddChild(dd)
-	frmt := add(ted, "FRMT", base64.StdEncoding.EncodeToString(signature))
-	frmt.CreateAttr("algoritmo", "SHA1withRSA")
-	add(document, "TmstFirma", timestamp)
+	frmt.SetText(base64.StdEncoding.EncodeToString(signature))
 
 	context, err := dsig.NewSigningContext(credentials.SigningKey, [][]byte{credentials.Certificate.Raw})
 	if err != nil {
@@ -172,7 +227,7 @@ func BuildDocument(credentials Credentials, sale Sale, now time.Time) (Document,
 		return Document{}, err
 	}
 	dte.AddChild(signatureElement)
-	doc.Indent(2)
+	wrapXMLSignatureBase64(signatureElement)
 	contents, err := doc.WriteToBytes()
 	if err != nil {
 		return Document{}, err
@@ -182,6 +237,41 @@ func BuildDocument(credentials Credentials, sale Sale, now time.Time) (Document,
 		return Document{}, fmt.Errorf("encode DTE: %w", err)
 	}
 	return Document{XML: contents, Folio: sale.Folio, IssuerRUT: credentials.IssuerRUT, Amount: sale.Amount}, nil
+}
+
+func removeFormattingWhitespace(element *etree.Element) {
+	children := element.Child[:0]
+	for _, token := range element.Child {
+		if text, ok := token.(*etree.CharData); ok && strings.TrimSpace(text.Data) == "" {
+			continue
+		}
+		if child, ok := token.(*etree.Element); ok {
+			removeFormattingWhitespace(child)
+		}
+		children = append(children, token)
+	}
+	element.Child = children
+}
+
+func wrapXMLSignatureBase64(signature *etree.Element) {
+	// Los ejemplos oficiales de SII mantienen SignatureValue en una sola línea
+	// y pliegan únicamente el certificado, sin saltos iniciales ni finales.
+	// El parser legado de Maullín rechaza otras representaciones equivalentes.
+	element := signature.FindElement("KeyInfo/X509Data/X509Certificate")
+	if element == nil {
+		return
+	}
+	value := strings.Join(strings.Fields(element.Text()), "")
+	if value == "" {
+		return
+	}
+	lines := make([]string, 0, (len(value)+75)/76)
+	for len(value) > 76 {
+		lines = append(lines, value[:76])
+		value = value[76:]
+	}
+	lines = append(lines, value)
+	element.SetText(strings.Join(lines, "\n"))
 }
 
 func latin1(input []byte) ([]byte, error) {

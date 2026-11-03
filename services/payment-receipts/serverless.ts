@@ -17,10 +17,11 @@ const configuration: AWS = {
     deploymentBucket: { name: DEPLOYMENT_BUCKET }, memorySize: 128, timeout: 60, logRetentionInDays: 14,
     environment: { APP_STAGE: STAGE, PAYMENTS_TABLE_NAME: tableName, RECEIPTS_BUCKET_NAME: bucketName, RECEIPT_VERIFICATION_URL: `https://${portalDomain}/verificar-comprobante` },
     iam: { role: { statements: [
-      { Effect: 'Allow', Action: ['dynamodb:GetItem', 'dynamodb:UpdateItem'], Resource: tableArn, Condition: { 'ForAllValues:StringLike': { 'dynamodb:LeadingKeys': ['RECEIPT#*', 'JOB#*'] } } },
+      { Effect: 'Allow', Action: ['dynamodb:GetItem', 'dynamodb:UpdateItem'], Resource: tableArn, Condition: { 'ForAllValues:StringLike': { 'dynamodb:LeadingKeys': ['RECEIPT#*', 'JOB#*', 'TAX_REQUEST#*', 'TAX_PUBLIC#39#*', 'TAX_JOB#*'] } } },
       { Effect: 'Allow', Action: ['dynamodb:DescribeStream', 'dynamodb:GetRecords', 'dynamodb:GetShardIterator'], Resource: streamArn },
       { Effect: 'Allow', Action: ['dynamodb:ListStreams'], Resource: tableArn },
       { Effect: 'Allow', Action: ['s3:PutObject', 's3:GetObject'], Resource: `${bucketArn}/receipts/*` },
+      { Effect: 'Allow', Action: ['s3:PutObject', 's3:GetObject'], Resource: `${bucketArn}/tax-documents/39/*` },
       { Effect: 'Allow', Action: ['ssm:GetParameter'], Resource: { 'Fn::Sub': `arn:\${AWS::Partition}:ssm:\${AWS::Region}:\${AWS::AccountId}:parameter/indomito/${STAGE}/payments/receipt-smtp` } },
       { Effect: 'Allow', Action: ['sqs:SendMessage'], Resource: { 'Fn::GetAtt': ['ReceiptFailures', 'Arn'] } },
     ] } },
@@ -33,7 +34,7 @@ const configuration: AWS = {
       EventSourceArn: streamArn, FunctionName: { 'Fn::GetAtt': ['FnDashprocesarDashcomprobantesDashv1LambdaFunction', 'Arn'] }, StartingPosition: 'TRIM_HORIZON', BatchSize: 1,
       MaximumRetryAttempts: 5, MaximumRecordAgeInSeconds: 3600, BisectBatchOnFunctionError: true, FunctionResponseTypes: ['ReportBatchItemFailures'],
       DestinationConfig: { OnFailure: { Destination: { 'Fn::GetAtt': ['ReceiptFailures', 'Arn'] } } },
-      FilterCriteria: { Filters: [{ Pattern: JSON.stringify({ eventName: ['INSERT', 'MODIFY'], dynamodb: { NewImage: { pk: { S: [{ prefix: 'JOB#' }] }, status: { S: ['PENDING'] } } } }) }] },
+      FilterCriteria: { Filters: [{ Pattern: JSON.stringify({ eventName: ['INSERT', 'MODIFY'], dynamodb: { NewImage: { pk: { S: [{ prefix: 'JOB#' }, { prefix: 'TAX_JOB#' }] }, status: { S: ['PENDING'] } } } }) }] },
     } },
   }, Outputs: { ReceiptFailuresUrl: { Value: { Ref: 'ReceiptFailures' } } } },
 };

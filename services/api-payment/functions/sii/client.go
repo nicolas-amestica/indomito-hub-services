@@ -29,6 +29,15 @@ type Submission struct {
 	Status  string
 }
 
+type SubmissionStatus struct {
+	State, Detail                         string
+	Informed, Accepted, Rejected, Repairs int64
+}
+
+func (s SubmissionStatus) Approved() bool {
+	return s.State == "EPR" && s.Informed > 0 && s.Rejected == 0 && s.Accepted+s.Repairs == s.Informed
+}
+
 type HTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
 }
@@ -39,7 +48,20 @@ type Client struct {
 }
 
 func (c Client) Submit(ctx context.Context, credentials Credentials, document Document) (Submission, error) {
-	if c.HTTP == nil || c.Now == nil || len(document.XML) == 0 || document.IssuerRUT != credentials.IssuerRUT {
+	return c.SubmitSet(ctx, credentials, []Document{document})
+}
+
+// SubmitSet envía uno o más DTE en un único sobre, conservando el orden recibido.
+func (c Client) SubmitSet(ctx context.Context, credentials Credentials, documents []Document) (Submission, error) {
+	if len(documents) == 0 || len(documents) > 500 {
+		return Submission{}, ErrInvalidConfiguration
+	}
+	for _, document := range documents {
+		if len(document.XML) == 0 || document.IssuerRUT != credentials.IssuerRUT {
+			return Submission{}, ErrInvalidConfiguration
+		}
+	}
+	if c.HTTP == nil || c.Now == nil {
 		return Submission{}, ErrInvalidConfiguration
 	}
 	seed, err := c.seed(ctx, credentials.Environment)
@@ -50,15 +72,56 @@ func (c Client) Submit(ctx context.Context, credentials Credentials, document Do
 	if err != nil {
 		return Submission{}, err
 	}
-	envelope, err := buildEnvelope(credentials, document.XML, c.Now())
+	envelope, err := buildEnvelopeSet(credentials, documents, c.Now())
 	if err != nil {
 		return Submission{}, fmt.Errorf("build SII envelope: %w", err)
 	}
-	submission, err := c.upload(ctx, credentials, token, envelope)
+	submission, err := c.uploadNamed(ctx, credentials, token, envelope, "EnvioBOLETA")
 	if err != nil {
 		return Submission{}, fmt.Errorf("upload SII envelope: %w", err)
 	}
 	return submission, nil
+}
+
+// QuerySubmission consulta el resultado final del sobre. Un Track ID por si solo
+// acredita recepción, no aceptación de los DTE contenidos.
+func (c Client) QuerySubmission(ctx context.Context, credentials Credentials, trackID string) (SubmissionStatus, error) {
+	if c.HTTP == nil || c.Now == nil || strings.TrimSpace(trackID) == "" {
+		return SubmissionStatus{}, ErrInvalidConfiguration
+	}
+	seed, err := c.seed(ctx, credentials.Environment)
+	if err != nil {
+		return SubmissionStatus{}, err
+	}
+	token, err := c.token(ctx, credentials, seed)
+	if err != nil {
+		return SubmissionStatus{}, err
+	}
+	rut, dv, ok := splitRUT(credentials.IssuerRUT)
+	if !ok {
+		return SubmissionStatus{}, ErrInvalidConfiguration
+	}
+	escape := func(value string) string {
+		var target bytes.Buffer
+		_ = xml.EscapeText(&target, []byte(value))
+		return target.String()
+	}
+	body := `<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><soapenv:Body><ns1:getEstUp soapenv:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/" xmlns:ns1="http://DefaultNamespace"><RutCompania xsi:type="xsd:string">` + escape(rut) + `</RutCompania><DvCompania xsi:type="xsd:string">` + escape(dv) + `</DvCompania><TrackId xsi:type="xsd:string">` + escape(trackID) + `</TrackId><Token xsi:type="xsd:string">` + escape(token) + `</Token></ns1:getEstUp></soapenv:Body></soapenv:Envelope>`
+	endpoint := "https://maullin.sii.cl/DTEWS/QueryEstUp.jws"
+	if credentials.Environment == EnvironmentProduction {
+		endpoint = "https://palena.sii.cl/DTEWS/QueryEstUp.jws"
+	}
+	response, err := c.soap(ctx, endpoint, []byte(body))
+	if err != nil {
+		return SubmissionStatus{}, err
+	}
+	read := func(name string) string { value, _ := nestedValue(response, name); return strings.TrimSpace(value) }
+	parse := func(name string) int64 { value, _ := strconv.ParseInt(read(name), 10, 64); return value }
+	status := SubmissionStatus{State: read("ESTADO"), Detail: read("GLOSA"), Informed: parse("INFORMADOS"), Accepted: parse("ACEPTADOS"), Rejected: parse("RECHAZADOS"), Repairs: parse("REPAROS")}
+	if status.State == "" {
+		return SubmissionStatus{}, fmt.Errorf("invalid SII submission status response")
+	}
+	return status, nil
 }
 
 func endpoints(environment Environment) (string, string, string) {
@@ -229,6 +292,10 @@ func (c Client) do(request *http.Request) ([]byte, error) {
 }
 
 func (c Client) upload(ctx context.Context, credentials Credentials, token string, envelope []byte) (Submission, error) {
+	return c.uploadNamed(ctx, credentials, token, envelope, "EnvioBOLETA")
+}
+
+func (c Client) uploadNamed(ctx context.Context, credentials Credentials, token string, envelope []byte, filePrefix string) (Submission, error) {
 	_, _, endpoint := endpoints(credentials.Environment)
 	if credentials.Environment == EnvironmentCertification {
 		endpoint = "https://maullin.sii.cl/cgi_dte/UPL/DTEUpload"
@@ -248,7 +315,11 @@ func (c Client) upload(ctx context.Context, credentials Credentials, token strin
 	header := textproto.MIMEHeader{}
 	filename := "boleta.xml"
 	if credentials.Environment == EnvironmentCertification {
-		filename = "EnvioBOLETA.xml"
+		uploadTime := time.Now()
+		if c.Now != nil {
+			uploadTime = c.Now()
+		}
+		filename = filePrefix + "_" + uploadTime.UTC().Format("20060102T150405") + ".xml"
 	}
 	header.Set("Content-Disposition", `form-data; name="archivo"; filename="`+filename+`"`)
 	header.Set("Content-Type", "text/xml")
@@ -323,16 +394,24 @@ func responseDiagnostic(contents []byte) string {
 }
 
 func buildEnvelope(credentials Credentials, dteXML []byte, now time.Time) ([]byte, error) {
-	decodedDTE, err := decodeLatin1(dteXML)
-	if err != nil {
-		return nil, fmt.Errorf("decode DTE XML: %w", err)
+	return buildEnvelopeSet(credentials, []Document{{XML: dteXML, IssuerRUT: credentials.IssuerRUT}}, now)
+}
+
+func buildEnvelopeSet(credentials Credentials, documents []Document, now time.Time) ([]byte, error) {
+	if len(documents) == 0 || len(documents) > 500 {
+		return nil, ErrInvalidConfiguration
 	}
-	dteDocument := etree.NewDocument()
-	if err = dteDocument.ReadFromBytes(decodedDTE); err != nil {
-		return nil, fmt.Errorf("parse DTE XML: %w", err)
-	}
-	if dteDocument.Root() == nil {
-		return nil, fmt.Errorf("parse DTE XML: %w", ErrInvalidConfiguration)
+	dteDocuments := make([]*etree.Document, 0, len(documents))
+	for _, source := range documents {
+		decodedDTE, err := decodeLatin1(source.XML)
+		if err != nil {
+			return nil, fmt.Errorf("decode DTE XML: %w", err)
+		}
+		dteDocument := etree.NewDocument()
+		if err = dteDocument.ReadFromBytes(decodedDTE); err != nil || dteDocument.Root() == nil {
+			return nil, fmt.Errorf("parse DTE XML: %w", ErrInvalidConfiguration)
+		}
+		dteDocuments = append(dteDocuments, dteDocument)
 	}
 	document := etree.NewDocument()
 	document.CreateProcInst("xml", `version="1.0" encoding="ISO-8859-1"`)
@@ -357,8 +436,13 @@ func buildEnvelope(credentials Credentials, dteXML []byte, now time.Time) ([]byt
 	add(cover, "TmstFirmaEnv", now.In(location).Format("2006-01-02T15:04:05"))
 	subtotal := cover.CreateElement("SubTotDTE")
 	add(subtotal, "TpoDTE", strconv.Itoa(documentType))
-	add(subtotal, "NroDTE", "1")
-	set.AddChild(dteDocument.Root().Copy())
+	add(subtotal, "NroDTE", strconv.Itoa(len(dteDocuments)))
+	// Formatear la estructura del sobre antes de insertar DTE firmados. Indentar
+	// después alteraría el whitespace de Documento y, por tanto, su digest.
+	document.Indent(2)
+	for _, dteDocument := range dteDocuments {
+		set.AddChild(dteDocument.Root().Copy())
+	}
 	context, err := dsig.NewSigningContext(credentials.SigningKey, [][]byte{credentials.Certificate.Raw})
 	if err != nil {
 		return nil, err
@@ -378,10 +462,16 @@ func buildEnvelope(credentials Credentials, dteXML []byte, now time.Time) ([]byt
 		return nil, err
 	}
 	envelope.AddChild(signatureElement)
-	document.Indent(2)
+	wrapXMLSignatureBase64(signatureElement)
 	contents, err := document.WriteToBytes()
 	if err != nil {
 		return nil, err
+	}
+	if declarationEnd := bytes.Index(contents, []byte("?>")); declarationEnd >= 0 {
+		remainder := contents[declarationEnd+2:]
+		if len(remainder) == 0 || (remainder[0] != '\n' && remainder[0] != '\r') {
+			contents = append(contents[:declarationEnd+2], append([]byte("\n"), remainder...)...)
+		}
 	}
 	return latin1(contents)
 }

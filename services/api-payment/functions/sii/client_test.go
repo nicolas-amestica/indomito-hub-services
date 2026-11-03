@@ -2,6 +2,9 @@ package sii
 
 import (
 	"context"
+	"crypto/sha1" // #nosec G505 -- el formato XMLDSIG del SII exige SHA-1.
+	"encoding/base64"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -9,6 +12,7 @@ import (
 	"time"
 
 	"github.com/beevik/etree"
+	dsig "github.com/russellhaering/goxmldsig"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -76,6 +80,17 @@ func TestClientRejectsSuccessfulHTTPUploadWithoutTrackID(t *testing.T) {
 	}
 }
 
+func TestSubmissionStatusRequiresProcessedEnvelopeWithoutRejections(t *testing.T) {
+	accepted := SubmissionStatus{State: "EPR", Informed: 5, Accepted: 4, Repairs: 1}
+	if !accepted.Approved() {
+		t.Fatal("processed envelope with accepted documents and repairs should be approved")
+	}
+	rejected := SubmissionStatus{State: "EPR", Informed: 5, Accepted: 4, Rejected: 1}
+	if rejected.Approved() {
+		t.Fatal("envelope with rejected documents must not be approved")
+	}
+}
+
 func TestBuildEnvelopeAcceptsLatin1DTE(t *testing.T) {
 	now := time.Date(2026, 10, 30, 18, 0, 0, 0, time.UTC)
 	credentials := testCredentials(t, now)
@@ -92,8 +107,12 @@ func TestBuildEnvelopeAcceptsLatin1DTE(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(string(decoded), `<?xml version="1.0" encoding="ISO-8859-1"?>`) {
+	if !strings.HasPrefix(string(decoded), "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n") {
 		t.Fatal("envelope XML declaration must be the first node")
+	}
+	lines := strings.SplitN(string(decoded), "\n", 3)
+	if len(lines) < 2 || !strings.HasPrefix(lines[1], `<EnvioBOLETA `) || !strings.Contains(lines[1], `EnvioBOLETA_v11.xsd`) {
+		t.Fatalf("SII schema declaration must be on line 2: %q", lines)
 	}
 	parsed := etree.NewDocument()
 	if err = parsed.ReadFromBytes(decoded); err != nil {
@@ -105,5 +124,69 @@ func TestBuildEnvelopeAcceptsLatin1DTE(t *testing.T) {
 	}
 	if parsed.FindElement("//Signature/KeyInfo/KeyValue/RSAKeyValue") == nil {
 		t.Fatal("envelope signature is missing RSAKeyValue")
+	}
+}
+
+func TestBuildEnvelopeSetPreservesCertificationOrder(t *testing.T) {
+	now := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	credentials := testCredentials(t, now)
+	documents := make([]Document, 0, 5)
+	for index := 1; index <= 5; index++ {
+		document, err := BuildDocument(credentials, Sale{RequestID: "01M68000000000000000000000", Folio: int64(index), Amount: 1000, IssueDate: now, Reference: fmt.Sprintf("CASO-%d", index), Items: []SaleItem{{Description: fmt.Sprintf("item %d", index), Quantity: 1, UnitPrice: 1000}}}, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		documents = append(documents, document)
+	}
+	envelope, err := buildEnvelopeSet(credentials, documents, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := decodeLatin1(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed := etree.NewDocument()
+	if err = parsed.ReadFromBytes(decoded); err != nil {
+		t.Fatal(err)
+	}
+	if count := parsed.FindElement("//SubTotDTE/NroDTE"); count == nil || count.Text() != "5" {
+		t.Fatalf("unexpected DTE count: %v", count)
+	}
+	dtes := parsed.FindElements("//SetDTE/DTE")
+	if len(dtes) != 5 {
+		t.Fatalf("unexpected DTE count: %d", len(dtes))
+	}
+	for index, dte := range dtes {
+		if reference := dte.FindElement("Documento/Referencia/RazonRef"); reference == nil || reference.Text() != fmt.Sprintf("CASO-%d", index+1) {
+			t.Fatalf("unexpected reference at %d: %v", index, reference)
+		}
+		document := dte.FindElement("Documento")
+		digestValue := dte.FindElement("Signature/SignedInfo/Reference/DigestValue")
+		canonical, canonicalErr := dsig.MakeC14N10RecCanonicalizer().Canonicalize(document)
+		if canonicalErr != nil {
+			t.Fatal(canonicalErr)
+		}
+		digest := sha1.Sum(canonical) // #nosec G401 -- el formato XMLDSIG del SII exige SHA-1.
+		if digestValue == nil || digestValue.Text() != base64.StdEncoding.EncodeToString(digest[:]) {
+			t.Fatalf("embedded DTE %d digest changed inside EnvioBOLETA", index+1)
+		}
+	}
+	set := parsed.FindElement("//SetDTE")
+	digestValue := parsed.FindElement("//Signature/SignedInfo/Reference/DigestValue")
+	canonical, err := dsig.MakeC14N10RecCanonicalizer().Canonicalize(set)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha1.Sum(canonical) // #nosec G401 -- el formato XMLDSIG del SII exige SHA-1.
+	if digestValue == nil || digestValue.Text() != base64.StdEncoding.EncodeToString(digest[:]) {
+		t.Fatal("serialized certification envelope changed after its digest was signed")
+	}
+	signatures := parsed.FindElements("//Signature")
+	if len(signatures) != 6 {
+		t.Fatalf("unexpected signature count: %d", len(signatures))
+	}
+	for _, signature := range signatures {
+		assertXMLSignatureBase64Wrapped(t, signature)
 	}
 }

@@ -58,6 +58,8 @@ github.com/signintech/gopdf v0.38.1 h1:mMdVMPKrvHCskYmjet/uTuXRAEV742oTM7GdFcuhu
 github.com/signintech/gopdf v0.38.1/go.mod h1:d23eO35GpEliSrF22eJ4bsM3wVeQJTjXTHq5x5qGKjA=
 github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e h1:MRM5ITcdelLK2j1vwZ3Je0FKVCfqOLp5zO6trqMLYs0=
 github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e/go.mod h1:XV66xRDqSt+GTGFMVlhk3ULuV0y9ZmzeVGR4mloJI3M=
+github.com/speedata/barcode v1.1.1 h1:pEBt6VWg2tG2rOhDePLCub4bZWP6bHyGJhclwyt6Oxc=
+github.com/speedata/barcode v1.1.1/go.mod h1:BNwJ2io3ZgecUqunSUFAlfnnI8YTh3SLSHZgs5vaoTY=
 github.com/stretchr/testify v1.7.2 h1:4jaiDzPyXQvSd7D0EjG45355tLlV3VOECpq10pLC+8s=
 github.com/stretchr/testify v1.7.2/go.mod h1:R6va5+xMeoiuVRoj+gSkQ7d3FALtqAAGI1FQKckRals=
 github.com/wneessen/go-mail v0.8.1 h1:tVcncj02/QySVFw3zr/kXOzZcuFQqBNT6K+Rbgm/pcM=
