@@ -16,6 +16,7 @@ func TestServerlessDefinesEncryptedQueuesDlqsAndAlarms(t *testing.T) {
 		"InboxWorkflowQueue", "InboxWorkflowDeadLetterQueue",
 		"InboxRealtimeQueue", "InboxRealtimeDeadLetterQueue",
 		"maxReceiveCount: 5", "MessageRetentionPeriod: 1209600",
+		"ReceiveMessageWaitTimeSeconds: 20",
 		"SqsManagedSseEnabled: true", "AWS::CloudWatch::Alarm",
 		"fn-despachar-trabajo-inbox-v1", "ConversacionesTableStreamArn",
 		"ReportBatchItemFailures", "sqs:SendMessage",
@@ -36,6 +37,23 @@ func TestServerlessDefinesEncryptedQueuesDlqsAndAlarms(t *testing.T) {
 	} {
 		if !strings.Contains(source, fragment) {
 			t.Fatalf("serverless infrastructure is missing %q", fragment)
+		}
+	}
+}
+
+func TestServerlessLimitsFreeTierAlarmsByStage(t *testing.T) {
+	raw, err := os.ReadFile("../serverless.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(raw)
+	for _, fragment := range []string{
+		"const productionAlarmIds = new Set([",
+		"STAGE !== \"prd\" || !productionAlarmIds.has(id)",
+		"resource.Type === \"AWS::CloudWatch::Alarm\"",
+	} {
+		if !strings.Contains(source, fragment) {
+			t.Fatalf("serverless Free Tier alarm policy is missing %q", fragment)
 		}
 	}
 }

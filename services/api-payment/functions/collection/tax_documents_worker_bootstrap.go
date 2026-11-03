@@ -8,15 +8,14 @@ import (
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"ind-hub-api-gox-sls-pri-gh/bootstrap"
 	"ind-hub-api-gox-sls-pri-gh/services/api-payment/functions/sii"
 )
 
-type secretsManagerSIIConfigLoader struct {
-	Reader *secretsmanager.Client
+type ssmSIIConfigLoader struct {
+	Reader siiParameterAPI
 	Stage  string
 }
 
@@ -29,16 +28,15 @@ func loadTaxDocumentWorker(ctx context.Context) (TaxDocumentWorkerApp, error) {
 	if err != nil {
 		return TaxDocumentWorkerApp{}, err
 	}
-	return TaxDocumentWorkerApp{Accounts: Service{DB: dynamodb.NewFromConfig(cfg), Table: os.Getenv("PAYMENTS_TABLE_NAME")}, Config: secretsManagerSIIConfigLoader{Reader: secretsmanager.NewFromConfig(cfg), Stage: stage}, Issuer: directSIIssuer{Client: sii.Client{HTTP: &http.Client{Timeout: 20 * time.Second}, Now: time.Now}}, Now: time.Now}, nil
+	return TaxDocumentWorkerApp{Accounts: Service{DB: dynamodb.NewFromConfig(cfg), Table: os.Getenv("PAYMENTS_TABLE_NAME")}, Config: ssmSIIConfigLoader{Reader: ssm.NewFromConfig(cfg), Stage: stage}, Issuer: directSIIssuer{Client: sii.Client{HTTP: &http.Client{Timeout: 20 * time.Second}, Now: time.Now}}, Now: time.Now}, nil
 }
 
-func (l secretsManagerSIIConfigLoader) Load(ctx context.Context, now time.Time) (sii.Credentials, error) {
-	name := "indomito/" + l.Stage + "/payments/sii/boleta-config"
-	result, err := l.Reader.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: aws.String(name)})
-	if err != nil || result == nil || result.SecretString == nil {
+func (l ssmSIIConfigLoader) Load(ctx context.Context, now time.Time) (sii.Credentials, error) {
+	raw, err := (siiParameterStore{Client: l.Reader, Stage: l.Stage}).Load(ctx)
+	if err != nil {
 		return sii.Credentials{}, errors.New("configuración SII no disponible")
 	}
-	return sii.ParseConfig([]byte(aws.ToString(result.SecretString)), now)
+	return sii.ParseConfig(raw, now)
 }
 
 // TaxDocumentWorkerHandler emite solo solicitudes creadas por pagos Khipu conciliados.

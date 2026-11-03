@@ -530,6 +530,7 @@ serverlessConfiguration.resources = {
       Type: "AWS::SQS::Queue",
       Properties: {
         VisibilityTimeout: 180,
+        ReceiveMessageWaitTimeSeconds: 20,
         MessageRetentionPeriod: 345600,
         SqsManagedSseEnabled: true,
         RedrivePolicy: { deadLetterTargetArn: { "Fn::GetAtt": ["InboxInboundDeadLetterQueue", "Arn"] }, maxReceiveCount: 5 },
@@ -545,12 +546,13 @@ serverlessConfiguration.resources = {
     },
     InboxAgentQueue: {
       Type: "AWS::SQS::Queue",
-      Properties: { VisibilityTimeout: 210, MessageRetentionPeriod: 345600, SqsManagedSseEnabled: true, RedrivePolicy: { deadLetterTargetArn: { "Fn::GetAtt": ["InboxAgentDeadLetterQueue", "Arn"] }, maxReceiveCount: 5 } },
+      Properties: { VisibilityTimeout: 210, ReceiveMessageWaitTimeSeconds: 20, MessageRetentionPeriod: 345600, SqsManagedSseEnabled: true, RedrivePolicy: { deadLetterTargetArn: { "Fn::GetAtt": ["InboxAgentDeadLetterQueue", "Arn"] }, maxReceiveCount: 5 } },
     },
     InboxWorkflowQueue: {
       Type: "AWS::SQS::Queue",
       Properties: {
         VisibilityTimeout: 960,
+        ReceiveMessageWaitTimeSeconds: 20,
         MessageRetentionPeriod: 345600,
         SqsManagedSseEnabled: true,
         RedrivePolicy: { deadLetterTargetArn: { "Fn::GetAtt": ["InboxWorkflowDeadLetterQueue", "Arn"] }, maxReceiveCount: 5 },
@@ -564,6 +566,7 @@ serverlessConfiguration.resources = {
       Type: "AWS::SQS::Queue",
       Properties: {
         VisibilityTimeout: 90,
+        ReceiveMessageWaitTimeSeconds: 20,
         MessageRetentionPeriod: 345600,
         SqsManagedSseEnabled: true,
         RedrivePolicy: { deadLetterTargetArn: { "Fn::GetAtt": ["InboxRealtimeDeadLetterQueue", "Arn"] }, maxReceiveCount: 5 },
@@ -677,5 +680,20 @@ serverlessConfiguration.resources = {
     InboxOperationalAlertsTopicArn: { Value: INBOX_OPERATIONAL_ALERTS_TOPIC },
   },
 };
+
+const productionAlarmIds = new Set([
+  "InboxWorkflowDlqAlarm",
+  "InboxAgentDlqAlarm",
+  "InboxInboundDlqAlarm",
+  "InboxRealtimeDlqAlarm",
+  "InboxWebhookErrorsAlarm",
+  "InboxOutboundSendErrorsAlarm",
+]);
+const deployedResources = serverlessConfiguration.resources.Resources as Record<string, { Type?: string }>;
+for (const [id, resource] of Object.entries(deployedResources)) {
+  if (resource.Type === "AWS::CloudWatch::Alarm" && (STAGE !== "prd" || !productionAlarmIds.has(id))) {
+    delete deployedResources[id];
+  }
+}
 
 module.exports = serverlessConfiguration;

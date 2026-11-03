@@ -25,15 +25,8 @@ test('monitoreo y alarmas sin permisos de escritura financiera ni Scan', () => {
   assert.ok(config.functions.alarm.onError);
   assert.ok(config.provider.iam.role.statements.some((s: { Action: string[] }) => s.Action.includes('sqs:SendMessage')));
 });
-test('incluye fallos HTTP, trabajador detenido y monitor detenido, sin bucle SMTP', () => {
+test('DEV no provisiona alarmas permanentes para mantenerse en Free Tier', () => {
   const r = config.resources.Resources;
-  for (const name of ['ReceiverErrors', 'ReceiverThrottles', 'WorkerErrors', 'WorkerThrottles', 'ReceiverRejected', 'MonitorErrors']) {
-    assert.equal(r[name].Properties.TreatMissingData, 'notBreaching');
-    assert.ok(r[name].Properties.AlarmActions.length);
-    assert.ok(r[name].Properties.OKActions.length);
-  }
-  for (const name of ['WorkerNotRunning', 'MonitorNotHealthy']) assert.equal(r[name].Properties.TreatMissingData, 'breaching');
-  assert.equal(r.EmailDeliveryErrors.Properties.AlarmActions, undefined);
-  assert.equal(r.EmailDeadLetters.Properties.AlarmActions, undefined);
+  assert.equal(Object.values(r).filter((resource: any) => resource.Type === 'AWS::CloudWatch::Alarm').length, 0);
   assert.ok(r.AlertTopicPolicy.Properties.PolicyDocument.Statement[0].Condition.StringEquals['aws:SourceAccount']);
 });

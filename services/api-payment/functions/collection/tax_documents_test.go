@@ -18,6 +18,15 @@ type taxStorageFake struct {
 	objects map[string][]byte
 }
 
+type taxDocumentSignerFake struct {
+	key string
+}
+
+func (f *taxDocumentSignerFake) Download(_ context.Context, key string) (string, error) {
+	f.key = key
+	return "https://example.test/boleta.pdf", nil
+}
+
 func (f *taxStorageFake) PutObject(_ context.Context, input *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
 	content, err := io.ReadAll(input.Body)
 	if err != nil {
@@ -75,6 +84,34 @@ func TestManualTaxIssuanceUsesDedicatedBoundedDecoder(t *testing.T) {
 	tooLarge := strings.Repeat("A", maxManualTaxBodyBytes+1)
 	if err := decodeManualTaxIssuance(events.APIGatewayV2HTTPRequest{Body: tooLarge}, &request); err == nil {
 		t.Fatal("oversized tax body was accepted")
+	}
+}
+
+func TestTaxDocumentDownloadRecognizesLiteralAPIGatewayRoute(t *testing.T) {
+	service, db := serviceFixture(t)
+	requestID := approvedID
+	tax := TaxDocumentRequest{
+		RequestID: requestID,
+		Status:    taxStatusSubmitted,
+		SIIIssuance: &SIIIssuance{
+			Folio:       386,
+			DocumentKey: "tax-documents/39/386.pdf",
+		},
+	}
+	saveLookupRow(t, db, record{PK: "TAX_REQUEST#" + requestID, SK: "META", TaxRequest: &tax, Status: tax.Status})
+	signer := &taxDocumentSignerFake{}
+	req := events.APIGatewayV2HTTPRequest{
+		RawPath:        "/pagos/documentos-tributarios/" + requestID + "/descarga",
+		PathParameters: map[string]string{"requestId": requestID},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			HTTP:       events.APIGatewayV2HTTPRequestContextHTTPDescription{Method: "GET"},
+			Authorizer: &events.APIGatewayV2HTTPRequestContextAuthorizerDescription{Lambda: map[string]any{"userId": "operator", "paymentAccess": "admin"}},
+		},
+	}
+
+	response, err := (TaxDocumentsApp{Accounts: service, Signer: signer}).Handle(context.Background(), req)
+	if err != nil || response.StatusCode != 200 || signer.key != "tax-documents/39/386.pdf" {
+		t.Fatalf("literal download route failed: response=%+v err=%v key=%q", response, err, signer.key)
 	}
 }
 

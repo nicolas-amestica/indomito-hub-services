@@ -33,6 +33,13 @@ alarm('MonitorErrors', 'Errors', 'AWS/Lambda', [{ Name: 'FunctionName', Value: `
 alarm('EmailDeliveryErrors', 'Errors', 'AWS/Lambda', [{ Name: 'FunctionName', Value: `payment-monitoring-${STAGE}-alarm` }], 300, 1, 'notBreaching', 'GreaterThanOrEqualToThreshold', false);
 alarm('EmailDeadLetters', 'ApproximateNumberOfMessagesVisible', 'AWS/SQS', [{ Name: 'QueueName', Value: { 'Fn::GetAtt': ['AlertDeliveryFailures', 'QueueName'] } }], 300, 1, 'notBreaching', 'GreaterThanOrEqualToThreshold', false);
 
+const productionAlarmIds = new Set(['ReceiverErrors', 'WorkerErrors', 'MonitorNotHealthy', 'EmailDeadLetters']);
+for (const [id, resource] of Object.entries(resources)) {
+  if ((resource as { Type?: string }).Type === 'AWS::CloudWatch::Alarm' && (STAGE !== 'prd' || !productionAlarmIds.has(id))) {
+    delete resources[id];
+  }
+}
+
 const configuration: AWS = {
   service: 'payment-monitoring', frameworkVersion: '4',
   provider: {

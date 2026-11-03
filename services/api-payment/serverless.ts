@@ -40,17 +40,19 @@ const groupReceiptQuery:IamStatement={Effect:'Allow',Action:['dynamodb:Query'],R
 const receiptDownload:IamStatement={Effect:'Allow',Action:['s3:GetObject'],Resource:`${receiptsBucketArn}/receipts/*`};
 const taxDocumentRead:IamStatement={Effect:'Allow',Action:['dynamodb:GetItem','dynamodb:Query'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['TAX_REQUEST#*','TAX_QUEUE#PENDING','TAX_QUEUE#RECORDED','TAX_FOLIO#39','COMMAND#*']}}};
 const taxDocumentWrite:IamStatement={Effect:'Allow',Action:['dynamodb:PutItem','dynamodb:DeleteItem','dynamodb:TransactWriteItems'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['TAX_REQUEST#*','TAX_QUEUE#PENDING','TAX_QUEUE#RECORDED','TAX_FOLIO#*','COMMAND#*']}}};
-const siiConfig:IamStatement={Effect:'Allow',Action:['secretsmanager:GetSecretValue'],Resource:{'Fn::Sub':`arn:\${AWS::Partition}:secretsmanager:${REGION}:\${AWS::AccountId}:secret:indomito/${STAGE}/payments/sii/boleta-config-*`}};
-const taxConfigurationActiveSecret:IamStatement={Effect:'Allow',Action:['secretsmanager:GetSecretValue','secretsmanager:PutSecretValue'],Resource:{'Fn::Sub':`arn:\${AWS::Partition}:secretsmanager:${REGION}:\${AWS::AccountId}:secret:indomito/${STAGE}/payments/sii/boleta-config-*`}};
+const siiParameterArn = {'Fn::Sub':`arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/${STAGE}/payments/sii/boleta-config*`};
+const siiConfig:IamStatement={Effect:'Allow',Action:['ssm:GetParameter','ssm:GetParameters'],Resource:siiParameterArn};
+const taxConfigurationActiveParameter:IamStatement={Effect:'Allow',Action:['ssm:GetParameter','ssm:GetParameters','ssm:PutParameter'],Resource:siiParameterArn};
+const taxFolioConfigurationRead:IamStatement={Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringEquals':{'dynamodb:LeadingKeys':['TAX_FOLIO#39']}}};
 const taxDocumentObjects:IamStatement={Effect:'Allow',Action:['s3:PutObject','s3:GetObject'],Resource:`${receiptsBucketArn}/tax-documents/*`};
 const endpoints: GoHttpEndpoint[] = [
   ...renditionEndpoints(),
 	{name:'fn-verificar-comprobante-publico-v1',method:'POST',path:'/pagos/comprobantes/verificaciones',public:true,timeout:10,policies:[{Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['RECEIPT#*','ATTEMPT#*','RATE#*']}}},rateWrite,lookupSecret]},
 	{name:'fn-consultar-boleta-electronica-v1',method:'POST',path:'/pagos/boletas/consultas',public:true,timeout:10,policies:[{Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['TAX_PUBLIC#39#*','RATE#*']}}},rateWrite,lookupSecret]},
-	{name:'fn-sii-config-get-v1',method:'GET',path:'/pagos/documentos-tributarios/configuracion',public:false,timeout:10,policies:[taxConfigurationActiveSecret,{Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringEquals':{'dynamodb:LeadingKeys':['TAX_FOLIO#39']}}}]},
-	{name:'fn-sii-config-put-v1',method:'PUT',path:'/pagos/documentos-tributarios/configuracion',public:false,timeout:10,policies:[taxConfigurationActiveSecret]},
-	{name:'fn-sii-config-caf-v1',method:'POST',path:'/pagos/documentos-tributarios/configuracion/caf',public:false,timeout:15,env:{GODEBUG:'rsa1024min=0'},policies:[taxConfigurationActiveSecret]},
-	{name:'fn-sii-config-pfx-v1',method:'POST',path:'/pagos/documentos-tributarios/configuracion/pfx',public:false,timeout:15,policies:[taxConfigurationActiveSecret]},
+	{name:'fn-sii-config-get-v1',method:'GET',path:'/pagos/documentos-tributarios/configuracion',public:false,timeout:10,policies:[taxConfigurationActiveParameter,taxFolioConfigurationRead]},
+	{name:'fn-sii-config-put-v1',method:'PUT',path:'/pagos/documentos-tributarios/configuracion',public:false,timeout:10,policies:[taxConfigurationActiveParameter,taxFolioConfigurationRead]},
+	{name:'fn-sii-config-caf-v1',method:'POST',path:'/pagos/documentos-tributarios/configuracion/caf',public:false,timeout:15,env:{GODEBUG:'rsa1024min=0'},policies:[taxConfigurationActiveParameter,taxFolioConfigurationRead]},
+	{name:'fn-sii-config-pfx-v1',method:'POST',path:'/pagos/documentos-tributarios/configuracion/pfx',public:false,timeout:15,policies:[taxConfigurationActiveParameter,taxFolioConfigurationRead]},
 	{name:'fn-listar-solicitudes-tributarias-v1',method:'GET',path:'/pagos/documentos-tributarios/pendientes',public:false,timeout:10,policies:[taxDocumentRead]},
 	{name:'fn-crear-boleta-electronica-v1',method:'POST',path:'/pagos/documentos-tributarios/emisiones',public:false,timeout:10,policies:[taxDocumentRead,taxDocumentWrite]},
 	{name:'fn-emitir-boleta-pendiente-v1',method:'POST',path:'/pagos/documentos-tributarios/{requestId}/{action}',public:false,timeout:29,env:{GODEBUG:'rsa1024min=0'},policies:[taxDocumentRead,taxDocumentWrite,siiConfig]},
@@ -165,7 +167,7 @@ const resources = configuration.resources.Resources as Record<string, unknown> |
 (configuration.resources as { Resources: Record<string, unknown> }).Resources = {
   ...(resources ?? {}),
   PaymentReconciliationDLQ: { Type:'AWS::SQS::Queue', Properties:{MessageRetentionPeriod:1209600,SqsManagedSseEnabled:true}},
-  PaymentReconciliationQueue: { Type:'AWS::SQS::Queue', Properties:{VisibilityTimeout:60,MessageRetentionPeriod:1209600,SqsManagedSseEnabled:true,RedrivePolicy:{deadLetterTargetArn:{'Fn::GetAtt':['PaymentReconciliationDLQ','Arn']},maxReceiveCount:5}}},
+  PaymentReconciliationQueue: { Type:'AWS::SQS::Queue', Properties:{VisibilityTimeout:60,ReceiveMessageWaitTimeSeconds:20,MessageRetentionPeriod:1209600,SqsManagedSseEnabled:true,RedrivePolicy:{deadLetterTargetArn:{'Fn::GetAtt':['PaymentReconciliationDLQ','Arn']},maxReceiveCount:5}}},
 };
 module.exports = configuration;
 

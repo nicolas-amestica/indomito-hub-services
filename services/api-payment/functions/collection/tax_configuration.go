@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"net/mail"
 	"os"
 	"strings"
 	"time"
@@ -17,7 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
 )
 
 type taxConfigurationInput struct {
@@ -26,6 +27,7 @@ type taxConfigurationInput struct {
 	IssuerActivity        string          `json:"issuerActivity"`
 	IssuerAddress         string          `json:"issuerAddress"`
 	IssuerCommune         string          `json:"issuerCommune"`
+	NotificationEmail     string          `json:"notificationEmail"`
 	Environment           sii.Environment `json:"environment"`
 	ResolutionDate        string          `json:"resolutionDate"`
 	ResolutionNumber      int64           `json:"resolutionNumber"`
@@ -62,7 +64,7 @@ func TaxConfigurationHandler(ctx context.Context, req events.APIGatewayV2HTTPReq
 	app := taxConfigurationApp{
 		payments:      dynamodb.NewFromConfig(cfg),
 		paymentsTable: strings.TrimSpace(os.Getenv("PAYMENTS_TABLE_NAME")),
-		secrets:       secretsmanager.NewFromConfig(cfg),
+		parameters:    ssm.NewFromConfig(cfg),
 		stage:         stage,
 		now:           time.Now,
 	}
@@ -72,7 +74,7 @@ func TaxConfigurationHandler(ctx context.Context, req events.APIGatewayV2HTTPReq
 type taxConfigurationApp struct {
 	payments      *dynamodb.Client
 	paymentsTable string
-	secrets       *secretsmanager.Client
+	parameters    siiParameterAPI
 	stage         string
 	now           func() time.Time
 }
@@ -95,20 +97,20 @@ func (a taxConfigurationApp) handle(ctx context.Context, req events.APIGatewayV2
 }
 
 func (a taxConfigurationApp) load(ctx context.Context) (sii.Config, sii.Credentials, error) {
-	if a.secrets == nil || a.now == nil {
+	if a.parameters == nil || a.now == nil {
 		return sii.Config{}, sii.Credentials{}, sii.ErrInvalidConfiguration
 	}
-	result, err := a.secrets.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: aws.String("indomito/" + a.stage + "/payments/sii/boleta-config")})
-	if err != nil || result == nil || result.SecretString == nil {
+	raw, err := (siiParameterStore{Client: a.parameters, Stage: a.stage}).Load(ctx)
+	if err != nil {
 		return sii.Config{}, sii.Credentials{}, sii.ErrInvalidConfiguration
 	}
 	var config sii.Config
-	decoder := json.NewDecoder(strings.NewReader(*result.SecretString))
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&config) != nil {
 		return sii.Config{}, sii.Credentials{}, sii.ErrInvalidConfiguration
 	}
-	credentials, err := sii.ParseConfig([]byte(*result.SecretString), a.now().UTC())
+	credentials, err := sii.ParseConfig(raw, a.now().UTC())
 	if err != nil {
 		return sii.Config{}, sii.Credentials{}, err
 	}
@@ -161,7 +163,7 @@ func (a taxConfigurationApp) summary(ctx context.Context, req events.APIGatewayV
 	return lambdautil.SuccessResponseWithHeaders(200, map[string]any{
 		"senderRut": config.SenderRUT, "issuerName": credentials.IssuerName,
 		"issuerActivity": config.IssuerActivity, "issuerAddress": config.IssuerAddress,
-		"issuerCommune": config.IssuerCommune, "environment": config.Environment,
+		"issuerCommune": config.IssuerCommune, "notificationEmail": config.NotificationEmail, "environment": config.Environment,
 		"resolutionDate": config.ResolutionDate, "resolutionNumber": config.ResolutionNumber,
 		"enabled": config.Enabled, "certificationApproved": false,
 		"caf":         map[string]any{"from": credentials.FolioFrom, "to": credentials.FolioTo, "used": used, "available": available, "next": next, "usagePercentage": usagePercentage, "authorizationDate": credentials.AuthorizationAt, "severity": cafSeverity},
@@ -188,16 +190,15 @@ func (a taxConfigurationApp) lastReservedFolio(ctx context.Context) (int64, erro
 
 func (a taxConfigurationApp) save(ctx context.Context, config sii.Config) error {
 	raw, err := json.Marshal(config)
-	if err != nil || a.secrets == nil {
+	if err != nil || a.parameters == nil {
 		return sii.ErrInvalidConfiguration
 	}
-	_, err = a.secrets.PutSecretValue(ctx, &secretsmanager.PutSecretValueInput{SecretId: aws.String("indomito/" + a.stage + "/payments/sii/boleta-config"), SecretString: aws.String(string(raw))})
-	return err
+	return (siiParameterStore{Client: a.parameters, Stage: a.stage}).Save(ctx, raw)
 }
 
 func (a taxConfigurationApp) update(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	var input taxConfigurationInput
-	if decodeAdmin(req, &input) != nil || (input.Environment != sii.EnvironmentCertification && input.Environment != sii.EnvironmentProduction) || strings.TrimSpace(input.IssuerName) == "" {
+	if decodeAdmin(req, &input) != nil || (input.Environment != sii.EnvironmentCertification && input.Environment != sii.EnvironmentProduction) || strings.TrimSpace(input.IssuerName) == "" || !validSIINotificationEmail(input.NotificationEmail) {
 		return adminFailure(req, 400, "INVALID_REQUEST")
 	}
 	config, credentials, err := a.load(ctx)
@@ -208,6 +209,7 @@ func (a taxConfigurationApp) update(ctx context.Context, req events.APIGatewayV2
 	config.IssuerActivity = strings.TrimSpace(input.IssuerActivity)
 	config.IssuerAddress = strings.TrimSpace(input.IssuerAddress)
 	config.IssuerCommune = strings.TrimSpace(input.IssuerCommune)
+	config.NotificationEmail = strings.TrimSpace(input.NotificationEmail)
 	config.Environment = input.Environment
 	config.ResolutionDate = input.ResolutionDate
 	config.ResolutionNumber = input.ResolutionNumber
@@ -220,6 +222,15 @@ func (a taxConfigurationApp) update(ctx context.Context, req events.APIGatewayV2
 		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
 	}
 	return a.summary(ctx, req)
+}
+
+func validSIINotificationEmail(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return true
+	}
+	address, err := mail.ParseAddress(value)
+	return err == nil && address.Address == value && len(value) <= 254
 }
 
 func (a taxConfigurationApp) uploadCAF(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -240,7 +251,10 @@ func (a taxConfigurationApp) uploadCAF(ctx context.Context, req events.APIGatewa
 		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
 	}
 	lastReserved, err := a.lastReservedFolio(ctx)
-	if err != nil || info.IssuerRUT != current.IssuerRUT || info.To <= lastReserved || (lastReserved >= current.FolioFrom && lastReserved < current.FolioTo) {
+	if err != nil {
+		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
+	}
+	if info.IssuerRUT != current.IssuerRUT || info.To <= lastReserved || (lastReserved >= current.FolioFrom && lastReserved < current.FolioTo) {
 		return adminFailure(req, 409, "CAF_RANGE_CONFLICT")
 	}
 	config.CAFXMLBase64 = base64.StdEncoding.EncodeToString(raw)

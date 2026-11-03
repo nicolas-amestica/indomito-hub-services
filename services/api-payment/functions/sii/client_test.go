@@ -89,6 +89,10 @@ func TestSubmissionStatusRequiresProcessedEnvelopeWithoutRejections(t *testing.T
 	if rejected.Approved() {
 		t.Fatal("envelope with rejected documents must not be approved")
 	}
+	incomplete := SubmissionStatus{State: "EPR"}
+	if incomplete.Approved() {
+		t.Fatal("processed envelope without document statistics must remain pending")
+	}
 }
 
 func TestBuildEnvelopeAcceptsLatin1DTE(t *testing.T) {

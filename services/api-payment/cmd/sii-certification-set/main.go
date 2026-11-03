@@ -8,9 +8,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	"ind-hub-api-gox-sls-pri-gh/services/api-payment/functions/collection"
 	"ind-hub-api-gox-sls-pri-gh/services/api-payment/functions/sii"
 )
 
@@ -26,13 +26,13 @@ func main() {
 	defer cancel()
 	awsConfig, err := config.LoadDefaultConfig(ctx, config.WithRegion("us-east-1"))
 	check(err)
-	secret, err := secretsmanager.NewFromConfig(awsConfig).GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: aws.String("indomito/dev/payments/sii/boleta-config")})
+	parameter, err := collection.LoadSIIParameterValue(ctx, ssm.NewFromConfig(awsConfig), "dev")
 	check(err)
-	if secret.SecretString == nil {
+	if len(parameter) == 0 {
 		check(fmt.Errorf("configuracion SII sin contenido"))
 	}
 	now := time.Now()
-	credentials, err := sii.ParseConfig([]byte(aws.ToString(secret.SecretString)), now)
+	credentials, err := sii.ParseConfig(parameter, now)
 	check(err)
 	if credentials.Environment != sii.EnvironmentCertification || credentials.FolioTo-credentials.FolioFrom+1 != 5 {
 		check(fmt.Errorf("se requiere ambiente CERTIFICATION y un CAF de exactamente 5 folios; rango actual %d-%d", credentials.FolioFrom, credentials.FolioTo))

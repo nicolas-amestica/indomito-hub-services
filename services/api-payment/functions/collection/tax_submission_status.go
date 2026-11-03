@@ -25,6 +25,8 @@ type TaxSubmissionStatusApp struct {
 	Now      func() time.Time
 }
 
+const minimumSIISubmissionQueryDelay = 2 * time.Minute
+
 func (a TaxSubmissionStatusApp) Run(ctx context.Context) error {
 	db, ok := a.Accounts.DB.(queryDatabase)
 	if !ok || a.Config == nil || a.SII == nil || a.Now == nil {
@@ -44,12 +46,15 @@ func (a TaxSubmissionStatusApp) Run(ctx context.Context) error {
 		if attributevalue.UnmarshalMap(item, &row) != nil || row.TaxRequest == nil || row.TaxRequest.Status != taxStatusSubmitted || row.TaxRequest.SIIIssuance == nil || row.TaxRequest.SIIIssuance.TrackID == "" {
 			continue
 		}
+		if row.TaxRequest.SIIIssuance.SubmittedAt != nil && a.Now().UTC().Sub(*row.TaxRequest.SIIIssuance.SubmittedAt) < minimumSIISubmissionQueryDelay {
+			continue
+		}
 		status, queryErr := a.SII.QuerySubmission(ctx, credentials, row.TaxRequest.SIIIssuance.TrackID)
 		if queryErr != nil {
 			failures = append(failures, queryErr)
 			continue
 		}
-		if status.State != "EPR" && status.State != "RSC" && status.State != "RFR" && status.State != "RCT" {
+		if !finalSubmissionStatus(status) {
 			continue
 		}
 		if err = a.finish(ctx, row, status); err != nil {
@@ -57,6 +62,20 @@ func (a TaxSubmissionStatusApp) Run(ctx context.Context) error {
 		}
 	}
 	return errors.Join(failures...)
+}
+
+func finalSubmissionStatus(status sii.SubmissionStatus) bool {
+	switch status.State {
+	case "EPR":
+		// El SII puede informar primero que el sobre fue procesado y publicar
+		// las estadísticas de sus DTE en una consulta posterior. Sin esos
+		// contadores todavía no existe evidencia de aceptación ni rechazo.
+		return status.Informed > 0
+	case "RSC", "RFR", "RCT":
+		return true
+	default:
+		return false
+	}
 }
 
 func (a TaxSubmissionStatusApp) finish(ctx context.Context, queue record, status sii.SubmissionStatus) error {

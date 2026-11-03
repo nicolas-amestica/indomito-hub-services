@@ -152,7 +152,7 @@ func (a TaxDocumentsApp) Handle(ctx context.Context, req events.APIGatewayV2HTTP
 	if !validPortalID(requestID) {
 		return adminFailure(req, 400, "INVALID_REQUEST")
 	}
-	if req.PathParameters["action"] == "descarga" && req.RequestContext.HTTP.Method == "GET" {
+	if req.RequestContext.HTTP.Method == "GET" && (req.PathParameters["action"] == "descarga" || strings.HasSuffix(req.RawPath, "/descarga")) {
 		return a.download(ctx, req, requestID)
 	}
 	if req.PathParameters["action"] == "emision" && req.RequestContext.HTTP.Method == "POST" {

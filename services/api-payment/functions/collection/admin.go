@@ -139,6 +139,8 @@ func adminFailure(req events.APIGatewayV2HTTPRequest, status int, reason string)
 	message := "No fue posible realizar la operación de pagos."
 	if reason == "INVALID_PAYMENT_CONFIGURATION" {
 		message = "Revise los liberados, las condiciones y las fechas de vencimiento del contrato."
+	} else if reason == "CAF_RANGE_CONFLICT" {
+		message = "El CAF vigente aún tiene folios disponibles o el nuevo rango no continúa al emisor configurado. Consuma el rango activo antes de cargar el siguiente CAF."
 	}
 	response, err := lambdautil.ErrorResponse(req, apperr.New(code, message))
 	if response.Headers == nil {

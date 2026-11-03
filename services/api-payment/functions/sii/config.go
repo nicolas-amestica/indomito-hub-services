@@ -35,6 +35,7 @@ type Config struct {
 	IssuerActivity       string      `json:"issuerActivity"`
 	IssuerAddress        string      `json:"issuerAddress"`
 	IssuerCommune        string      `json:"issuerCommune"`
+	NotificationEmail    string      `json:"notificationEmail,omitempty"`
 	SenderRUT            string      `json:"senderRut"`
 	ResolutionDate       string      `json:"resolutionDate"`
 	ResolutionNumber     int64       `json:"resolutionNumber"`
