@@ -121,7 +121,7 @@ type TaxDocumentStorage interface {
 }
 
 type TaxDocumentSigner interface {
-	Download(context.Context, string) (string, error)
+	Download(context.Context, string, string) (string, error)
 }
 
 type TaxDocumentsApp struct {
@@ -334,7 +334,7 @@ func (a TaxDocumentsApp) recordManualIssuance(ctx context.Context, req events.AP
 	sum := sha256.Sum256(pdf)
 	digest := hex.EncodeToString(sum[:])
 	documentKey := "tax-documents/manual/" + requestID + "/" + digest + ".pdf"
-	if err = a.putTaxPDF(ctx, documentKey, digest, pdf); err != nil {
+	if err = a.putTaxPDF(ctx, documentKey, digest, "boleta-"+strings.TrimSpace(body.Folio)+"-sii.pdf", pdf); err != nil {
 		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
 	}
 	audit := domain.Audit{CommandID: commandID, Actor: actor, Reason: strings.TrimSpace(body.Reason), RecordedAt: a.Now().UTC()}
@@ -401,8 +401,8 @@ func decodeManualTaxIssuance(req events.APIGatewayV2HTTPRequest, target *ManualT
 	return nil
 }
 
-func (a TaxDocumentsApp) putTaxPDF(ctx context.Context, key, digest string, pdf []byte) error {
-	_, err := a.Storage.PutObject(ctx, &s3.PutObjectInput{Bucket: &a.Bucket, Key: &key, Body: bytes.NewReader(pdf), ContentType: aws.String("application/pdf"), ContentDisposition: aws.String(`attachment; filename="boleta-sii.pdf"`), ServerSideEncryption: "AES256", IfNoneMatch: aws.String("*"), Metadata: map[string]string{"sha256": digest}})
+func (a TaxDocumentsApp) putTaxPDF(ctx context.Context, key, digest, fileName string, pdf []byte) error {
+	_, err := a.Storage.PutObject(ctx, &s3.PutObjectInput{Bucket: &a.Bucket, Key: &key, Body: bytes.NewReader(pdf), ContentType: aws.String("application/pdf"), ContentDisposition: aws.String(`attachment; filename="` + fileName + `"`), ServerSideEncryption: "AES256", IfNoneMatch: aws.String("*"), Metadata: map[string]string{"sha256": digest}})
 	if err == nil {
 		return nil
 	}
@@ -419,6 +419,7 @@ func (a TaxDocumentsApp) download(ctx context.Context, req events.APIGatewayV2HT
 		return adminFailure(req, 404, "PAYMENT_ACCOUNT_NOT_FOUND")
 	}
 	documentKey := ""
+	fileName := ""
 	if row.TaxRequest.ManualIssuance != nil {
 		issuance := row.TaxRequest.ManualIssuance
 		expectedPrefix := "tax-documents/manual/" + requestID + "/"
@@ -426,16 +427,18 @@ func (a TaxDocumentsApp) download(ctx context.Context, req events.APIGatewayV2HT
 			return adminFailure(req, 409, "PAYMENT_STATE_CONFLICT")
 		}
 		documentKey = issuance.DocumentKey
+		fileName = "boleta-" + issuance.Folio + "-sii.pdf"
 	} else if (row.TaxRequest.Status == taxStatusSubmitted || row.TaxRequest.Status == taxStatusAccepted || row.TaxRequest.Status == taxStatusAcceptedRepair) && row.TaxRequest.SIIIssuance != nil {
 		expected := "tax-documents/39/" + strconv.FormatInt(row.TaxRequest.SIIIssuance.Folio, 10) + ".pdf"
 		if row.TaxRequest.SIIIssuance.DocumentKey != expected {
 			return adminFailure(req, 409, "PAYMENT_STATE_CONFLICT")
 		}
 		documentKey = expected
+		fileName = "boleta-" + strconv.FormatInt(row.TaxRequest.SIIIssuance.Folio, 10) + "-sii.pdf"
 	} else {
 		return adminFailure(req, 404, "PAYMENT_ACCOUNT_NOT_FOUND")
 	}
-	url, err := a.Signer.Download(ctx, documentKey)
+	url, err := a.Signer.Download(ctx, documentKey, fileName)
 	if err != nil {
 		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
 	}

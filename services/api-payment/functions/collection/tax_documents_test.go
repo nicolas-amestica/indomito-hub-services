@@ -19,11 +19,13 @@ type taxStorageFake struct {
 }
 
 type taxDocumentSignerFake struct {
-	key string
+	key      string
+	fileName string
 }
 
-func (f *taxDocumentSignerFake) Download(_ context.Context, key string) (string, error) {
+func (f *taxDocumentSignerFake) Download(_ context.Context, key, fileName string) (string, error) {
 	f.key = key
+	f.fileName = fileName
 	return "https://example.test/boleta.pdf", nil
 }
 
@@ -110,8 +112,8 @@ func TestTaxDocumentDownloadRecognizesLiteralAPIGatewayRoute(t *testing.T) {
 	}
 
 	response, err := (TaxDocumentsApp{Accounts: service, Signer: signer}).Handle(context.Background(), req)
-	if err != nil || response.StatusCode != 200 || signer.key != "tax-documents/39/386.pdf" {
-		t.Fatalf("literal download route failed: response=%+v err=%v key=%q", response, err, signer.key)
+	if err != nil || response.StatusCode != 200 || signer.key != "tax-documents/39/386.pdf" || signer.fileName != "boleta-386-sii.pdf" {
+		t.Fatalf("literal download route failed: response=%+v err=%v key=%q filename=%q", response, err, signer.key, signer.fileName)
 	}
 }
 

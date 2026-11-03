@@ -24,7 +24,6 @@ import (
 	barcode "github.com/speedata/barcode"
 	"github.com/speedata/barcode/pdf417"
 	gomail "github.com/wneessen/go-mail"
-	"ind-hub-api-gox-sls-pri-gh/libs/pdfbrand"
 )
 
 type taxDeliveryJob struct {
@@ -45,6 +44,8 @@ type taxPublicItem struct {
 	Description string `dynamodbav:"description"`
 	Quantity    int64  `dynamodbav:"quantity"`
 	UnitPrice   int64  `dynamodbav:"unitPrice"`
+	Exempt      bool   `dynamodbav:"exempt"`
+	Unit        string `dynamodbav:"unit"`
 }
 
 type taxPublicDocument struct {
@@ -93,11 +94,23 @@ func processTaxDelivery(ctx context.Context, job taxDeliveryJob, deps taxDeliver
 	key := fmt.Sprintf("tax-documents/39/%d.pdf", job.Folio)
 	digest := sha256.Sum256(document)
 	sha := hex.EncodeToString(digest[:])
-	_, err = deps.objects.PutObject(ctx, &s3.PutObjectInput{Bucket: &deps.bucket, Key: &key, Body: bytes.NewReader(document), ContentType: aws.String("application/pdf"), ContentDisposition: aws.String(fmt.Sprintf(`attachment; filename="boleta-%d.pdf"`, job.Folio)), ServerSideEncryption: "AES256", IfNoneMatch: aws.String("*"), Metadata: map[string]string{"sha256": sha, "document-type": "39", "folio": strconv.FormatInt(job.Folio, 10)}})
+	object := &s3.PutObjectInput{Bucket: &deps.bucket, Key: &key, Body: bytes.NewReader(document), ContentType: aws.String("application/pdf"), ContentDisposition: aws.String(fmt.Sprintf(`attachment; filename="boleta-%d-sii.pdf"`, job.Folio)), ServerSideEncryption: "AES256", IfNoneMatch: aws.String("*"), Metadata: map[string]string{"sha256": sha, "document-type": "39", "folio": strconv.FormatInt(job.Folio, 10), "render-version": "2"}}
+	_, err = deps.objects.PutObject(ctx, object)
 	if err != nil {
 		head, headErr := deps.objects.HeadObject(ctx, &s3.HeadObjectInput{Bucket: &deps.bucket, Key: &key})
-		if headErr != nil || head.Metadata["sha256"] != sha {
+		if headErr != nil {
 			return fmt.Errorf("store tax document: %w", err)
+		}
+		if head.Metadata["sha256"] != sha {
+			if head.Metadata["document-type"] != "39" || head.Metadata["folio"] != strconv.FormatInt(job.Folio, 10) || head.ETag == nil {
+				return fmt.Errorf("store tax document: %w", err)
+			}
+			object.Body = bytes.NewReader(document)
+			object.IfNoneMatch = nil
+			object.IfMatch = head.ETag
+			if _, replaceErr := deps.objects.PutObject(ctx, object); replaceErr != nil {
+				return fmt.Errorf("replace legacy tax document: %w", replaceErr)
+			}
 		}
 	}
 	requestItem, err := deps.db.GetItem(ctx, &dynamodb.GetItemInput{TableName: &deps.table, Key: taxKey("TAX_REQUEST#"+job.RequestID, "META"), ConsistentRead: aws.Bool(true)})
@@ -146,29 +159,53 @@ func renderTaxDocument(model taxPublicDocument) ([]byte, error) {
 		return nil, err
 	}
 	pdf.AddPage()
-	pdfbrand.DrawHeader(pdf)
-	pdfbrand.DrawFooter(pdf)
-	writePDFText(pdf, "bold", 13, 255, 255, 255, 48, 88, model.IssuerName)
-	writePDFText(pdf, "regular", 9, 255, 255, 255, 48, 108, "RUT "+model.IssuerRUT+" · "+model.IssuerActivity)
-	writePDFText(pdf, "regular", 9, 255, 255, 255, 48, 124, model.IssuerAddress+", "+model.IssuerCommune)
+	writePDFText(pdf, "bold", 14, 28, 28, 28, 48, 48, model.IssuerName)
+	writePDFText(pdf, "regular", 9, 28, 28, 28, 48, 70, "RUT "+model.IssuerRUT)
+	writePDFText(pdf, "regular", 9, 28, 28, 28, 48, 86, model.IssuerActivity)
+	writePDFText(pdf, "regular", 9, 28, 28, 28, 48, 102, model.IssuerAddress+", "+model.IssuerCommune)
 	pdf.SetStrokeColor(180, 20, 20)
 	pdf.SetLineWidth(1.5)
-	pdf.RectFromUpperLeftWithStyle(350, 82, 197, 82, "D")
-	writeCenteredPDFText(pdf, "bold", 11, 180, 20, 20, 448, 96, "RUT "+model.IssuerRUT)
-	writeCenteredPDFText(pdf, "bold", 12, 180, 20, 20, 448, 116, "BOLETA ELECTRÓNICA")
-	writeCenteredPDFText(pdf, "bold", 12, 180, 20, 20, 448, 136, "Nº "+strconv.FormatInt(model.Folio, 10))
-	writeCenteredPDFText(pdf, "bold", 10, 180, 20, 20, 448, 151, "S.I.I.")
-	writePDFText(pdf, "regular", 10, 28, 28, 28, 48, 188, "Fecha de emisión: "+model.IssueDate)
-	y := 220.0
+	pdf.RectFromUpperLeftWithStyle(350, 42, 197, 105, "D")
+	writeCenteredPDFText(pdf, "bold", 11, 180, 20, 20, 448, 58, "RUT "+model.IssuerRUT)
+	writeCenteredPDFText(pdf, "bold", 12, 180, 20, 20, 448, 82, "BOLETA ELECTRÓNICA")
+	writeCenteredPDFText(pdf, "bold", 12, 180, 20, 20, 448, 106, "Nº "+strconv.FormatInt(model.Folio, 10))
+	writeCenteredPDFText(pdf, "bold", 10, 180, 20, 20, 448, 130, "S.I.I.")
+	pdf.SetStrokeColor(28, 28, 28)
+	pdf.SetLineWidth(0.5)
+	pdf.Line(48, 166, 547, 166)
+	writePDFText(pdf, "regular", 10, 28, 28, 28, 390, 188, "Fecha de emisión: "+model.IssueDate)
+	writePDFText(pdf, "bold", 9, 28, 28, 28, 48, 222, "Descripción")
+	writePDFText(pdf, "bold", 9, 28, 28, 28, 330, 222, "Cantidad")
+	writePDFText(pdf, "bold", 9, 28, 28, 28, 405, 222, "Precio")
+	writePDFText(pdf, "bold", 9, 28, 28, 28, 492, 222, "Total")
+	pdf.Line(48, 232, 547, 232)
+	y := 250.0
 	for _, item := range model.Items {
-		writePDFText(pdf, "regular", 9, 28, 28, 28, 48, y, item.Description)
-		writePDFText(pdf, "regular", 9, 28, 28, 28, 340, y, strconv.FormatInt(item.Quantity, 10))
-		writePDFText(pdf, "regular", 9, 28, 28, 28, 430, y, formatCLP(item.Quantity*item.UnitPrice))
-		y += 20
+		description := item.Description
+		if item.Exempt {
+			description += " (Exento)"
+		}
+		quantity := strconv.FormatInt(item.Quantity, 10)
+		if strings.TrimSpace(item.Unit) != "" {
+			quantity += " " + strings.TrimSpace(item.Unit)
+		}
+		writePDFText(pdf, "regular", 9, 28, 28, 28, 48, y, description)
+		writePDFText(pdf, "regular", 9, 28, 28, 28, 340, y, quantity)
+		writePDFText(pdf, "regular", 9, 28, 28, 28, 405, y, formatCLP(item.UnitPrice))
+		writePDFText(pdf, "regular", 9, 28, 28, 28, 492, y, formatCLP(item.Quantity*item.UnitPrice))
+		pdf.Line(48, y+10, 547, y+10)
+		y += 22
 	}
-	writePDFText(pdf, "regular", 10, 28, 28, 28, 390, 430, "Neto: "+formatCLP(model.NetAmount))
-	writePDFText(pdf, "regular", 10, 28, 28, 28, 390, 450, "IVA 19%: "+formatCLP(model.VATAmount))
-	writePDFText(pdf, "bold", 12, 28, 28, 28, 390, 474, "Total: "+formatCLP(model.TotalAmount))
+	totalsY := max(y+18, 360)
+	if model.NetAmount > 0 {
+		writePDFText(pdf, "regular", 10, 28, 28, 28, 390, totalsY, "Neto: "+formatCLP(model.NetAmount))
+		totalsY += 20
+	}
+	if model.VATAmount > 0 {
+		writePDFText(pdf, "regular", 10, 28, 28, 28, 390, totalsY, "IVA 19%: "+formatCLP(model.VATAmount))
+		totalsY += 20
+	}
+	writePDFText(pdf, "bold", 12, 28, 28, 28, 390, totalsY, "Total: "+formatCLP(model.TotalAmount))
 	code, err := pdf417.Encode(model.TED, 5)
 	if err != nil {
 		return nil, err
@@ -187,12 +224,12 @@ func renderTaxDocument(model taxPublicDocument) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = pdf.ImageByHolder(holder, 68, 520, &gopdf.Rect{W: 460, H: 130}); err != nil {
+	if err = pdf.ImageByHolder(holder, 68, 500, &gopdf.Rect{W: 460, H: 130}); err != nil {
 		return nil, err
 	}
-	writeCenteredPDFText(pdf, "regular", 9, 28, 28, 28, receiptPageWidth/2, 658, "Timbre electrónico SII")
-	writeCenteredPDFText(pdf, "regular", 8, 28, 28, 28, receiptPageWidth/2, 676, fmt.Sprintf("Resolución SII Nº %d de %s", model.ResolutionNumber, model.ResolutionDate))
-	writeCenteredPDFText(pdf, "regular", 8, 28, 28, 28, receiptPageWidth/2, 694, "Verifique en https://pagos.girasindomito.cl/consultar-boleta")
+	writeCenteredPDFText(pdf, "regular", 9, 28, 28, 28, receiptPageWidth/2, 638, "Timbre electrónico SII")
+	writeCenteredPDFText(pdf, "regular", 8, 28, 28, 28, receiptPageWidth/2, 656, fmt.Sprintf("Resolución SII Nº %d de %s", model.ResolutionNumber, model.ResolutionDate))
+	writeCenteredPDFText(pdf, "regular", 8, 28, 28, 28, receiptPageWidth/2, 674, "Verifique documento: https://pagos.girasindomito.cl/consultar-boleta")
 	return pdf.GetBytesPdfReturnErr()
 }
 
@@ -211,7 +248,7 @@ func (m mailer) sendTax(ctx context.Context, to string, folio int64, document []
 	message.Subject("Giras Indomito: boleta electrónica Nº " + strconv.FormatInt(folio, 10))
 	message.SetMessageIDWithValue(fmt.Sprintf("tax-document-39-%d@girasindomito.cl", folio))
 	message.SetBodyString(gomail.TypeTextPlain, "Adjuntamos la representación PDF de tu boleta electrónica emitida y enviada al SII. Su validación se encuentra pendiente; puedes consultar posteriormente el folio en nuestro portal.")
-	if err = message.AttachReader(fmt.Sprintf("boleta-%d.pdf", folio), bytes.NewReader(document), gomail.WithFileContentType(gomail.ContentType("application/pdf"))); err != nil {
+	if err = message.AttachReader(fmt.Sprintf("boleta-%d-sii.pdf", folio), bytes.NewReader(document), gomail.WithFileContentType(gomail.ContentType("application/pdf"))); err != nil {
 		return err
 	}
 	return m.sendMessage(ctx, message)

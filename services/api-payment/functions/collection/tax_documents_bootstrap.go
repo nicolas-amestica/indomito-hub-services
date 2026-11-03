@@ -20,8 +20,8 @@ type s3TaxDocumentSigner struct {
 	bucket string
 }
 
-func (s s3TaxDocumentSigner) Download(ctx context.Context, key string) (string, error) {
-	result, err := s.client.PresignGetObject(ctx, &s3.GetObjectInput{Bucket: &s.bucket, Key: &key, ResponseContentType: aws.String("application/pdf"), ResponseContentDisposition: aws.String(`attachment; filename="boleta-sii.pdf"`)}, func(options *s3.PresignOptions) { options.Expires = 2 * time.Minute })
+func (s s3TaxDocumentSigner) Download(ctx context.Context, key, fileName string) (string, error) {
+	result, err := s.client.PresignGetObject(ctx, &s3.GetObjectInput{Bucket: &s.bucket, Key: &key, ResponseContentType: aws.String("application/pdf"), ResponseContentDisposition: aws.String(`attachment; filename="` + fileName + `"`)}, func(options *s3.PresignOptions) { options.Expires = 2 * time.Minute })
 	if err != nil {
 		return "", err
 	}
