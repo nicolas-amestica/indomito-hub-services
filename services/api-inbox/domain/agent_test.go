@@ -431,7 +431,8 @@ func TestGeminiStatusErrorIncludesSafeProviderDetail(t *testing.T) {
 		body   string
 		want   string
 	}{
-		{name: "provider detail", status: http.StatusNotFound, body: `{"error":{"status":"NOT_FOUND","message":"model unavailable"}}`, want: "gemini status 404 (NOT_FOUND): model unavailable"},
+		{name: "legacy status detail", status: http.StatusNotFound, body: `{"error":{"status":"NOT_FOUND","message":"model unavailable"}}`, want: "gemini status 404 (NOT_FOUND): model unavailable"},
+		{name: "interactions code detail", status: http.StatusPaymentRequired, body: `{"error":{"code":"payment_required","message":"Prepay credit balance is depleted."}}`, want: "gemini status 402 (payment_required): Prepay credit balance is depleted."},
 		{name: "invalid body", status: http.StatusServiceUnavailable, body: `not-json`, want: "gemini status 503"},
 	}
 	for _, test := range tests {
@@ -444,17 +445,26 @@ func TestGeminiStatusErrorIncludesSafeProviderDetail(t *testing.T) {
 	}
 }
 
-func TestGeminiQuotaExhaustedRecognizesOnlyResourceExhausted429(t *testing.T) {
+func TestGeminiQuotaExhaustedRecognizesQuotaAndBalanceErrors(t *testing.T) {
 	t.Parallel()
-	quotaError := geminiStatusError(http.StatusTooManyRequests, []byte(`{"error":{"status":"RESOURCE_EXHAUSTED","message":"free tier quota exhausted"}}`))
-	if !isGeminiQuotaExhausted(quotaError) {
-		t.Fatal("expected RESOURCE_EXHAUSTED 429 to be recognized as quota exhaustion")
+	tests := []struct {
+		name   string
+		status int
+		body   string
+		want   bool
+	}{
+		{name: "legacy quota exhausted", status: http.StatusTooManyRequests, body: `{"error":{"status":"RESOURCE_EXHAUSTED","message":"free tier quota exhausted"}}`, want: true},
+		{name: "prepay balance depleted", status: http.StatusPaymentRequired, body: `{"error":{"code":"payment_required","message":"Prepay credit balance is depleted."}}`, want: true},
+		{name: "resource exhausted with wrong status", status: http.StatusServiceUnavailable, body: `{"error":{"status":"RESOURCE_EXHAUSTED","message":"unavailable"}}`},
+		{name: "rate limited", status: http.StatusTooManyRequests, body: `{"error":{"code":"rate_limit_exceeded","message":"try later"}}`},
 	}
-	if isGeminiQuotaExhausted(geminiStatusError(http.StatusServiceUnavailable, []byte(`{"error":{"status":"RESOURCE_EXHAUSTED"}}`))) {
-		t.Fatal("unexpected quota exhaustion for non-429 status")
-	}
-	if isGeminiQuotaExhausted(geminiStatusError(http.StatusTooManyRequests, []byte(`{"error":{"status":"RATE_LIMITED","message":"try later"}}`))) {
-		t.Fatal("unexpected quota exhaustion for another provider code")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := isGeminiQuotaExhausted(geminiStatusError(test.status, []byte(test.body))); got != test.want {
+				t.Fatalf("isGeminiQuotaExhausted() = %t, want %t", got, test.want)
+			}
+		})
 	}
 }
 

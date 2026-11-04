@@ -250,7 +250,11 @@ func isLatestCustomerMessage(messages []Message, messageID string) bool {
 
 func isGeminiQuotaExhausted(err error) bool {
 	var provider *geminiProviderError
-	return errors.As(err, &provider) && provider.status == http.StatusTooManyRequests && strings.EqualFold(provider.code, "RESOURCE_EXHAUSTED")
+	if !errors.As(err, &provider) {
+		return false
+	}
+	return provider.status == http.StatusPaymentRequired ||
+		(provider.status == http.StatusTooManyRequests && strings.EqualFold(provider.code, "RESOURCE_EXHAUSTED"))
 }
 
 func (s *AgentService) confirmExistingDerivation(ctx context.Context, phone, messageID string) error {
@@ -396,9 +400,9 @@ type interactionResponse struct {
 	Steps  []json.RawMessage `json:"steps"`
 	Usage  AgentTokenUsage   `json:"usage"`
 	Error  *struct {
-		Code    int    `json:"code"`
-		Status  string `json:"status"`
-		Message string `json:"message"`
+		Code    json.RawMessage `json:"code"`
+		Status  string          `json:"status"`
+		Message string          `json:"message"`
 	} `json:"error,omitempty"`
 }
 
@@ -851,7 +855,14 @@ func geminiStatusError(status int, body []byte) error {
 		if len(message) > 500 {
 			message = message[:500]
 		}
-		return &geminiProviderError{status: status, code: result.Error.Status, message: string(message)}
+		code := strings.TrimSpace(result.Error.Status)
+		if code == "" {
+			var interactionCode string
+			if json.Unmarshal(result.Error.Code, &interactionCode) == nil {
+				code = strings.TrimSpace(interactionCode)
+			}
+		}
+		return &geminiProviderError{status: status, code: code, message: string(message)}
 	}
 	return &geminiProviderError{status: status}
 }
