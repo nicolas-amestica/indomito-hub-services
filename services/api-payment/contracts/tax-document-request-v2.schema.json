@@ -20,6 +20,23 @@
     "effectiveDate": { "type": "string", "format": "date" },
     "status": { "enum": ["PENDING_MANUAL_ISSUE", "MANUAL_RECORDED", "READY", "ISSUING", "SUBMITTED", "ACCEPTED", "REJECTED", "VOIDED", "REQUIRES_REVIEW"] },
     "requestedAt": { "type": "string", "format": "date-time" },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["description", "quantity", "unitPrice", "exempt"],
+        "properties": {
+          "description": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "quantity": { "type": "integer", "minimum": 1 },
+          "unitPrice": { "type": "integer", "minimum": 1 },
+          "exempt": { "type": "boolean" },
+          "unit": { "type": "string", "maxLength": 4 }
+        }
+      }
+    },
     "issuerConfigurationVersion": { "type": "integer", "minimum": 1 },
     "externalDocumentId": { "type": "string", "maxLength": 128 },
     "externalStatusCode": { "type": "string", "maxLength": 64 },

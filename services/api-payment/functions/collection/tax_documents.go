@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/mail"
@@ -137,7 +138,11 @@ type TaxDocumentsApp struct {
 }
 
 func newManualSalesReceiptRequest(receiptID string, event domain.Event) TaxDocumentRequest {
-	return TaxDocumentRequest{SchemaVersion: 2, RequestID: receiptID, SourceEventID: event.CommandID, ReceiptID: receiptID, AccountID: event.AccountID, TripID: event.TripID, Currency: "CLP", GrossAmount: event.Amount, EffectiveDate: event.EffectiveDate, RequestedAt: event.RecordedAt.UTC(), DocumentKind: "BOLETA", DocumentSubtype: manualSalesReceiptKind, IssuanceMode: "SII_DIRECT", Status: taxStatusReady}
+	request := TaxDocumentRequest{SchemaVersion: 2, RequestID: receiptID, SourceEventID: event.CommandID, ReceiptID: receiptID, AccountID: event.AccountID, TripID: event.TripID, Currency: "CLP", GrossAmount: event.Amount, EffectiveDate: event.EffectiveDate, RequestedAt: event.RecordedAt.UTC(), DocumentKind: "BOLETA", DocumentSubtype: manualSalesReceiptKind, IssuanceMode: "SII_DIRECT", Status: taxStatusReady}
+	if event.InstallmentNumber > 0 && event.TripID != "" {
+		request.Items = []TaxDocumentItem{{Description: fmt.Sprintf("Pago %d de gira %s", event.InstallmentNumber, event.TripID), Quantity: 1, UnitPrice: event.Amount}}
+	}
+	return request
 }
 
 func (a TaxDocumentsApp) Handle(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {

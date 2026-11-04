@@ -62,7 +62,7 @@ func TestDevelopmentCheckoutPersistsAndReusesResult(t *testing.T) {
 				t.Fatal("checkout persisted without durable reconciliation job")
 			}
 			again, err := s.CreateCheckout(ctx, gateway, "dev", "account", "attempt", "session", testCheckoutURLs(), now.Add(time.Minute))
-			if err != nil || first != again || gateway.calls != 1 || gateway.input.Amount != 20000 || gateway.input.TransactionID != "attempt" || gateway.input.BankID != "demo" {
+			if err != nil || first != again || gateway.calls != 1 || gateway.input.Amount != 20000 || gateway.input.TransactionID != "attempt" || gateway.input.BankID != "demo" || gateway.input.Subject != "Pago cuota 1 de gira trip — prueba DEV sin dinero real" {
 				t.Fatalf("replay %+v %v calls=%d", again, err, gateway.calls)
 			}
 			a, err := s.GetAccount(ctx, "account")
@@ -139,7 +139,7 @@ func TestProductionCheckoutUsesRealBankSelectionAndLabel(t *testing.T) {
 	if _, err := s.CreateCheckout(context.Background(), gateway, "prd", "account", "attempt", "session", testCheckoutURLs(), time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if gateway.bankCalls != 0 || gateway.input.BankID != "" || gateway.input.Subject != "Cuota de viaje — Giras Indómito" {
+	if gateway.bankCalls != 0 || gateway.input.BankID != "" || gateway.input.Subject != "Pago cuota 1 de gira trip" {
 		t.Fatalf("invalid production checkout: bankCalls=%d input=%+v", gateway.bankCalls, gateway.input)
 	}
 }

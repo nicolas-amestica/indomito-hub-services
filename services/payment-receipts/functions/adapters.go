@@ -204,8 +204,8 @@ func parseSMTPConfig(raw []byte) (smtpConfig, error) {
 	return config, nil
 }
 
-func (m mailer) send(ctx context.Context, to, receiptID, deliveryID string, document []byte, review bool) error {
-	message, err := buildMailMessage(m.config.From, to, receiptID, deliveryID, document, review)
+func (m mailer) send(ctx context.Context, to string, model receiptModel, deliveryID string, document []byte) error {
+	message, err := buildMailMessage(m.config.From, to, model, deliveryID, document)
 	if err != nil {
 		return err
 	}
@@ -236,7 +236,7 @@ func (m mailer) sendMessage(ctx context.Context, message *gomail.Msg) error {
 	return nil
 }
 
-func buildMailMessage(from, to, receiptID, deliveryID string, document []byte, review bool) (*gomail.Msg, error) {
+func buildMailMessage(from, to string, model receiptModel, deliveryID string, document []byte) (*gomail.Msg, error) {
 	toAddress, err := mail.ParseAddress(to)
 	if err != nil || toAddress.Address != to || strings.ContainsAny(to, "\r\n") {
 		return nil, errors.New("RECEIPT_EMAIL_MISSING")
@@ -245,22 +245,38 @@ func buildMailMessage(from, to, receiptID, deliveryID string, document []byte, r
 	if err != nil || fromAddress.Address != receiptSenderAddress() {
 		return nil, errors.New("SMTP_CONFIGURATION_REQUIRED")
 	}
-	text := "Consulta el portal para revisar el saldo actualizado."
-	if review {
-		text = "El dinero recibido está pendiente de revisión; no repitas el pago."
+	receiptID := model.ID
+	concept := "Pago registrado"
+	if model.InstallmentNumber > 0 {
+		concept = fmt.Sprintf("Pago %d de gira %s", model.InstallmentNumber, model.TripID)
+	}
+	lead := "Registramos tu pago correctamente. Consulta el portal para revisar el saldo actualizado."
+	notice := "Este comprobante acredita el registro del pago en Giras Indómito. No es una boleta ni una factura emitida por el SII."
+	if model.Review {
+		lead = "Recibimos el dinero, pero el pago está pendiente de revisión. No realices otro pago mientras verificamos su aplicación."
+		notice = "El comprobante acredita la recepción del dinero, no su aplicación definitiva a una cuota ni reemplaza un documento tributario del SII."
 	}
 	message := gomail.NewMsg(gomail.WithNoDefaultUserAgent())
 	message.FromMailAddress(fromAddress)
 	message.ToMailAddress(toAddress)
 	subject := "Giras Indomito: comprobante de registro de pago"
-	bodySuffix := "Este documento no es una boleta ni factura del SII."
+	if model.InstallmentNumber > 0 {
+		subject = fmt.Sprintf("Giras Indomito: comprobante pago %d de gira %s", model.InstallmentNumber, model.TripID)
+	}
+	stage := ""
 	if os.Getenv("APP_STAGE") == "dev" {
 		subject += " (DEV)"
-		bodySuffix += " Ambiente de desarrollo."
+		stage = "Ambiente de desarrollo: este mensaje no acredita una operación productiva."
 	}
 	message.Subject(subject)
 	message.SetMessageIDWithValue("receipt-" + receiptID + "-" + deliveryID + "@girasindomito.cl")
-	message.SetBodyString(gomail.TypeTextPlain, fmt.Sprintf("Adjuntamos el comprobante %s. %s %s", receiptID, text, bodySuffix))
+	plain := fmt.Sprintf("%s\n\nComprobante: %s\nConcepto: %s\nMonto: %s\n\n%s", lead, receiptID, concept, formatCLP(model.Amount), notice)
+	html, err := renderBrandedEmail(brandedEmail{Preheader: lead, Eyebrow: "Comprobante de pago", Title: "Recibimos tu pago", Lead: lead, Body: "Adjuntamos el comprobante interno generado por Giras Indómito para que conserves el respaldo de esta operación.", Notice: notice, Details: []emailDetail{{Label: "Comprobante", Value: receiptID}, {Label: "Concepto", Value: concept}, {Label: "Monto", Value: formatCLP(model.Amount)}}, Stage: stage})
+	if err != nil {
+		return nil, fmt.Errorf("generar correo: %w", err)
+	}
+	message.SetBodyString(gomail.TypeTextPlain, plain)
+	message.AddAlternativeString(gomail.TypeTextHTML, html)
 	if err = message.AttachReader("comprobante-"+receiptID+".pdf", bytes.NewReader(document), gomail.WithFileContentType(gomail.ContentType("application/pdf"))); err != nil {
 		return nil, fmt.Errorf("adjuntar comprobante: %w", err)
 	}

@@ -25,7 +25,8 @@ func TestParseSMTPConfigRequiresDevSenderAndTLSSubmissionPort(t *testing.T) {
 }
 
 func TestBuildMailMessageEncodesHeadersAndPDF(t *testing.T) {
-	message, err := buildMailMessage("Giras Indomito <no-reply-dev@girasindomito.cl>", "family@example.test", "receipt", "delivery", []byte("pdf"), false)
+	model := receiptModel{ID: "receipt", TripID: "01ARZ3NDEKTSV4RRFFQ69G5FAW", InstallmentNumber: 3, Amount: 20000}
+	message, err := buildMailMessage("Giras Indomito <no-reply-dev@girasindomito.cl>", "family@example.test", model, "delivery", []byte("pdf"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,12 +35,12 @@ func TestBuildMailMessageEncodesHeadersAndPDF(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw := output.String()
-	for _, expected := range []string{"no-reply-dev@girasindomito.cl", "family@example.test", "application/pdf", "comprobante-receipt.pdf", "no es una boleta ni factura"} {
+	for _, expected := range []string{"no-reply-dev@girasindomito.cl", "family@example.test", "application/pdf", "comprobante-receipt.pdf", "comprobante pago 3 de gira", "text/html", "Pago 3 de gira"} {
 		if !strings.Contains(raw, expected) {
 			t.Fatalf("message missing %q", expected)
 		}
 	}
-	if _, err = buildMailMessage("no-reply-dev@girasindomito.cl", "Display <family@example.test>", "receipt", "delivery", nil, false); err == nil {
+	if _, err = buildMailMessage("no-reply-dev@girasindomito.cl", "Display <family@example.test>", model, "delivery", nil); err == nil {
 		t.Fatal("display recipient accepted")
 	}
 }

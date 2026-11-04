@@ -43,7 +43,7 @@ type fakeMailer struct {
 	err   error
 }
 
-func (m *fakeMailer) send(context.Context, string, string, string, []byte, bool) error {
+func (m *fakeMailer) send(context.Context, string, receiptModel, string, []byte) error {
 	m.sends++
 	return m.err
 }

@@ -57,12 +57,13 @@ func (a Account) RequiresPaymentReview() bool {
 
 // Attempt congela cuota, importe y destinatario del comprobante antes de llamar al banco.
 type Attempt struct {
-	ID            string `json:"id"`
-	AccountID     string `json:"accountId"`
-	InstallmentID string `json:"installmentId"`
-	Amount        int64  `json:"amount"`
-	Email         string `json:"email"`
-	Status        string `json:"status"`
+	ID                string `json:"id"`
+	AccountID         string `json:"accountId"`
+	InstallmentID     string `json:"installmentId"`
+	InstallmentNumber int    `json:"installmentNumber,omitempty"`
+	Amount            int64  `json:"amount"`
+	Email             string `json:"email"`
+	Status            string `json:"status"`
 }
 
 // Audit acompaña todo comando; el ID y su huella se deduplican durablemente al persistir.
@@ -76,17 +77,19 @@ type Audit struct {
 // Event es la salida versionada del dominio para auditoría, outbox y futura BI.
 type Event struct {
 	Audit
-	SchemaVersion int     `json:"schemaVersion"`
-	Type          string  `json:"type"`
-	AccountID     string  `json:"accountId"`
-	TripID        string  `json:"tripId"`
-	Amount        int64   `json:"amount"`
-	Basis         int64   `json:"basis"`
-	BasisPoints   int64   `json:"basisPoints"`
-	Reference     string  `json:"reference,omitempty"`
-	AttemptID     string  `json:"attemptId,omitempty"`
-	EffectiveDate string  `json:"effectiveDate,omitempty"`
-	Entries       []Entry `json:"entries,omitempty"`
+	SchemaVersion     int     `json:"schemaVersion"`
+	Type              string  `json:"type"`
+	AccountID         string  `json:"accountId"`
+	TripID            string  `json:"tripId"`
+	Amount            int64   `json:"amount"`
+	Basis             int64   `json:"basis"`
+	BasisPoints       int64   `json:"basisPoints"`
+	Reference         string  `json:"reference,omitempty"`
+	AttemptID         string  `json:"attemptId,omitempty"`
+	InstallmentID     string  `json:"installmentId,omitempty"`
+	InstallmentNumber int     `json:"installmentNumber,omitempty"`
+	EffectiveDate     string  `json:"effectiveDate,omitempty"`
+	Entries           []Entry `json:"entries,omitempty"`
 }
 
 // Entry es una partida operativa: débitos positivos, créditos negativos, siempre CLP.

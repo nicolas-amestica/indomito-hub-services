@@ -55,7 +55,7 @@ func buildReceiptModel(row receiptRow) (receiptModel, error) {
 			return receiptModel{}, errors.New("INVALID_RECEIPT_VERIFICATION_URL")
 		}
 	}
-	return receiptModel{ID: row.ReceiptID, AccountID: event.AccountID, TripID: event.TripID, Amount: event.Amount, EffectiveDate: event.EffectiveDate, RecordedAt: event.RecordedAt.UTC(), Review: event.Type == "PAYMENT_REQUIRES_REVIEW", Deposit: event.Type == "DEPOSIT_RECEIVED", GroupDeposit: group, Version: version, PassengerName: name, PassengerDocument: document, VerificationURL: verificationURL}, nil
+	return receiptModel{ID: row.ReceiptID, AccountID: event.AccountID, TripID: event.TripID, InstallmentNumber: event.InstallmentNumber, Amount: event.Amount, EffectiveDate: event.EffectiveDate, RecordedAt: event.RecordedAt.UTC(), Review: event.Type == "PAYMENT_REQUIRES_REVIEW", Deposit: event.Type == "DEPOSIT_RECEIVED", GroupDeposit: group, Version: version, PassengerName: name, PassengerDocument: document, VerificationURL: verificationURL}, nil
 }
 
 func renderReceipt(model receiptModel) (renderedDocument, error) {
@@ -87,6 +87,9 @@ func renderReceipt(model receiptModel) (renderedDocument, error) {
 		label, identity = "Pasajero", model.PassengerName+" · RUT "+model.PassengerDocument
 	}
 	concept := "Pago de cuota recibido"
+	if model.InstallmentNumber > 0 {
+		concept = fmt.Sprintf("Pago %d de gira %s", model.InstallmentNumber, model.TripID)
+	}
 	if model.GroupDeposit {
 		concept = "Abono grupal recibido y asignado"
 	} else if model.Deposit {

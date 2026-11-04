@@ -49,7 +49,7 @@ type taxDeliveryMailerFake struct {
 	sends int
 }
 
-func (f *taxDeliveryMailerFake) sendTax(_ context.Context, to string, _ int64, _ []byte) error {
+func (f *taxDeliveryMailerFake) sendTax(_ context.Context, to string, _ int64, _ string, _ []byte) error {
 	f.to = to
 	f.sends++
 	return nil

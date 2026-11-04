@@ -24,7 +24,7 @@ type documentStore interface {
 	putImmutable(context.Context, renderedDocument) error
 }
 type receiptMailer interface {
-	send(context.Context, string, string, string, []byte, bool) error
+	send(context.Context, string, receiptModel, string, []byte) error
 }
 
 type dependencies struct {
@@ -95,7 +95,7 @@ func processReceipt(ctx context.Context, receiptID string, deps dependencies) (s
 	if deliveryID == "" {
 		deliveryID = receiptID
 	}
-	if err = deps.mail.send(ctx, row.ReceiptEmail, model.ID, deliveryID, document.Bytes, model.Review); err != nil {
+	if err = deps.mail.send(ctx, row.ReceiptEmail, model, deliveryID, document.Bytes); err != nil {
 		return fail(err)
 	}
 	if err = deps.store.sent(ctx, receiptID, owner); err != nil {

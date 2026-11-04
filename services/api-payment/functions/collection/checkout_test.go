@@ -51,7 +51,7 @@ func TestReserveCheckoutReplayAndLock(t *testing.T) {
 			audit := domain.Audit{CommandID: "reserve", Actor: "public-session", Reason: "checkout requested", RecordedAt: time.Now().UTC()}
 			ctx := context.Background()
 			first, err := s.ReserveCheckout(ctx, "account", 1, audit, "attempt", paymentOperationID("session"), "receipt@example.com")
-			if err != nil || first.Amount != 20000 || first.InstallmentID != "0001" {
+			if err != nil || first.Amount != 20000 || first.InstallmentID != "0001" || first.InstallmentNumber != 1 {
 				t.Fatalf("reserve: %+v %v", first, err)
 			}
 			again, err := s.ReserveCheckout(ctx, "account", 1, audit, "attempt", paymentOperationID("session"), "receipt@example.com")

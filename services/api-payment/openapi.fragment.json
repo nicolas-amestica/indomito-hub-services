@@ -7,6 +7,29 @@
         "responses": { "200": { "description": "Resultado de la consulta" } }
       }
     },
+    "/pagos/portal/checkout": {
+      "post": {
+        "summary": "Inicia el pago de la primera cuota pendiente",
+        "description": "La respuesta identifica la cuota congelada para el intento mediante installmentNumber. El asunto enviado a Khipu usa esa misma cuota y el identificador del contrato.",
+        "responses": {
+          "200": {
+            "description": "Intento de pago",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PortalAttemptResponse" } } }
+          }
+        }
+      }
+    },
+    "/pagos/portal/intentos/{id}": {
+      "get": {
+        "summary": "Consulta el estado de un intento de pago",
+        "responses": {
+          "200": {
+            "description": "Estado y cuota asociada al intento",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PortalAttemptResponse" } } }
+          }
+        }
+      }
+    },
     "/pagos/documentos-tributarios/configuracion": {
       "get": { "summary": "Obtiene el resumen de configuración tributaria", "responses": { "200": { "description": "Configuración sin secretos" } } },
       "put": { "summary": "Actualiza metadatos del emisor", "responses": { "200": { "description": "Configuración actualizada" } } }
@@ -43,6 +66,28 @@
         "responses": {
           "202": { "description": "Boleta encolada para emisión" },
           "400": { "description": "Solicitud o correo inválido" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PortalAttemptResponse": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["id", "status"],
+            "properties": {
+              "id": { "type": "string" },
+              "status": { "type": "string" },
+              "installmentNumber": { "type": "integer", "minimum": 1 },
+              "paymentUrl": { "type": "string", "format": "uri" },
+              "receiptReady": { "type": "boolean" },
+              "lastCheckedAt": { "type": "string", "format": "date-time" }
+            }
+          }
         }
       }
     }

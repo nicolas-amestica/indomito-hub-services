@@ -28,11 +28,12 @@ type PortalApp struct {
 
 // PortalAttempt excluye correo, referencias bancarias y datos internos de la cuenta.
 type PortalAttempt struct {
-	ID            string `json:"id"`
-	Status        string `json:"status"`
-	PaymentURL    string `json:"paymentUrl,omitempty"`
-	ReceiptReady  bool   `json:"receiptReady,omitempty"`
-	LastCheckedAt string `json:"lastCheckedAt,omitempty"`
+	ID                string `json:"id"`
+	Status            string `json:"status"`
+	InstallmentNumber int    `json:"installmentNumber,omitempty"`
+	PaymentURL        string `json:"paymentUrl,omitempty"`
+	ReceiptReady      bool   `json:"receiptReady,omitempty"`
+	LastCheckedAt     string `json:"lastCheckedAt,omitempty"`
 }
 
 func portalResponse(status int, data any) events.APIGatewayV2HTTPResponse {
@@ -161,7 +162,7 @@ func (a PortalApp) attemptView(ctx context.Context, account domain.Account, id s
 	if r.Attempt == nil || r.Attempt.AccountID != account.ID || r.Attempt.ID != id {
 		return PortalAttempt{}, ErrNotFound
 	}
-	view := PortalAttempt{ID: id, Status: "RECONCILIATION_REQUIRED"}
+	view := PortalAttempt{ID: id, Status: "RECONCILIATION_REQUIRED", InstallmentNumber: r.Attempt.InstallmentNumber}
 	resolution, resolutionErr := a.Accounts.read(ctx, "ATTEMPT#"+id, "RESOLUTION")
 	if resolutionErr == nil {
 		if resolution.AccountID != account.ID || resolution.Event == nil || resolution.Event.AttemptID != id {

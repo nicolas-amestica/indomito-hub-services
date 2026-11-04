@@ -11,6 +11,7 @@ import (
 	"image/draw"
 	"image/png"
 	"net/mail"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -41,7 +42,7 @@ type taxDeliveryDependencies struct {
 }
 
 type taxMailer interface {
-	sendTax(context.Context, string, int64, []byte) error
+	sendTax(context.Context, string, int64, string, []byte) error
 }
 
 type taxPublicItem struct {
@@ -143,7 +144,11 @@ func processTaxDelivery(ctx context.Context, job taxDeliveryJob, deps taxDeliver
 		if addressErr != nil || address.Address != deliveryEmail || len(deliveryEmail) > 254 {
 			return errors.New("RECEIPT_EMAIL_MISSING")
 		}
-		if err = deps.mail.sendTax(ctx, deliveryEmail, job.Folio, document); err != nil {
+		concept := "Boleta electrónica"
+		if len(publicRow.PublicTaxDocument.Items) > 0 && strings.TrimSpace(publicRow.PublicTaxDocument.Items[0].Description) != "" {
+			concept = strings.TrimSpace(publicRow.PublicTaxDocument.Items[0].Description)
+		}
+		if err = deps.mail.sendTax(ctx, deliveryEmail, job.Folio, concept, document); err != nil {
 			return err
 		}
 	}
@@ -243,7 +248,7 @@ func renderTaxDocument(model taxPublicDocument) ([]byte, error) {
 	return pdf.GetBytesPdfReturnErr()
 }
 
-func (m mailer) sendTax(ctx context.Context, to string, folio int64, document []byte) error {
+func (m mailer) sendTax(ctx context.Context, to string, folio int64, concept string, document []byte) error {
 	toAddress, err := mail.ParseAddress(to)
 	if err != nil || toAddress.Address != to {
 		return errors.New("RECEIPT_EMAIL_MISSING")
@@ -257,7 +262,19 @@ func (m mailer) sendTax(ctx context.Context, to string, folio int64, document []
 	message.ToMailAddress(toAddress)
 	message.Subject("Giras Indomito: boleta electrónica Nº " + strconv.FormatInt(folio, 10))
 	message.SetMessageIDWithValue(fmt.Sprintf("tax-document-39-%d@girasindomito.cl", folio))
-	message.SetBodyString(gomail.TypeTextPlain, "Adjuntamos la representación PDF de tu boleta electrónica emitida y enviada al SII. Su validación se encuentra pendiente; puedes consultar posteriormente el folio en nuestro portal.")
+	lead := "Tu boleta electrónica fue emitida y enviada al SII. Adjuntamos su representación en PDF para que la conserves."
+	notice := "El envío al SII no equivale a aceptación definitiva. El estado tributario puede procesarse posteriormente y el folio permite identificar el documento."
+	plain := fmt.Sprintf("%s\n\nFolio: %d\nConcepto: %s\n\n%s", lead, folio, concept, notice)
+	stage := ""
+	if os.Getenv("APP_STAGE") == "dev" {
+		stage = "Ambiente de desarrollo: este mensaje no acredita una operación productiva."
+	}
+	html, err := renderBrandedEmail(brandedEmail{Preheader: lead, Eyebrow: "Documento tributario", Title: "Tu boleta electrónica está lista", Lead: lead, Body: "Guarda este correo y el archivo adjunto como respaldo de la operación.", Notice: notice, Details: []emailDetail{{Label: "Documento", Value: "Boleta electrónica SII"}, {Label: "Folio", Value: strconv.FormatInt(folio, 10)}, {Label: "Concepto", Value: concept}}, Stage: stage})
+	if err != nil {
+		return fmt.Errorf("generar correo: %w", err)
+	}
+	message.SetBodyString(gomail.TypeTextPlain, plain)
+	message.AddAlternativeString(gomail.TypeTextHTML, html)
 	if err = message.AttachReader(fmt.Sprintf("boleta-%d-sii.pdf", folio), bytes.NewReader(document), gomail.WithFileContentType(gomail.ContentType("application/pdf"))); err != nil {
 		return err
 	}

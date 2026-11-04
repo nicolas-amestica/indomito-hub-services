@@ -12,9 +12,9 @@ func OpenAttempt(a Account, audit Audit, id, email string) (Change, Attempt, err
 	if a.OpenAttemptID != "" || a.RequiresPaymentReview() {
 		return Change{}, Attempt{}, ErrConflict
 	}
-	for _, i := range a.Installments {
+	for index, i := range a.Installments {
 		if i.Outstanding() > 0 {
-			attempt := Attempt{ID: id, AccountID: a.ID, InstallmentID: i.ID, Amount: i.Outstanding(), Email: email, Status: "CREATING"}
+			attempt := Attempt{ID: id, AccountID: a.ID, InstallmentID: i.ID, InstallmentNumber: index + 1, Amount: i.Outstanding(), Email: email, Status: "CREATING"}
 			c.Account.OpenAttemptID = id
 			c.Event.Amount = attempt.Amount
 			c.Event.Reference = id
@@ -36,7 +36,18 @@ func ResolveUnpaid(a Account, audit Audit, attempt Attempt, providerReference st
 	c.Account.OpenAttemptID = ""
 	c.Event.Reference = providerReference
 	c.Event.AttemptID = attempt.ID
+	c.Event.InstallmentID = attempt.InstallmentID
+	c.Event.InstallmentNumber = installmentNumber(a, attempt.InstallmentID)
 	return finish(c)
+}
+
+func installmentNumber(account Account, installmentID string) int {
+	for index, installment := range account.Installments {
+		if installment.ID == installmentID {
+			return index + 1
+		}
+	}
+	return 0
 }
 
 // ReverseProviderPayment revierte exactamente el efecto del ingreso original.
@@ -76,6 +87,8 @@ func ReverseProviderPayment(a Account, audit Audit, attempt Attempt, originalTyp
 	c.Event.Amount = amount
 	c.Event.Reference = reference
 	c.Event.AttemptID = attempt.ID
+	c.Event.InstallmentID = attempt.InstallmentID
+	c.Event.InstallmentNumber = installmentNumber(a, attempt.InstallmentID)
 	c.Event.EffectiveDate = effectiveDate
 	c.Event.Entries = []Entry{{"CUSTOMER_FUNDS", amount}, {"PROVIDER_RECEIVABLE", -amount}}
 	if originalType == "PAYMENT_REQUIRES_REVIEW" {
@@ -126,6 +139,8 @@ func ConfirmPayment(a Account, audit Audit, attempt Attempt, amount int64, refer
 	c.Event.Amount = amount
 	c.Event.Reference = reference
 	c.Event.AttemptID = attempt.ID
+	c.Event.InstallmentID = attempt.InstallmentID
+	c.Event.InstallmentNumber = installmentNumber(a, attempt.InstallmentID)
 	c.Event.EffectiveDate = effectiveDate
 	c.Event.Entries = []Entry{{debit, amount}, {credit, -amount}}
 	return finish(c)

@@ -86,9 +86,21 @@ func (s Service) CreateCheckout(ctx context.Context, gateway CheckoutGateway, st
 		return CheckoutResult{}, err
 	}
 	expires := now.UTC().Add(time.Hour)
-	subject := "Cuota de viaje — Giras Indómito"
+	installmentNumber := attempt.InstallmentNumber
+	if installmentNumber < 1 {
+		for index, installment := range a.Installments {
+			if installment.ID == attempt.InstallmentID {
+				installmentNumber = index + 1
+				break
+			}
+		}
+	}
+	if installmentNumber < 1 {
+		return CheckoutResult{}, domain.ErrInvalid
+	}
+	subject := fmt.Sprintf("Pago cuota %d de gira %s", installmentNumber, a.TripID)
 	if stage == "dev" {
-		subject = "Cuota de viaje — prueba DEV sin dinero real"
+		subject += " — prueba DEV sin dinero real"
 	}
 	out, err := gateway.Create(ctx, providers.CheckoutRequest{BankID: bank, TransactionID: attempt.ID, Amount: attempt.Amount, Subject: subject, ReturnURL: urls.Return, CancelURL: urls.Cancel, NotifyURL: urls.Notify, ExpiresAt: expires})
 	if err != nil {

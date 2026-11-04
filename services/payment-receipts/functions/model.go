@@ -4,12 +4,14 @@ package functions
 import "time"
 
 type financialEvent struct {
-	Type          string    `dynamodbav:"Type"`
-	AccountID     string    `dynamodbav:"AccountID"`
-	TripID        string    `dynamodbav:"TripID"`
-	Amount        int64     `dynamodbav:"Amount"`
-	EffectiveDate string    `dynamodbav:"EffectiveDate"`
-	RecordedAt    time.Time `dynamodbav:"RecordedAt"`
+	Type              string    `dynamodbav:"Type"`
+	AccountID         string    `dynamodbav:"AccountID"`
+	TripID            string    `dynamodbav:"TripID"`
+	InstallmentID     string    `dynamodbav:"InstallmentID"`
+	InstallmentNumber int       `dynamodbav:"InstallmentNumber"`
+	Amount            int64     `dynamodbav:"Amount"`
+	EffectiveDate     string    `dynamodbav:"EffectiveDate"`
+	RecordedAt        time.Time `dynamodbav:"RecordedAt"`
 }
 
 type receiptRow struct {
@@ -33,6 +35,7 @@ type receiptRow struct {
 type receiptModel struct {
 	ID, AccountID, TripID, EffectiveDate, PassengerName, PassengerDocument string
 	VerificationURL                                                        string
+	InstallmentNumber                                                      int
 	Amount                                                                 int64
 	RecordedAt                                                             time.Time
 	Review, Deposit, GroupDeposit                                          bool

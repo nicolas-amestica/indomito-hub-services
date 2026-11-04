@@ -3381,7 +3381,7 @@
               ],
               "path": []
             },
-            "description": "POST /pagos/portal/checkout\n\nFunción: fn-crear-checkout-cuota-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "description": "POST /pagos/portal/checkout\n\nFunción: fn-crear-checkout-cuota-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.\n\nLa respuesta incluye installmentNumber para identificar la cuota congelada. El asunto de Khipu contiene el número de cuota y el identificador del contrato.",
             "body": {
               "mode": "raw",
               "raw": "{}",
@@ -3422,7 +3422,7 @@
               ],
               "path": []
             },
-            "description": "GET /pagos/portal/intentos/{id}\n\nFunción: fn-obtener-intento-cuota-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+            "description": "GET /pagos/portal/intentos/{id}\n\nFunción: fn-obtener-intento-cuota-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.\n\nDevuelve installmentNumber para mantener visible la cuota asociada durante todo el intento."
           },
           "response": []
         },
