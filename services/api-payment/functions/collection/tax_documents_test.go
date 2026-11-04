@@ -120,7 +120,7 @@ func TestTaxDocumentDownloadRecognizesLiteralAPIGatewayRoute(t *testing.T) {
 func TestCreateCertificationTaxDocumentQueuesExactItems(t *testing.T) {
 	service, db := serviceFixture(t)
 	now := time.Date(2026, 10, 30, 15, 0, 0, 0, time.UTC)
-	body := CreateTaxDocumentRequest{CommandID: approvedID, IssueDate: "2026-10-30", Reference: "CASO-4", Items: []TaxDocumentItem{{Description: "item afecto 1", Quantity: 8, UnitPrice: 1590}, {Description: "item exento 2", Quantity: 2, UnitPrice: 1000, Exempt: true}}}
+	body := CreateTaxDocumentRequest{CommandID: approvedID, IssueDate: "2026-10-30", Reference: "CASO-4", DeliveryEmail: "receptor@example.test", Items: []TaxDocumentItem{{Description: "item afecto 1", Quantity: 8, UnitPrice: 1590}, {Description: "item exento 2", Quantity: 2, UnitPrice: 1000, Exempt: true}}}
 	raw, _ := json.Marshal(body)
 	req := events.APIGatewayV2HTTPRequest{Body: string(raw), RequestContext: events.APIGatewayV2HTTPRequestContext{HTTP: events.APIGatewayV2HTTPRequestContextHTTPDescription{Method: "POST"}, Authorizer: &events.APIGatewayV2HTTPRequestContextAuthorizerDescription{Lambda: map[string]any{"userId": "operator", "paymentAccess": "admin"}}}}
 	response, err := (TaxDocumentsApp{Accounts: service, Now: func() time.Time { return now }}).Handle(context.Background(), req)
@@ -128,11 +128,22 @@ func TestCreateCertificationTaxDocumentQueuesExactItems(t *testing.T) {
 		t.Fatalf("create certification request: %+v %v", response, err)
 	}
 	stored, err := service.read(context.Background(), "TAX_REQUEST#"+approvedID, "META")
-	if err != nil || stored.TaxRequest == nil || stored.TaxRequest.GrossAmount != 14720 || stored.TaxRequest.Reference != "CASO-4" || len(stored.TaxRequest.Items) != 2 {
+	if err != nil || stored.TaxRequest == nil || stored.TaxRequest.GrossAmount != 14720 || stored.TaxRequest.Reference != "CASO-4" || stored.TaxRequest.DeliveryEmail != "receptor@example.test" || len(stored.TaxRequest.Items) != 2 {
 		t.Fatalf("unexpected request: %+v %v", stored.TaxRequest, err)
 	}
 	queueSK := now.Format(time.RFC3339Nano) + "#" + approvedID
 	if db.items["TAX_QUEUE#PENDING/"+queueSK] == nil {
 		t.Fatal("pending emission projection missing")
+	}
+}
+
+func TestCreateTaxDocumentRejectsInvalidOptionalDeliveryEmail(t *testing.T) {
+	service, _ := serviceFixture(t)
+	body := CreateTaxDocumentRequest{CommandID: approvedID, IssueDate: "2026-10-30", DeliveryEmail: "correo-invalido", Items: []TaxDocumentItem{{Description: "item", Quantity: 1, UnitPrice: 1000}}}
+	raw, _ := json.Marshal(body)
+	req := events.APIGatewayV2HTTPRequest{Body: string(raw), RequestContext: events.APIGatewayV2HTTPRequestContext{HTTP: events.APIGatewayV2HTTPRequestContextHTTPDescription{Method: "POST"}, Authorizer: &events.APIGatewayV2HTTPRequestContextAuthorizerDescription{Lambda: map[string]any{"userId": "operator", "paymentAccess": "admin"}}}}
+	response, err := (TaxDocumentsApp{Accounts: service, Now: func() time.Time { return time.Date(2026, 10, 30, 15, 0, 0, 0, time.UTC) }}).Handle(context.Background(), req)
+	if err != nil || response.StatusCode != 400 {
+		t.Fatalf("expected invalid email response, got %+v %v", response, err)
 	}
 }

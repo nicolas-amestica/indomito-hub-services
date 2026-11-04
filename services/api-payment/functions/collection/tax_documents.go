@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"net/mail"
 	"regexp"
 	"strconv"
 	"strings"
@@ -58,6 +59,7 @@ type TaxDocumentRequest struct {
 	Items           []TaxDocumentItem  `json:"items,omitempty" dynamodbav:"items,omitempty"`
 	Reference       string             `json:"reference,omitempty" dynamodbav:"reference,omitempty"`
 	CustomerRUT     string             `json:"customerRut,omitempty" dynamodbav:"customerRut,omitempty"`
+	DeliveryEmail   string             `json:"deliveryEmail,omitempty" dynamodbav:"deliveryEmail,omitempty"`
 	ReissuesRequest string             `json:"reissuesRequest,omitempty" dynamodbav:"reissuesRequest,omitempty"`
 	ReissuedBy      string             `json:"reissuedBy,omitempty" dynamodbav:"reissuedBy,omitempty"`
 }
@@ -104,11 +106,12 @@ type ManualTaxIssuanceRequest struct {
 }
 
 type CreateTaxDocumentRequest struct {
-	CommandID   string            `json:"commandId"`
-	IssueDate   string            `json:"issueDate"`
-	CustomerRUT string            `json:"customerRut"`
-	Reference   string            `json:"reference"`
-	Items       []TaxDocumentItem `json:"items"`
+	CommandID     string            `json:"commandId"`
+	IssueDate     string            `json:"issueDate"`
+	CustomerRUT   string            `json:"customerRut"`
+	DeliveryEmail string            `json:"deliveryEmail"`
+	Reference     string            `json:"reference"`
+	Items         []TaxDocumentItem `json:"items"`
 }
 
 type ReissueTaxDocumentRequest struct {
@@ -221,7 +224,8 @@ func (a TaxDocumentsApp) create(ctx context.Context, req events.APIGatewayV2HTTP
 		return adminFailure(req, 400, "INVALID_REQUEST")
 	}
 	issueDate, err := time.Parse(time.DateOnly, body.IssueDate)
-	if err != nil || issueDate.After(a.Now().UTC().Add(24*time.Hour)) || len(strings.TrimSpace(body.Reference)) > 90 || len(strings.TrimSpace(body.CustomerRUT)) > 12 {
+	deliveryEmail := strings.TrimSpace(body.DeliveryEmail)
+	if err != nil || issueDate.After(a.Now().UTC().Add(24*time.Hour)) || len(strings.TrimSpace(body.Reference)) > 90 || len(strings.TrimSpace(body.CustomerRUT)) > 12 || !validOptionalDeliveryEmail(deliveryEmail) {
 		return adminFailure(req, 400, "INVALID_REQUEST")
 	}
 	var total int64
@@ -243,7 +247,7 @@ func (a TaxDocumentsApp) create(ctx context.Context, req events.APIGatewayV2HTTP
 		return lambdautil.SuccessResponseWithHeaders(200, prior.TaxRequest, map[string]string{"cache-control": "no-store"})
 	}
 	now := a.Now().UTC()
-	tax := TaxDocumentRequest{SchemaVersion: 3, RequestID: requestID, SourceEventID: requestID, Currency: "CLP", GrossAmount: total, EffectiveDate: issueDate.Format(time.DateOnly), RequestedAt: now, DocumentKind: "BOLETA", DocumentSubtype: manualSalesReceiptKind, IssuanceMode: "SII_DIRECT", Status: taxStatusReady, Items: body.Items, Reference: strings.TrimSpace(body.Reference), CustomerRUT: strings.TrimSpace(body.CustomerRUT)}
+	tax := TaxDocumentRequest{SchemaVersion: 3, RequestID: requestID, SourceEventID: requestID, Currency: "CLP", GrossAmount: total, EffectiveDate: issueDate.Format(time.DateOnly), RequestedAt: now, DocumentKind: "BOLETA", DocumentSubtype: manualSalesReceiptKind, IssuanceMode: "SII_DIRECT", Status: taxStatusReady, Items: body.Items, Reference: strings.TrimSpace(body.Reference), CustomerRUT: strings.TrimSpace(body.CustomerRUT), DeliveryEmail: deliveryEmail}
 	canonical, err := a.Accounts.put(record{PK: "TAX_REQUEST#" + requestID, SK: "META", TaxRequest: &tax, Status: tax.Status}, "attribute_not_exists(pk)", nil)
 	if err != nil {
 		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
@@ -263,6 +267,14 @@ func (a TaxDocumentsApp) create(ctx context.Context, req events.APIGatewayV2HTTP
 		return adminFailure(req, 409, "PAYMENT_STATE_CONFLICT")
 	}
 	return lambdautil.SuccessResponseWithHeaders(202, tax, map[string]string{"cache-control": "no-store"})
+}
+
+func validOptionalDeliveryEmail(value string) bool {
+	if value == "" {
+		return true
+	}
+	address, err := mail.ParseAddress(value)
+	return err == nil && address.Address == value && len(value) <= 254
 }
 
 func (a TaxDocumentsApp) list(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {

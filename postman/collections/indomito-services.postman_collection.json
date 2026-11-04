@@ -2762,10 +2762,10 @@
               ],
               "path": []
             },
-            "description": "POST /pagos/documentos-tributarios/emisiones\n\nFunción: fn-crear-boleta-electronica-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "description": "POST /pagos/documentos-tributarios/emisiones\n\nFunción: fn-crear-boleta-electronica-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.\n\ndeliveryEmail es opcional. Si contiene un correo válido, el PDF se envía de forma asíncrona; vacío significa que no se envía correo.",
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"commandId\": \"01ARZ3NDEKTSV4RRFFQ69G5FAW\",\n  \"issueDate\": \"2026-11-04\",\n  \"customerRut\": \"\",\n  \"deliveryEmail\": \"receptor@example.com\",\n  \"items\": [\n    {\n      \"description\": \"Cuota de viaje\",\n      \"quantity\": 1,\n      \"unitPrice\": 10000,\n      \"exempt\": false,\n      \"unit\": \"UN\"\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"

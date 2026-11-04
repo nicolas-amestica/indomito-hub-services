@@ -36,8 +36,12 @@ type taxDeliveryDependencies struct {
 	table   string
 	objects documentAPI
 	bucket  string
-	mail    mailer
+	mail    taxMailer
 	now     func() time.Time
+}
+
+type taxMailer interface {
+	sendTax(context.Context, string, int64, []byte) error
 }
 
 type taxPublicItem struct {
@@ -66,7 +70,8 @@ type taxPublicDocument struct {
 }
 
 type taxRequestProjection struct {
-	ReceiptID string `dynamodbav:"receiptId"`
+	ReceiptID     string `dynamodbav:"receiptId"`
+	DeliveryEmail string `dynamodbav:"deliveryEmail"`
 }
 type taxRequestRow struct {
 	TaxRequest taxRequestProjection `dynamodbav:"taxRequest"`
@@ -121,7 +126,8 @@ func processTaxDelivery(ctx context.Context, job taxDeliveryJob, deps taxDeliver
 	if attributevalue.UnmarshalMap(requestItem.Item, &requestRow) != nil {
 		return errors.New("INVALID_TAX_REQUEST")
 	}
-	if requestRow.TaxRequest.ReceiptID != "" {
+	deliveryEmail := requestRow.TaxRequest.DeliveryEmail
+	if deliveryEmail == "" && requestRow.TaxRequest.ReceiptID != "" {
 		receiptItem, getErr := deps.db.GetItem(ctx, &dynamodb.GetItemInput{TableName: &deps.table, Key: taxKey("RECEIPT#"+requestRow.TaxRequest.ReceiptID, "META"), ConsistentRead: aws.Bool(true)})
 		if getErr != nil {
 			return getErr
@@ -130,11 +136,14 @@ func processTaxDelivery(ctx context.Context, job taxDeliveryJob, deps taxDeliver
 		if attributevalue.UnmarshalMap(receiptItem.Item, &receipt) != nil {
 			return errors.New("INVALID_RECEIPT")
 		}
-		address, addressErr := mail.ParseAddress(receipt.ReceiptEmail)
-		if addressErr != nil || address.Address != receipt.ReceiptEmail {
+		deliveryEmail = receipt.ReceiptEmail
+	}
+	if deliveryEmail != "" {
+		address, addressErr := mail.ParseAddress(deliveryEmail)
+		if addressErr != nil || address.Address != deliveryEmail || len(deliveryEmail) > 254 {
 			return errors.New("RECEIPT_EMAIL_MISSING")
 		}
-		if err = deps.mail.sendTax(ctx, receipt.ReceiptEmail, job.Folio, document); err != nil {
+		if err = deps.mail.sendTax(ctx, deliveryEmail, job.Folio, document); err != nil {
 			return err
 		}
 	}

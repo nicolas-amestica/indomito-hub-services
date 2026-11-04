@@ -16,6 +16,35 @@
     },
     "/pagos/documentos-tributarios/configuracion/pfx": {
       "post": { "summary": "Carga un certificado PFX", "responses": { "200": { "description": "Certificado validado y almacenado" } } }
+    },
+    "/pagos/documentos-tributarios/emisiones": {
+      "post": {
+        "summary": "Encola una boleta electrónica para emisión",
+        "description": "Si deliveryEmail contiene un correo válido, la representación PDF se entrega de forma asíncrona después de la emisión. Si se omite o queda vacío, no se envía correo.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["commandId", "issueDate", "customerRut", "items"],
+                "properties": {
+                  "commandId": { "type": "string", "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" },
+                  "issueDate": { "type": "string", "format": "date" },
+                  "customerRut": { "type": "string", "maxLength": 12 },
+                  "deliveryEmail": { "type": "string", "format": "email", "maxLength": 254 },
+                  "items": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "type": "object" } }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": { "description": "Boleta encolada para emisión" },
+          "400": { "description": "Solicitud o correo inválido" }
+        }
+      }
     }
   }
 }
