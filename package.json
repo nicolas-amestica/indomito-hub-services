@@ -1,7 +1,9 @@
 {
   "private": true,
   "type": "module",
-  "scripts": {},
+  "scripts": {
+    "postman:generate": "tsx scripts/generate-postman-collection.ts"
+  },
   "devDependencies": {
     "@serverless/typescript": "^3.38.0",
     "@types/node": "^24.13.3",

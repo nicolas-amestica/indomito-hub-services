@@ -1,0 +1,3944 @@
+{
+  "info": {
+    "_postman_id": "035edfd7-b929-4d61-ae4c-f329096118db",
+    "name": "Indómito Hub — Services API",
+    "description": "Colección generada desde los serverless.ts de los servicios HTTP de Indómito Hub.\n\nNo contiene credenciales ni ejecuta solicitudes automáticamente.\n\nLos procesadores payment-monitoring y payment-receipts son asíncronos y no exponen rutas HTTP.\n\nSelecciona baseUrlDev o baseUrlPrd en baseUrl y completa accessToken después de iniciar sesión.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "{{baseUrlDev}}",
+      "type": "string"
+    },
+    {
+      "key": "baseUrlDev",
+      "value": "https://api.dev.girasindomito.cl",
+      "type": "string"
+    },
+    {
+      "key": "baseUrlPrd",
+      "value": "https://api.girasindomito.cl",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "api-catalog",
+      "description": "Endpoints HTTP del servicio api-catalog.",
+      "item": [
+        {
+          "name": "GET /catalogo:servicios",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogo:servicios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Obtiene el catalogo de servicios por scope\n\nFunción: fn-obtener-catalogo-servicios-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /catalogo:servicios",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/catalogo:servicios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Crea un servicio en el catalogo administrado\n\nFunción: fn-crear-servicio-catalogo-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /catalogo:servicios/{id}",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/catalogo:servicios/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Actualiza un servicio existente del catalogo\n\nFunción: fn-actualizar-servicio-catalogo-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /catalogos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Catalogos del formulario de programa y parametros de politica\n\nFunción: fn-obtener-catalogos-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /configuracion/acceso-maestro",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion/acceso-maestro",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "DELETE /configuracion/acceso-maestro\n\nFunción: fn-revocar-acceso-maestro-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /configuracion/acceso-maestro",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion/acceso-maestro",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /configuracion/acceso-maestro\n\nFunción: fn-obtener-acceso-maestro-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /configuracion/acceso-maestro",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion/acceso-maestro",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "PUT /configuracion/acceso-maestro\n\nFunción: fn-rotar-acceso-maestro-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /configuracion/anfitriones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion/anfitriones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /configuracion/anfitriones\n\nFunción: fn-obtener-anfitriones-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /configuracion/anfitriones",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion/anfitriones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /configuracion/anfitriones\n\nFunción: fn-crear-anfitrion-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /configuracion/anfitriones:opciones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion/anfitriones:opciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /configuracion/anfitriones:opciones\n\nFunción: fn-obtener-opciones-anfitriones-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /configuracion/anfitriones/{id}",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion/anfitriones/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "DELETE /configuracion/anfitriones/{id}\n\nFunción: fn-eliminar-anfitrion-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /configuracion/anfitriones/{id}",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion/anfitriones/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "PUT /configuracion/anfitriones/{id}\n\nFunción: fn-actualizar-anfitrion-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /configuracion/tributaria",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion/tributaria",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Obtiene los porcentajes tributarios vigentes\n\nFunción: fn-obtener-configuracion-tributaria-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /configuracion/tributaria",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion/tributaria",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Actualiza los porcentajes de IVA y retencion de tripulacion\n\nFunción: fn-actualizar-configuracion-tributaria-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /tasas-cambio",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tasas-cambio",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Tasas de cambio de USD y BRL a CLP, con respaldo por snapshot\n\nFunción: fn-obtener-tasas-cambio-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "api-contract",
+      "description": "Endpoints HTTP del servicio api-contract.",
+      "item": [
+        {
+          "name": "GET /contratos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/contratos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Lista contratos por periodo\n\nFunción: fn-listar-contratos-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /contratos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/contratos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Crea un contrato en estado borrador\n\nFunción: fn-crear-contrato-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /contratos:configuracion",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/contratos:configuracion",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Obtiene la configuracion inicial del formulario por scope\n\nFunción: fn-obtener-configuracion-contrato-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /contratos:pdf",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/contratos:pdf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Genera el PDF del contrato en memoria\n\nFunción: fn-generar-contrato-pdf-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /contratos/{id-contrato}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/contratos/{{id-contrato}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Obtiene un contrato\n\nFunción: fn-obtener-contrato-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /contratos/{id-contrato}",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/contratos/{{id-contrato}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Actualiza un contrato no aprobado y almacena su PDF al aprobar\n\nFunción: fn-actualizar-contrato-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /contratos/{id-contrato}/anexos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/contratos/{{id-contrato}}/anexos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Lista los anexos contractuales sin consultar otras particiones\n\nFunción: fn-listar-anexos-contrato-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /contratos/{id-contrato}/anexos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/contratos/{{id-contrato}}/anexos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Crea un anexo de fechas y servicios sobre un contrato aprobado\n\nFunción: fn-crear-anexo-contrato-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /contratos/{id-contrato}/anexos/{id-anexo}/aprobacion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/contratos/{{id-contrato}}/anexos/{{id-anexo}}/aprobacion",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Aprueba y almacena el PDF inmutable de un anexo contractual\n\nFunción: fn-aprobar-anexo-contrato-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /contratos/{id-contrato}/anexos/{id-anexo}/pdf",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/contratos/{{id-contrato}}/anexos/{{id-anexo}}/pdf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Entrega acceso temporal al PDF aprobado de un anexo\n\nFunción: fn-obtener-pdf-anexo-contrato-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /contratos/{id-contrato}/documento-firmado/pdf",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/contratos/{{id-contrato}}/documento-firmado/pdf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Entrega el contrato firmado vigente\n\nFunción: fn-obtener-contrato-firmado-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /contratos/{id-contrato}/documentos-firmados",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/contratos/{{id-contrato}}/documentos-firmados",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Lista el historial firmado\n\nFunción: fn-listar-contratos-firmados-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /contratos/{id-contrato}/documentos-firmados:carga",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/contratos/{{id-contrato}}/documentos-firmados:carga",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Prepara la carga idempotente del contrato firmado\n\nFunción: fn-preparar-carga-contrato-firmado-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /contratos/{id-contrato}/documentos-firmados:confirmar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/contratos/{{id-contrato}}/documentos-firmados:confirmar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Verifica y publica una version firmada\n\nFunción: fn-confirmar-carga-contrato-firmado-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /contratos/{id-contrato}/documentos-firmados/{id-documento-firmado}/pdf",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/contratos/{{id-contrato}}/documentos-firmados/{{id-documento-firmado}}/pdf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Entrega una version historica firmada\n\nFunción: fn-obtener-version-contrato-firmado-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /contratos/{id-contrato}/pdf",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/contratos/{{id-contrato}}/pdf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Entrega acceso temporal al PDF aprobado\n\nFunción: fn-obtener-pdf-contrato-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "api-identity",
+      "description": "Endpoints HTTP del servicio api-identity.",
+      "item": [
+        {
+          "name": "DELETE /auth/foto-perfil",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/foto-perfil",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "DELETE /auth/foto-perfil\n\nFunción: fn-eliminar-foto-perfil-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /auth/foto-perfil",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/foto-perfil",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /auth/foto-perfil\n\nFunción: fn-obtener-foto-perfil-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /auth/foto-perfil",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/foto-perfil",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "PUT /auth/foto-perfil\n\nFunción: fn-guardar-foto-perfil-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /auth/login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /auth/login\n\nFunción: fn-login-v1\nStages: DEV, PRD\nAutenticación: Pública o autenticación propia del proveedor.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /auth/permisos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/permisos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /auth/permisos\n\nFunción: fn-obtener-permisos-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /auth/recuperar-clave",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/recuperar-clave",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /auth/recuperar-clave\n\nFunción: fn-solicitar-recuperacion-clave-v1\nStages: DEV, PRD\nAutenticación: Pública o autenticación propia del proveedor.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /auth/restablecer-clave",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/restablecer-clave",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /auth/restablecer-clave\n\nFunción: fn-restablecer-clave-v1\nStages: DEV, PRD\nAutenticación: Pública o autenticación propia del proveedor.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /iam/modulos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/iam/modulos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /iam/modulos\n\nFunción: fn-listar-modulos-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /iam/modulos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/iam/modulos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /iam/modulos\n\nFunción: fn-guardar-modulo-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /iam/modulos/{codigo}",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/iam/modulos/{{codigo}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "DELETE /iam/modulos/{codigo}\n\nFunción: fn-eliminar-modulo-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /iam/modulos/{codigo}",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/iam/modulos/{{codigo}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "PUT /iam/modulos/{codigo}\n\nFunción: fn-actualizar-modulo-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /iam/perfiles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/iam/perfiles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /iam/perfiles\n\nFunción: fn-listar-perfiles-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /iam/perfiles",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/iam/perfiles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /iam/perfiles\n\nFunción: fn-guardar-perfil-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /iam/perfiles/{codigo}",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/iam/perfiles/{{codigo}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "DELETE /iam/perfiles/{codigo}\n\nFunción: fn-eliminar-perfil-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /iam/perfiles/{codigo}",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/iam/perfiles/{{codigo}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "PUT /iam/perfiles/{codigo}\n\nFunción: fn-actualizar-perfil-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /iam/perfiles/{codigo}/permisos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/iam/perfiles/{{codigo}}/permisos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /iam/perfiles/{codigo}/permisos\n\nFunción: fn-obtener-permisos-perfil-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /iam/perfiles/{codigo}/permisos",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/iam/perfiles/{{codigo}}/permisos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "PUT /iam/perfiles/{codigo}/permisos\n\nFunción: fn-guardar-permisos-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /iam/usuarios",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/iam/usuarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /iam/usuarios\n\nFunción: fn-listar-usuarios-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /iam/usuarios",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/iam/usuarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /iam/usuarios\n\nFunción: fn-guardar-usuario-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /iam/usuarios/{id}",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/iam/usuarios/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "DELETE /iam/usuarios/{id}\n\nFunción: fn-eliminar-usuario-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /iam/usuarios/{id}",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/iam/usuarios/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "PATCH /iam/usuarios/{id}\n\nFunción: fn-cambiar-estado-usuario-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /iam/usuarios/{id}",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/iam/usuarios/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "PUT /iam/usuarios/{id}\n\nFunción: fn-actualizar-usuario-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "api-inbox",
+      "description": "Endpoints HTTP del servicio api-inbox.",
+      "item": [
+        {
+          "name": "GET /configuracion-agente",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion-agente",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Obtiene borrador, version publicada e historial del agente IA\n\nFunción: fn-obtener-configuracion-agente-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /configuracion-agente/borrador",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion-agente/borrador",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Guarda un borrador validado de configuracion del agente IA\n\nFunción: fn-guardar-borrador-agente-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /configuracion-agente/metricas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion-agente/metricas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Obtiene consumo de tokens, costo AWS y estado del Free Tier con cache diario\n\nFunción: fn-obtener-metricas-operacionales-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /configuracion-agente/programas/cargas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion-agente/programas/cargas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Firma una carga PDF privada para un programa del agente IA\n\nFunción: fn-preparar-activo-agente-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /configuracion-agente/programas/descargas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion-agente/programas/descargas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Firma la descarga privada de un PDF del agente IA\n\nFunción: fn-descargar-activo-agente-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /configuracion-agente/publicaciones",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion-agente/publicaciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Publica de forma atomica la configuracion del agente IA\n\nFunción: fn-publicar-configuracion-agente-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /configuracion-agente/restauraciones",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion-agente/restauraciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Restaura una version historica del agente IA\n\nFunción: fn-restaurar-configuracion-agente-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /conversaciones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/conversaciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Materializa y pagina la bandeja Inbox sin operaciones Scan\n\nFunción: fn-obtener-conversaciones-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /conversaciones/{telefono}",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/conversaciones/{{telefono}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Elimina logicamente una conversacion Inbox\n\nFunción: fn-eliminar-conversacion-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /conversaciones/{telefono}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/conversaciones/{{telefono}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Obtiene historial, watermark y envios no terminales de una conversacion\n\nFunción: fn-obtener-conversacion-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /conversaciones/{telefono}/adjuntos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/conversaciones/{{telefono}}/adjuntos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Valida y envia un adjunto Inbox por WhatsApp\n\nFunción: fn-enviar-adjunto-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /conversaciones/{telefono}/adjuntos/preparar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/conversaciones/{{telefono}}/adjuntos/preparar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Reserva y firma cargas temporales de Inbox\n\nFunción: fn-preparar-adjuntos-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /conversaciones/{telefono}/contacto",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/conversaciones/{{telefono}}/contacto",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Actualiza el alias de una conversacion\n\nFunción: fn-actualizar-contacto-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /conversaciones/{telefono}/estado-agente",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/conversaciones/{{telefono}}/estado-agente",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Reactiva explicitamente el agente IA de una conversacion\n\nFunción: fn-reactivar-agente-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /conversaciones/{telefono}/estado-lectura",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/conversaciones/{{telefono}}/estado-lectura",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Marca una conversacion como no leida\n\nFunción: fn-marcar-no-leida-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /conversaciones/{telefono}/mensajes-enriquecidos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/conversaciones/{{telefono}}/mensajes-enriquecidos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Envia ubicaciones o contactos por WhatsApp\n\nFunción: fn-enviar-mensaje-enriquecido-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /conversaciones/{telefono}/plantillas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/conversaciones/{{telefono}}/plantillas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Envia una plantilla aprobada de WhatsApp\n\nFunción: fn-enviar-plantilla-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /conversaciones/{telefono}/reacciones",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/conversaciones/{{telefono}}/reacciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Agrega o elimina una reaccion de WhatsApp\n\nFunción: fn-enviar-reaccion-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /conversaciones/{telefono}/respuestas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/conversaciones/{{telefono}}/respuestas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Envia una respuesta idempotente por WhatsApp\n\nFunción: fn-enviar-respuesta-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /conversaciones/acciones/marcar-leidas",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/conversaciones/acciones/marcar-leidas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Inicia el marcado masivo de conversaciones como leidas\n\nFunción: fn-iniciar-marcar-leidas-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /conversaciones/acciones/recalcular-no-leidas",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/conversaciones/acciones/recalcular-no-leidas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Inicia el recalculo masivo de no leidas\n\nFunción: fn-iniciar-recalcular-no-leidas-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /conversaciones/suscripcion",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/conversaciones/suscripcion",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Emite un ticket efimero para la suscripcion WebSocket\n\nFunción: fn-crear-suscripcion-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /envios-inbox/{clientMessageId}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/envios-inbox/{{clientMessageId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Consulta un envio Inbox\n\nFunción: fn-obtener-envio-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /envios-inbox/{clientMessageId}/reintentar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/envios-inbox/{{clientMessageId}}/reintentar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Reintenta una vez un envio Inbox\n\nFunción: fn-reintentar-envio-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /envios-inbox/{clientMessageId}/resolucion",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/envios-inbox/{{clientMessageId}}/resolucion",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Resuelve administrativamente un envio incierto\n\nFunción: fn-resolver-envio-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /operaciones-inbox",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/operaciones-inbox",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Consulta la operacion masiva activa\n\nFunción: fn-obtener-operacion-activa-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /operaciones-inbox/{operationId}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/operaciones-inbox/{{operationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Consulta una operacion masiva por identificador\n\nFunción: fn-obtener-operacion-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /plantillas-whatsapp",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/plantillas-whatsapp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Lista plantillas aprobadas de WhatsApp\n\nFunción: fn-listar-plantillas-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /webhooks/whatsapp",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/whatsapp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Verifica el callback de WhatsApp\n\nFunción: fn-verificar-webhook-whatsapp-v1\nStages: DEV, PRD\nAutenticación: Pública o autenticación propia del proveedor.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /webhooks/whatsapp",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/whatsapp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Autentica y reserva eventos entrantes de WhatsApp\n\nFunción: fn-recibir-webhook-whatsapp-v1\nStages: DEV, PRD\nAutenticación: Pública o autenticación propia del proveedor.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "api-meet",
+      "description": "Endpoints HTTP del servicio api-meet.",
+      "item": [
+        {
+          "name": "GET /v1/reuniones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/reuniones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /v1/reuniones\n\nFunción: fn-listar-reuniones-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /v1/reuniones",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/reuniones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /v1/reuniones\n\nFunción: fn-crear-reunion-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /v1/reuniones/{eventId}",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/reuniones/{{eventId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "DELETE /v1/reuniones/{eventId}\n\nFunción: fn-eliminar-reunion-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /v1/reuniones/{eventId}",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/reuniones/{{eventId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "PUT /v1/reuniones/{eventId}\n\nFunción: fn-actualizar-reunion-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "api-payment",
+      "description": "Endpoints HTTP del servicio api-payment.",
+      "item": [
+        {
+          "name": "POST /pagos/boletas/consultas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/boletas/consultas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/boletas/consultas\n\nFunción: fn-consultar-boleta-electronica-v1\nStages: DEV, PRD\nAutenticación: Pública o autenticación propia del proveedor.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/comprobantes/fallos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/comprobantes/fallos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/comprobantes/fallos\n\nFunción: fn-listar-fallos-comprobantes-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/comprobantes/fallos/{receiptId}/reintentos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/comprobantes/fallos/{{receiptId}}/reintentos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/comprobantes/fallos/{receiptId}/reintentos\n\nFunción: fn-reintentar-comprobante-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/comprobantes/verificaciones",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/comprobantes/verificaciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/comprobantes/verificaciones\n\nFunción: fn-verificar-comprobante-publico-v1\nStages: DEV, PRD\nAutenticación: Pública o autenticación propia del proveedor.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/configuracion",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/configuracion",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/configuracion\n\nFunción: fn-configuracion-pagos-v1\nStages: DEV\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/consultas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/consultas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/consultas\n\nFunción: fn-consultar-cuotas-v1\nStages: DEV, PRD\nAutenticación: Pública o autenticación propia del proveedor.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/contratos/{id}/puesta-en-marcha",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/contratos/{{id}}/puesta-en-marcha",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/contratos/{id}/puesta-en-marcha\n\nFunción: fn-obtener-puesta-marcha-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/contratos/{id}/puesta-en-marcha",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/contratos/{{id}}/puesta-en-marcha",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/contratos/{id}/puesta-en-marcha\n\nFunción: fn-confirmar-puesta-marcha-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/cuentas/{accountId}/comprobantes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/cuentas/{{accountId}}/comprobantes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/cuentas/{accountId}/comprobantes\n\nFunción: fn-listar-comprobantes-cuenta-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/cuentas/{accountId}/comprobantes/{id}/descarga",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/cuentas/{{accountId}}/comprobantes/{{id}}/descarga",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/cuentas/{accountId}/comprobantes/{id}/descarga\n\nFunción: fn-descargar-comprobante-cuenta-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/cuentas/{accountId}/comprobantes/{id}/reenvios",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/cuentas/{{accountId}}/comprobantes/{{id}}/reenvios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/cuentas/{accountId}/comprobantes/{id}/reenvios\n\nFunción: fn-reenviar-comprobante-cuenta-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/cuentas/{accountId}/comprobantes/migracion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/cuentas/{{accountId}}/comprobantes/migracion",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/cuentas/{accountId}/comprobantes/migracion\n\nFunción: fn-migrar-comprobantes-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/cuentas/{accountId}/intentos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/cuentas/{{accountId}}/intentos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/cuentas/{accountId}/intentos\n\nFunción: fn-listar-intentos-cuenta-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/cuentas/{id}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/cuentas/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/cuentas/{id}\n\nFunción: fn-obtener-cuenta-cobranza-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/cuentas/{id}/operaciones",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/cuentas/{{id}}/operaciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/cuentas/{id}/operaciones\n\nFunción: fn-registrar-operacion-cuenta-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/cuotas/khipu/notificaciones",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/cuotas/khipu/notificaciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/cuotas/khipu/notificaciones\n\nFunción: fn-notificacion-cuota-khipu-v1\nStages: DEV, PRD\nAutenticación: Pública o autenticación propia del proveedor.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/documentos-tributarios/{requestId}/{action}",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/documentos-tributarios/{{requestId}}/{{action}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/documentos-tributarios/{requestId}/{action}\n\nFunción: fn-emitir-boleta-pendiente-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/documentos-tributarios/{requestId}/descarga",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/documentos-tributarios/{{requestId}}/descarga",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/documentos-tributarios/{requestId}/descarga\n\nFunción: fn-descargar-boleta-manual-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/documentos-tributarios/{requestId}/emision-manual",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/documentos-tributarios/{{requestId}}/emision-manual",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/documentos-tributarios/{requestId}/emision-manual\n\nFunción: fn-registrar-boleta-manual-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/documentos-tributarios/configuracion",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/documentos-tributarios/configuracion",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/documentos-tributarios/configuracion\n\nFunción: fn-sii-config-get-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /pagos/documentos-tributarios/configuracion",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/documentos-tributarios/configuracion",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "PUT /pagos/documentos-tributarios/configuracion\n\nFunción: fn-sii-config-put-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/documentos-tributarios/configuracion/caf",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/documentos-tributarios/configuracion/caf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/documentos-tributarios/configuracion/caf\n\nFunción: fn-sii-config-caf-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/documentos-tributarios/configuracion/pfx",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/documentos-tributarios/configuracion/pfx",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/documentos-tributarios/configuracion/pfx\n\nFunción: fn-sii-config-pfx-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/documentos-tributarios/emisiones",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/documentos-tributarios/emisiones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/documentos-tributarios/emisiones\n\nFunción: fn-crear-boleta-electronica-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/documentos-tributarios/pendientes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/documentos-tributarios/pendientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/documentos-tributarios/pendientes\n\nFunción: fn-listar-solicitudes-tributarias-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/giras/{tripId}/abonos-grupales",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/giras/{{tripId}}/abonos-grupales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/giras/{tripId}/abonos-grupales\n\nFunción: fn-registrar-abono-grupal-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/giras/{tripId}/abonos-grupales/{commandId}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/giras/{{tripId}}/abonos-grupales/{{commandId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/giras/{tripId}/abonos-grupales/{commandId}\n\nFunción: fn-obtener-abono-grupal-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/giras/{tripId}/acceso",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/giras/{{tripId}}/acceso",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/giras/{tripId}/acceso\n\nFunción: fn-obtener-acceso-gira-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/giras/{tripId}/acceso/revoke",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/giras/{{tripId}}/acceso/revoke",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/giras/{tripId}/acceso/revoke\n\nFunción: fn-cambiar-acceso-gira-v1-revoke\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/giras/{tripId}/acceso/rotate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/giras/{{tripId}}/acceso/rotate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/giras/{tripId}/acceso/rotate\n\nFunción: fn-cambiar-acceso-gira-v1-rotate\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/giras/{tripId}/anexos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/giras/{{tripId}}/anexos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/giras/{tripId}/anexos\n\nFunción: fn-crear-anexo-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/giras/{tripId}/anexos/{annexId}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/giras/{{tripId}}/anexos/{{annexId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/giras/{tripId}/anexos/{annexId}\n\nFunción: fn-obtener-anexo-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/giras/{tripId}/anexos/{annexId}/aplicacion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/giras/{{tripId}}/anexos/{{annexId}}/aplicacion",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/giras/{tripId}/anexos/{annexId}/aplicacion\n\nFunción: fn-aplicar-anexo-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/giras/{tripId}/anexos/{annexId}/impacto",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/giras/{{tripId}}/anexos/{{annexId}}/impacto",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/giras/{tripId}/anexos/{annexId}/impacto\n\nFunción: fn-resumir-impacto-anexo-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/giras/{tripId}/anexos/{annexId}/propuestas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/giras/{{tripId}}/anexos/{{annexId}}/propuestas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/giras/{tripId}/anexos/{annexId}/propuestas\n\nFunción: fn-previsualizar-anexo-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/giras/{tripId}/comprobantes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/giras/{{tripId}}/comprobantes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/giras/{tripId}/comprobantes\n\nFunción: fn-listar-comprobantes-gira-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/giras/{tripId}/comprobantes/{id}/descarga",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/giras/{{tripId}}/comprobantes/{{id}}/descarga",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/giras/{tripId}/comprobantes/{id}/descarga\n\nFunción: fn-descargar-comprobante-gira-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/giras/{tripId}/descuentos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/giras/{{tripId}}/descuentos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/giras/{tripId}/descuentos\n\nFunción: fn-crear-descuento-grupal-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/giras/{tripId}/descuentos/{discountId}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/giras/{{tripId}}/descuentos/{{discountId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/giras/{tripId}/descuentos/{discountId}\n\nFunción: fn-obtener-descuento-grupal-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/giras/{tripId}/descuentos/{discountId}/aprobacion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/giras/{{tripId}}/descuentos/{{discountId}}/aprobacion",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/giras/{tripId}/descuentos/{discountId}/aprobacion\n\nFunción: fn-aprobar-descuento-grupal-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/giras/{tripId}/pasajeros",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/giras/{{tripId}}/pasajeros",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/giras/{tripId}/pasajeros\n\nFunción: fn-listar-nomina-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/giras/{tripId}/pasajeros/cierre",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/giras/{{tripId}}/pasajeros/cierre",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/giras/{tripId}/pasajeros/cierre\n\nFunción: fn-cerrar-nomina-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/giras/{tripId}/pasajeros/migracion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/giras/{{tripId}}/pasajeros/migracion",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/giras/{tripId}/pasajeros/migracion\n\nFunción: fn-migrar-nomina-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/intentos/{attemptId}/conciliacion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/intentos/{{attemptId}}/conciliacion",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/intentos/{attemptId}/conciliacion\n\nFunción: fn-conciliar-intento-khipu-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/khipu/notificaciones",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/khipu/notificaciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/khipu/notificaciones\n\nFunción: fn-notificacion-khipu-v1\nStages: DEV\nAutenticación: Pública o autenticación propia del proveedor.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/khipu/rendiciones",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/khipu/rendiciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/khipu/rendiciones\n\nFunción: fn-recibir-rendicion-khipu-v1\nStages: PRD\nAutenticación: Pública o autenticación propia del proveedor.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/khipu/rendiciones/capturas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/khipu/rendiciones/capturas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/khipu/rendiciones/capturas\n\nFunción: fn-capturar-rendicion-khipu-v1\nStages: PRD\nAutenticación: Pública o autenticación propia del proveedor.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/operaciones/{id}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/operaciones/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/operaciones/{id}\n\nFunción: fn-obtener-operacion-financiera-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/portal/checkout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/portal/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/portal/checkout\n\nFunción: fn-crear-checkout-cuota-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/portal/cuenta",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/portal/cuenta",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/portal/cuenta\n\nFunción: fn-obtener-cuenta-portal-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/portal/intentos/{id}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/portal/intentos/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/portal/intentos/{id}\n\nFunción: fn-obtener-intento-cuota-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/portal/intentos/{id}/comprobante/reenvios",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/portal/intentos/{{id}}/comprobante/reenvios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/portal/intentos/{id}/comprobante/reenvios\n\nFunción: fn-reenviar-comprobante-portal-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/pruebas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/pruebas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/pruebas\n\nFunción: fn-crear-prueba-pago-v1\nStages: DEV\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/pruebas/{id}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/pruebas/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/pruebas/{id}\n\nFunción: fn-obtener-prueba-pago-v1\nStages: DEV\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/pruebas/{id}/verificar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/pruebas/{{id}}/verificar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/pruebas/{id}/verificar\n\nFunción: fn-verificar-prueba-pago-v1\nStages: DEV\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/retorno",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/retorno",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/retorno\n\nFunción: fn-retorno-pago-v1\nStages: DEV\nAutenticación: Pública o autenticación propia del proveedor.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/tesoreria/alertas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/tesoreria/alertas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/tesoreria/alertas\n\nFunción: fn-listar-alertas-cobranza-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/tesoreria/caja",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/tesoreria/caja",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/tesoreria/caja\n\nFunción: fn-obtener-caja-consolidada-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/tesoreria/giras/{tripId}/alertas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/tesoreria/giras/{{tripId}}/alertas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/tesoreria/giras/{tripId}/alertas\n\nFunción: fn-obtener-alertas-cobranza-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/tesoreria/giras/{tripId}/caja",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/tesoreria/giras/{{tripId}}/caja",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/tesoreria/giras/{tripId}/caja\n\nFunción: fn-obtener-caja-gira-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/tesoreria/giras/{tripId}/devoluciones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/tesoreria/giras/{{tripId}}/devoluciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/tesoreria/giras/{tripId}/devoluciones\n\nFunción: fn-listar-devoluciones-gira-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/tesoreria/giras/{tripId}/liquidaciones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/tesoreria/giras/{{tripId}}/liquidaciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/tesoreria/giras/{tripId}/liquidaciones\n\nFunción: fn-listar-liquidaciones-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/tesoreria/giras/{tripId}/liquidaciones/{paymentId}",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/tesoreria/giras/{{tripId}}/liquidaciones/{{paymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/tesoreria/giras/{tripId}/liquidaciones/{paymentId}\n\nFunción: fn-conciliar-liquidacion-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/tesoreria/giras/{tripId}/proveedores",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/tesoreria/giras/{{tripId}}/proveedores",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/tesoreria/giras/{tripId}/proveedores\n\nFunción: fn-listar-proveedores-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/tesoreria/giras/{tripId}/proveedores/{supplierId}",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/tesoreria/giras/{{tripId}}/proveedores/{{supplierId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/tesoreria/giras/{tripId}/proveedores/{supplierId}\n\nFunción: fn-registrar-operacion-proveedor-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/tesoreria/rendiciones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/tesoreria/rendiciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/tesoreria/rendiciones\n\nFunción: fn-listar-rendiciones-khipu-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /pagos/tesoreria/rendiciones/{id}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/tesoreria/rendiciones/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /pagos/tesoreria/rendiciones/{id}\n\nFunción: fn-obtener-rendicion-khipu-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /pagos/tesoreria/rendiciones/{id}/reintentos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagos/tesoreria/rendiciones/{{id}}/reintentos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "POST /pagos/tesoreria/rendiciones/{id}/reintentos\n\nFunción: fn-reprocesar-rendicion-khipu-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "api-program",
+      "description": "Endpoints HTTP del servicio api-program.",
+      "item": [
+        {
+          "name": "GET /cotizaciones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cotizaciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Lista las cotizaciones del usuario autenticado\n\nFunción: fn-listar-cotizaciones-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /cotizaciones",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cotizaciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Crea una cotizacion para el usuario autenticado\n\nFunción: fn-crear-cotizacion-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /cotizaciones:presupuesto",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cotizaciones:presupuesto",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Genera el PDF de presupuesto del programa con los precios por escenario recibidos\n\nFunción: fn-generar-presupuesto-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /cotizaciones/{id-cotizacion}",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cotizaciones/{{id-cotizacion}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Elimina una cotizacion del usuario autenticado\n\nFunción: fn-eliminar-cotizacion-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /cotizaciones/{id-cotizacion}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cotizaciones/{{id-cotizacion}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Obtiene el detalle de una cotizacion del usuario autenticado\n\nFunción: fn-obtener-cotizacion-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /cotizaciones/{id-cotizacion}",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cotizaciones/{{id-cotizacion}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Actualiza una cotizacion del usuario autenticado\n\nFunción: fn-actualizar-cotizacion-v1\nStages: DEV, PRD\nAutenticación: Bearer JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
