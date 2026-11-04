@@ -200,7 +200,7 @@ func (a taxConfigurationApp) summary(ctx context.Context, req events.APIGatewayV
 	return lambdautil.SuccessResponseWithHeaders(200, map[string]any{
 		"senderRut": config.SenderRUT, "issuerName": cafInfo.IssuerName,
 		"issuerActivity": config.IssuerActivity, "issuerAddress": config.IssuerAddress,
-		"issuerCommune": config.IssuerCommune, "notificationEmail": config.NotificationEmail, "environment": config.Environment,
+		"issuerCommune": config.IssuerCommune, "notificationEmail": config.NotificationEmail, "environment": resolveSIIEnvironment(config.Environment, a.stage),
 		"resolutionDate": config.ResolutionDate, "resolutionNumber": config.ResolutionNumber,
 		"enabled": config.Enabled, "certificationApproved": false,
 		"caf": caf, "certificate": certificate,
@@ -232,13 +232,44 @@ func (a taxConfigurationApp) save(ctx context.Context, config sii.Config) error 
 	return (siiParameterStore{Client: a.parameters, Stage: a.stage}).Save(ctx, raw)
 }
 
+// validSIIEnvironment indica si el ambiente SII es uno de los valores soportados.
+func validSIIEnvironment(environment sii.Environment) bool {
+	return environment == sii.EnvironmentCertification || environment == sii.EnvironmentProduction
+}
+
+// defaultSIIEnvironment devuelve el ambiente SII que corresponde al stage de despliegue:
+// producción en prd y certificación en cualquier otro stage.
+func defaultSIIEnvironment(stage string) sii.Environment {
+	if stage == "prd" {
+		return sii.EnvironmentProduction
+	}
+	return sii.EnvironmentCertification
+}
+
+// resolveSIIEnvironment devuelve el ambiente configurado o, si el parámetro aún no lo
+// tiene definido (por ejemplo, cuando sólo se cargó el CAF o el certificado), el
+// ambiente por defecto del stage.
+func resolveSIIEnvironment(configured sii.Environment, stage string) sii.Environment {
+	if validSIIEnvironment(configured) {
+		return configured
+	}
+	return defaultSIIEnvironment(stage)
+}
+
 func (a taxConfigurationApp) update(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	var input taxConfigurationInput
-	if decodeAdmin(req, &input) != nil || (input.Environment != sii.EnvironmentCertification && input.Environment != sii.EnvironmentProduction) || strings.TrimSpace(input.IssuerName) == "" || !validSIINotificationEmail(input.NotificationEmail) {
+	if decodeAdmin(req, &input) != nil || strings.TrimSpace(input.IssuerName) == "" || !validSIINotificationEmail(input.NotificationEmail) {
 		return adminFailure(req, 400, "INVALID_REQUEST")
 	}
 	config, _, err := a.loadConfig(ctx)
 	if err != nil {
+		return adminFailure(req, 400, "INVALID_REQUEST")
+	}
+	// Un ambiente omitido se completa con el ya guardado o el del stage; uno informado
+	// pero desconocido sigue siendo un error de validación.
+	if strings.TrimSpace(string(input.Environment)) == "" {
+		input.Environment = resolveSIIEnvironment(config.Environment, a.stage)
+	} else if !validSIIEnvironment(input.Environment) {
 		return adminFailure(req, 400, "INVALID_REQUEST")
 	}
 	if rawCAF, decodeErr := base64.StdEncoding.DecodeString(config.CAFXMLBase64); decodeErr == nil && len(rawCAF) > 0 {
