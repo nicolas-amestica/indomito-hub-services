@@ -16,6 +16,8 @@ import (
 
 const siiParameterChunkSize = 3500
 
+var errSIIParameterMissing = errors.New("configuración SII no creada")
+
 type siiParameterAPI interface {
 	GetParameter(context.Context, *ssm.GetParameterInput, ...func(*ssm.Options)) (*ssm.GetParameterOutput, error)
 	GetParameters(context.Context, *ssm.GetParametersInput, ...func(*ssm.Options)) (*ssm.GetParametersOutput, error)
@@ -47,7 +49,14 @@ func (s siiParameterStore) Load(ctx context.Context) ([]byte, error) {
 		return nil, errors.New("configuración SII no disponible")
 	}
 	result, err := s.Client.GetParameter(ctx, &ssm.GetParameterInput{Name: aws.String(s.baseName()), WithDecryption: aws.Bool(true)})
-	if err != nil || result == nil || result.Parameter == nil || result.Parameter.Value == nil {
+	if err != nil {
+		var notFound *ssmtypes.ParameterNotFound
+		if errors.As(err, &notFound) {
+			return nil, errSIIParameterMissing
+		}
+		return nil, errors.New("configuración SII no disponible")
+	}
+	if result == nil || result.Parameter == nil || result.Parameter.Value == nil {
 		return nil, errors.New("configuración SII no disponible")
 	}
 	var manifest siiParameterManifest

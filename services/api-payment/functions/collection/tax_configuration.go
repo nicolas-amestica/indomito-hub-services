@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/mail"
 	"os"
 	"strings"
@@ -117,57 +118,92 @@ func (a taxConfigurationApp) load(ctx context.Context) (sii.Config, sii.Credenti
 	return config, credentials, nil
 }
 
+func (a taxConfigurationApp) loadConfig(ctx context.Context) (sii.Config, bool, error) {
+	if a.parameters == nil {
+		return sii.Config{}, false, sii.ErrInvalidConfiguration
+	}
+	raw, err := (siiParameterStore{Client: a.parameters, Stage: a.stage}).Load(ctx)
+	if err != nil {
+		if errors.Is(err, errSIIParameterMissing) {
+			return sii.Config{}, false, nil
+		}
+		return sii.Config{}, false, err
+	}
+	var config sii.Config
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&config) != nil {
+		return sii.Config{}, false, sii.ErrInvalidConfiguration
+	}
+	return config, true, nil
+}
+
 func (a taxConfigurationApp) summary(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
-	config, credentials, err := a.load(ctx)
+	config, _, err := a.loadConfig(ctx)
 	if err != nil {
 		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
 	}
-	lastReserved, reserveErr := a.lastReservedFolio(ctx)
-	if reserveErr != nil {
-		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
-	}
-	used := int64(0)
-	if lastReserved >= credentials.FolioFrom {
-		used = lastReserved - credentials.FolioFrom + 1
-	}
-	available := credentials.FolioTo - credentials.FolioFrom + 1 - used
-	if available < 0 {
-		available = 0
-	}
-	next := any(nil)
-	if available > 0 {
-		nextFolio := credentials.FolioFrom
-		if lastReserved >= credentials.FolioFrom {
-			nextFolio = lastReserved + 1
+	caf := map[string]any{"from": int64(0), "to": int64(0), "used": int64(0), "available": int64(0), "next": nil, "usagePercentage": int64(0), "authorizationDate": "", "severity": "MISSING"}
+	certificate := map[string]any{"subject": "", "validFrom": "", "validTo": "", "daysUntilExpiry": int64(0), "severity": "MISSING"}
+	var cafInfo sii.CAFInfo
+	if rawCAF, decodeErr := base64.StdEncoding.DecodeString(config.CAFXMLBase64); decodeErr == nil && len(rawCAF) > 0 {
+		cafInfo, err = sii.ValidateCAF(rawCAF)
+		if err != nil {
+			return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
 		}
-		next = nextFolio
+		lastReserved, reserveErr := a.lastReservedFolio(ctx)
+		if reserveErr != nil {
+			return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
+		}
+		used := int64(0)
+		if lastReserved >= cafInfo.From {
+			used = lastReserved - cafInfo.From + 1
+		}
+		available := cafInfo.To - cafInfo.From + 1 - used
+		if available < 0 {
+			available = 0
+		}
+		var next any
+		if available > 0 {
+			next = cafInfo.From
+			if lastReserved >= cafInfo.From {
+				next = lastReserved + 1
+			}
+		}
+		total := cafInfo.To - cafInfo.From + 1
+		percentage := int64(0)
+		if total > 0 {
+			percentage = used * 100 / total
+		}
+		severity := "OK"
+		if available == 0 {
+			severity = "EXHAUSTED"
+		} else if available <= 20 {
+			severity = "LOW"
+		}
+		caf = map[string]any{"from": cafInfo.From, "to": cafInfo.To, "used": used, "available": available, "next": next, "usagePercentage": percentage, "authorizationDate": cafInfo.AuthorizationAt, "severity": severity}
 	}
-	total := credentials.FolioTo - credentials.FolioFrom + 1
-	usagePercentage := int64(0)
-	if total > 0 {
-		usagePercentage = used * 100 / total
-	}
-	cafSeverity := "OK"
-	if available == 0 {
-		cafSeverity = "EXHAUSTED"
-	} else if available <= 20 {
-		cafSeverity = "LOW"
-	}
-	days := int64(credentials.Certificate.NotAfter.Sub(a.now().UTC()).Hours() / 24)
-	certificateSeverity := "OK"
-	if days < 0 {
-		certificateSeverity = "EXPIRED"
-	} else if days <= 30 {
-		certificateSeverity = "EXPIRING"
+	if rawPFX, decodeErr := base64.StdEncoding.DecodeString(config.CertificatePFXBase64); decodeErr == nil && len(rawPFX) > 0 {
+		cert, certErr := sii.ValidatePFX(rawPFX, config.CertificatePassword, a.now().UTC())
+		if certErr != nil {
+			return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
+		}
+		days := int64(cert.NotAfter.Sub(a.now().UTC()).Hours() / 24)
+		severity := "OK"
+		if days < 0 {
+			severity = "EXPIRED"
+		} else if days <= 30 {
+			severity = "EXPIRING"
+		}
+		certificate = map[string]any{"subject": cert.Subject.String(), "validFrom": cert.NotBefore.UTC().Format(time.RFC3339), "validTo": cert.NotAfter.UTC().Format(time.RFC3339), "daysUntilExpiry": days, "severity": severity}
 	}
 	return lambdautil.SuccessResponseWithHeaders(200, map[string]any{
-		"senderRut": config.SenderRUT, "issuerName": credentials.IssuerName,
+		"senderRut": config.SenderRUT, "issuerName": cafInfo.IssuerName,
 		"issuerActivity": config.IssuerActivity, "issuerAddress": config.IssuerAddress,
 		"issuerCommune": config.IssuerCommune, "notificationEmail": config.NotificationEmail, "environment": config.Environment,
 		"resolutionDate": config.ResolutionDate, "resolutionNumber": config.ResolutionNumber,
 		"enabled": config.Enabled, "certificationApproved": false,
-		"caf":         map[string]any{"from": credentials.FolioFrom, "to": credentials.FolioTo, "used": used, "available": available, "next": next, "usagePercentage": usagePercentage, "authorizationDate": credentials.AuthorizationAt, "severity": cafSeverity},
-		"certificate": map[string]any{"subject": credentials.Certificate.Subject.String(), "validFrom": credentials.Certificate.NotBefore.UTC().Format(time.RFC3339), "validTo": credentials.Certificate.NotAfter.UTC().Format(time.RFC3339), "daysUntilExpiry": days, "severity": certificateSeverity},
+		"caf": caf, "certificate": certificate,
 	}, map[string]string{"cache-control": "no-store"})
 }
 
@@ -201,9 +237,15 @@ func (a taxConfigurationApp) update(ctx context.Context, req events.APIGatewayV2
 	if decodeAdmin(req, &input) != nil || (input.Environment != sii.EnvironmentCertification && input.Environment != sii.EnvironmentProduction) || strings.TrimSpace(input.IssuerName) == "" || !validSIINotificationEmail(input.NotificationEmail) {
 		return adminFailure(req, 400, "INVALID_REQUEST")
 	}
-	config, credentials, err := a.load(ctx)
-	if err != nil || input.IssuerName != credentials.IssuerName {
+	config, _, err := a.loadConfig(ctx)
+	if err != nil {
 		return adminFailure(req, 400, "INVALID_REQUEST")
+	}
+	if rawCAF, decodeErr := base64.StdEncoding.DecodeString(config.CAFXMLBase64); decodeErr == nil && len(rawCAF) > 0 {
+		info, validateErr := sii.ValidateCAF(rawCAF)
+		if validateErr != nil || input.IssuerName != info.IssuerName {
+			return adminFailure(req, 400, "INVALID_REQUEST")
+		}
 	}
 	config.SenderRUT = strings.TrimSpace(input.SenderRUT)
 	config.IssuerActivity = strings.TrimSpace(input.IssuerActivity)
@@ -215,8 +257,13 @@ func (a taxConfigurationApp) update(ctx context.Context, req events.APIGatewayV2
 	config.ResolutionNumber = input.ResolutionNumber
 	config.Enabled = input.Enabled
 	raw, marshalErr := json.Marshal(config)
-	if _, err := sii.ParseConfig(raw, a.now().UTC()); marshalErr != nil || err != nil {
+	if marshalErr != nil {
 		return adminFailure(req, 400, "INVALID_REQUEST")
+	}
+	if input.Enabled {
+		if _, err := sii.ParseConfig(raw, a.now().UTC()); err != nil {
+			return adminFailure(req, 400, "INVALID_REQUEST")
+		}
 	}
 	if err = a.save(ctx, config); err != nil {
 		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
@@ -246,7 +293,7 @@ func (a taxConfigurationApp) uploadCAF(ctx context.Context, req events.APIGatewa
 	if err != nil {
 		return adminFailure(req, 400, "INVALID_CAF")
 	}
-	config, current, err := a.load(ctx)
+	config, _, err := a.loadConfig(ctx)
 	if err != nil {
 		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
 	}
@@ -254,13 +301,16 @@ func (a taxConfigurationApp) uploadCAF(ctx context.Context, req events.APIGatewa
 	if err != nil {
 		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
 	}
-	if info.IssuerRUT != current.IssuerRUT || info.To <= lastReserved || (lastReserved >= current.FolioFrom && lastReserved < current.FolioTo) {
+	var currentFrom, currentTo int64
+	if currentRaw, decodeErr := base64.StdEncoding.DecodeString(config.CAFXMLBase64); decodeErr == nil && len(currentRaw) > 0 {
+		if currentInfo, validateErr := sii.ValidateCAF(currentRaw); validateErr == nil {
+			currentFrom, currentTo = currentInfo.From, currentInfo.To
+		}
+	}
+	if (strings.TrimSpace(config.SenderRUT) != "" && info.IssuerRUT != strings.TrimSpace(config.SenderRUT)) || info.To <= lastReserved || (lastReserved >= currentFrom && lastReserved < currentTo) {
 		return adminFailure(req, 409, "CAF_RANGE_CONFLICT")
 	}
 	config.CAFXMLBase64 = base64.StdEncoding.EncodeToString(raw)
-	if _, err = sii.ParseConfig(mustJSON(config), a.now().UTC()); err != nil {
-		return adminFailure(req, 400, "INVALID_CAF")
-	}
 	if err = a.save(ctx, config); err != nil {
 		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
 	}
@@ -279,15 +329,12 @@ func (a taxConfigurationApp) uploadPFX(ctx context.Context, req events.APIGatewa
 	if _, err = sii.ValidatePFX(raw, input.Password, a.now().UTC()); err != nil {
 		return adminFailure(req, 400, "INVALID_CERTIFICATE")
 	}
-	config, _, err := a.load(ctx)
+	config, _, err := a.loadConfig(ctx)
 	if err != nil {
 		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
 	}
 	config.CertificatePFXBase64 = base64.StdEncoding.EncodeToString(raw)
 	config.CertificatePassword = input.Password
-	if _, err = sii.ParseConfig(mustJSON(config), a.now().UTC()); err != nil {
-		return adminFailure(req, 400, "INVALID_CERTIFICATE")
-	}
 	if err = a.save(ctx, config); err != nil {
 		return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
 	}

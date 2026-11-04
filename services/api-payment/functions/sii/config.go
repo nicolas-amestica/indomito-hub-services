@@ -59,8 +59,10 @@ type Credentials struct {
 
 // CAFInfo contains the non-sensitive range extracted from a CAF DTE 39.
 type CAFInfo struct {
-	From, To  int64
-	IssuerRUT string
+	From, To        int64
+	IssuerRUT       string
+	IssuerName      string
+	AuthorizationAt string
 }
 
 // ValidateCAF validates the embedded RSA key and DTE 39 range without retaining XML.
@@ -92,7 +94,7 @@ func ValidateCAF(raw []byte) (CAFInfo, error) {
 	if read("DA/TD") != strconv.Itoa(documentType) || fromErr != nil || toErr != nil || from < 1 || to < from || read("DA/RE") == "" || read("DA/RS") == "" || read("DA/FA") == "" {
 		return CAFInfo{}, ErrInvalidConfiguration
 	}
-	return CAFInfo{From: from, To: to, IssuerRUT: read("DA/RE")}, nil
+	return CAFInfo{From: from, To: to, IssuerRUT: read("DA/RE"), IssuerName: read("DA/RS"), AuthorizationAt: read("DA/FA")}, nil
 }
 
 // ValidatePFX checks password, RSA signing key and certificate validity.
