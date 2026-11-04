@@ -229,7 +229,8 @@ func renderTaxDocument(model taxPublicDocument) ([]byte, error) {
 	}
 	writeCenteredPDFText(pdf, "regular", 9, 28, 28, 28, receiptPageWidth/2, 638, "Timbre electrónico SII")
 	writeCenteredPDFText(pdf, "regular", 8, 28, 28, 28, receiptPageWidth/2, 656, fmt.Sprintf("Resolución SII Nº %d de %s", model.ResolutionNumber, model.ResolutionDate))
-	writeCenteredPDFText(pdf, "regular", 8, 28, 28, 28, receiptPageWidth/2, 674, "Verifique documento: https://pagos.girasindomito.cl/consultar-boleta")
+	writeCenteredPDFText(pdf, "regular", 8, 28, 28, 28, receiptPageWidth/2, 674, "Verifique en www.sii.cl")
+	writeCenteredPDFText(pdf, "regular", 8, 28, 28, 28, receiptPageWidth/2, 692, "Consulta adicional: https://pagos.girasindomito.cl/consultar-boleta")
 	return pdf.GetBytesPdfReturnErr()
 }
 

@@ -36,6 +36,11 @@ func TestBuildDocumentUsesReservedFolioAndExactReconciledAmount(t *testing.T) {
 			t.Fatalf("%s = %v, want %s", path, element, expected)
 		}
 	}
+	// El XSD EnvioBOLETA_v11 publicado y aplicado actualmente por el SII no
+	// admite RutProvSW, aunque el documento descriptivo 4.2 sí lo menciona.
+	if element := parsed.FindElement("//RutProvSW"); element != nil {
+		t.Fatal("RutProvSW is not accepted by the active SII boleta schema")
+	}
 	if parsed.FindElement("//TED/FRMT") == nil || parsed.FindElement("//Signature") == nil || strings.Contains(string(document.XML), "certificatePassword") {
 		t.Fatal("missing tax signatures or leaked configuration")
 	}
