@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -14,6 +15,8 @@ import (
 )
 
 var recaptchaProjectID = regexp.MustCompile(`^[a-z][a-z0-9-]{4,28}[a-z0-9]$`)
+
+const recaptchaPrivacyFallbackScore = 0.3
 
 // RecaptchaConfig contiene la configuración server-side. APIKey nunca debe serializarse al cliente.
 type RecaptchaConfig struct {
@@ -28,6 +31,13 @@ type RecaptchaConfig struct {
 type Recaptcha struct {
 	config RecaptchaConfig
 	client *http.Client
+}
+
+// RecaptchaAssessmentError clasifica rechazos sin exponer el token ni secretos.
+type RecaptchaAssessmentError struct{ Code string }
+
+func (e *RecaptchaAssessmentError) Error() string {
+	return "evaluación reCAPTCHA rechazada: " + e.Code
 }
 
 func NewRecaptcha(config RecaptchaConfig) (*Recaptcha, error) {
@@ -83,24 +93,60 @@ func (r *Recaptcha) Assess(ctx context.Context, token, action, sourceIP, userAge
 	}
 	var assessment struct {
 		TokenProperties struct {
-			Valid    bool   `json:"valid"`
-			Action   string `json:"action"`
-			Hostname string `json:"hostname"`
+			Valid         bool   `json:"valid"`
+			InvalidReason string `json:"invalidReason"`
+			Action        string `json:"action"`
+			Hostname      string `json:"hostname"`
 		} `json:"tokenProperties"`
 		RiskAnalysis struct {
-			Score float64 `json:"score"`
+			Score   float64  `json:"score"`
+			Reasons []string `json:"reasons"`
 		} `json:"riskAnalysis"`
 	}
-	if json.Unmarshal(data, &assessment) != nil || !assessment.TokenProperties.Valid || assessment.TokenProperties.Action != action || assessment.RiskAnalysis.Score < r.config.MinimumScore {
-		return ErrVerification
+	if json.Unmarshal(data, &assessment) != nil {
+		log.Printf("recaptcha assessment outcome=rejected code=invalid_response")
+		return &RecaptchaAssessmentError{Code: "INVALID_RESPONSE"}
 	}
-	hostname := strings.ToLower(assessment.TokenProperties.Hostname)
+	properties := assessment.TokenProperties
+	risk := assessment.RiskAnalysis
+	if !properties.Valid {
+		log.Printf("recaptcha assessment outcome=rejected code=invalid_token invalidReason=%q", properties.InvalidReason)
+		return &RecaptchaAssessmentError{Code: "INVALID_TOKEN"}
+	}
+	if properties.Action != action {
+		log.Printf("recaptcha assessment outcome=rejected code=unexpected_action action=%q", properties.Action)
+		return &RecaptchaAssessmentError{Code: "UNEXPECTED_ACTION"}
+	}
+	hostname := strings.ToLower(properties.Hostname)
 	for _, allowed := range r.config.AllowedHostnames {
 		if hostname == allowed {
+			if risk.Score < r.config.MinimumScore {
+				if risk.Score < recaptchaPrivacyFallbackScore || explicitRecaptchaRisk(risk.Reasons) {
+					log.Printf("recaptcha assessment outcome=rejected code=low_score action=%q hostname=%q score=%.2f minimumScore=%.2f reasons=%q", properties.Action, hostname, risk.Score, r.config.MinimumScore, risk.Reasons)
+					return &RecaptchaAssessmentError{Code: "LOW_SCORE"}
+				}
+				// La banda 0.3–minimumScore tolera proxies de privacidad y baja
+				// confianza, pero no señales explícitas de abuso. El checkout conserva
+				// sesión breve, cuenta, idempotencia y un único intento abierto.
+				log.Printf("recaptcha assessment outcome=accepted_privacy_fallback action=%q hostname=%q score=%.2f minimumScore=%.2f reasons=%q", properties.Action, hostname, risk.Score, r.config.MinimumScore, risk.Reasons)
+			} else {
+				log.Printf("recaptcha assessment outcome=accepted action=%q hostname=%q score=%.2f reasons=%q", properties.Action, hostname, risk.Score, risk.Reasons)
+			}
 			return nil
 		}
 	}
-	return ErrVerification
+	log.Printf("recaptcha assessment outcome=rejected code=unexpected_hostname hostname=%q", hostname)
+	return &RecaptchaAssessmentError{Code: "UNEXPECTED_HOSTNAME"}
+}
+
+func explicitRecaptchaRisk(reasons []string) bool {
+	for _, reason := range reasons {
+		switch reason {
+		case "AUTOMATION", "TOO_MUCH_TRAFFIC", "UNEXPECTED_USAGE_PATTERNS":
+			return true
+		}
+	}
+	return false
 }
 
 // LoadRecaptchaConfig exige un único SecureString JSON por ambiente.

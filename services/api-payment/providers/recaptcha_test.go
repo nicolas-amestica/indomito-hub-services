@@ -35,11 +35,16 @@ func TestRecaptchaAcceptsOnlyExpectedAssessment(t *testing.T) {
 	if err := recaptchaFixture(t, valid).Assess(context.Background(), strings.Repeat("t", 30), "khipu_checkout", "192.0.2.1", "test"); err != nil {
 		t.Fatal(err)
 	}
+	lowScore := `{"tokenProperties":{"valid":true,"action":"khipu_checkout","hostname":"pagos.dev.girasindomito.cl"},"riskAnalysis":{"score":0.3,"reasons":["UNEXPECTED_ENVIRONMENT"]}}`
+	if err := recaptchaFixture(t, lowScore).Assess(context.Background(), strings.Repeat("t", 30), "khipu_checkout", "192.0.2.1", "test"); err != nil {
+		t.Fatalf("una evaluación válida de bajo puntaje no debe bloquear el pago: %v", err)
+	}
 	for name, response := range map[string]string{
-		"action":  `{"tokenProperties":{"valid":true,"action":"lookup","hostname":"pagos.dev.girasindomito.cl"},"riskAnalysis":{"score":0.9}}`,
-		"host":    `{"tokenProperties":{"valid":true,"action":"khipu_checkout","hostname":"evil.example"},"riskAnalysis":{"score":0.9}}`,
-		"score":   `{"tokenProperties":{"valid":true,"action":"khipu_checkout","hostname":"pagos.dev.girasindomito.cl"},"riskAnalysis":{"score":0.1}}`,
-		"invalid": `{"tokenProperties":{"valid":false,"action":"khipu_checkout","hostname":"pagos.dev.girasindomito.cl"},"riskAnalysis":{"score":0.9}}`,
+		"action":     `{"tokenProperties":{"valid":true,"action":"lookup","hostname":"pagos.dev.girasindomito.cl"},"riskAnalysis":{"score":0.9}}`,
+		"host":       `{"tokenProperties":{"valid":true,"action":"khipu_checkout","hostname":"evil.example"},"riskAnalysis":{"score":0.9}}`,
+		"invalid":    `{"tokenProperties":{"valid":false,"action":"khipu_checkout","hostname":"pagos.dev.girasindomito.cl"},"riskAnalysis":{"score":0.9}}`,
+		"score":      `{"tokenProperties":{"valid":true,"action":"khipu_checkout","hostname":"pagos.dev.girasindomito.cl"},"riskAnalysis":{"score":0.1}}`,
+		"automation": `{"tokenProperties":{"valid":true,"action":"khipu_checkout","hostname":"pagos.dev.girasindomito.cl"},"riskAnalysis":{"score":0.3,"reasons":["AUTOMATION"]}}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := recaptchaFixture(t, response).Assess(context.Background(), strings.Repeat("t", 30), "khipu_checkout", "192.0.2.1", "test"); err == nil {

@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/oklog/ulid/v2"
 	domain "ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
+	"ind-hub-api-gox-sls-pri-gh/services/api-payment/providers"
 )
 
 // PortalApp coordina acciones de una cuenta autorizada sin recibir importes del navegador.
@@ -45,6 +46,10 @@ func portalResponse(status int, data any) events.APIGatewayV2HTTPResponse {
 }
 func portalFailure(status int) events.APIGatewayV2HTTPResponse {
 	return portalResponse(status, map[string]string{"error": "No fue posible procesar la solicitud. Consulta el estado antes de volver a intentar."})
+}
+
+func portalFailureCode(status int, code string) events.APIGatewayV2HTTPResponse {
+	return portalResponse(status, map[string]string{"error": code})
 }
 
 func validPortalID(id string) bool {
@@ -83,8 +88,15 @@ func (a PortalApp) HandleCheckout(ctx context.Context, req events.APIGatewayV2HT
 	if !validPortalID(requestID) {
 		return portalFailure(400)
 	}
-	if a.Recaptcha == nil || a.Recaptcha.Assess(ctx, body.RecaptchaToken, "khipu_checkout", req.RequestContext.HTTP.SourceIP, req.Headers["user-agent"]) != nil {
-		return portalFailure(403)
+	if a.Recaptcha == nil {
+		return portalFailure(503)
+	}
+	if captchaErr := a.Recaptcha.Assess(ctx, body.RecaptchaToken, "khipu_checkout", req.RequestContext.HTTP.SourceIP, req.Headers["user-agent"]); captchaErr != nil {
+		var assessmentErr *providers.RecaptchaAssessmentError
+		if errors.As(captchaErr, &assessmentErr) {
+			return portalFailureCode(403, "PAYMENT_SECURITY_REJECTED")
+		}
+		return portalFailureCode(503, "PAYMENT_SECURITY_UNAVAILABLE")
 	}
 	account, err := a.Accounts.PassengerAccount(ctx, req)
 	if err != nil {

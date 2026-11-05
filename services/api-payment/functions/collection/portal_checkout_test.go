@@ -34,9 +34,18 @@ type captchaFake struct{ reject bool }
 
 func (f captchaFake) Assess(context.Context, string, string, string, string) error {
 	if f.reject {
-		return providers.ErrVerification
+		return &providers.RecaptchaAssessmentError{Code: "INVALID_TOKEN"}
 	}
 	return nil
+}
+
+func TestPortalReturnsSpecificRecaptchaFailure(t *testing.T) {
+	a, _, gateway, req := portalFixture(t)
+	a.Recaptcha = captchaFake{reject: true}
+	response := a.HandleCheckout(context.Background(), req)
+	if response.StatusCode != 403 || !strings.Contains(response.Body, "PAYMENT_SECURITY_REJECTED") || gateway.calls != 0 {
+		t.Fatalf("respuesta reCAPTCHA inesperada: %s", response.Body)
+	}
 }
 
 func portalAttemptBody(t *testing.T, resp events.APIGatewayV2HTTPResponse) PortalAttempt {
