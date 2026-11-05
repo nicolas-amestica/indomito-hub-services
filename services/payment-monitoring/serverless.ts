@@ -33,7 +33,12 @@ alarm('MonitorErrors', 'Errors', 'AWS/Lambda', [{ Name: 'FunctionName', Value: `
 alarm('EmailDeliveryErrors', 'Errors', 'AWS/Lambda', [{ Name: 'FunctionName', Value: `payment-monitoring-${STAGE}-alarm` }], 300, 1, 'notBreaching', 'GreaterThanOrEqualToThreshold', false);
 alarm('EmailDeadLetters', 'ApproximateNumberOfMessagesVisible', 'AWS/SQS', [{ Name: 'QueueName', Value: { 'Fn::GetAtt': ['AlertDeliveryFailures', 'QueueName'] } }], 300, 1, 'notBreaching', 'GreaterThanOrEqualToThreshold', false);
 
-const productionAlarmIds = new Set(['ReceiverErrors', 'WorkerErrors', 'MonitorNotHealthy', 'EmailDeadLetters']);
+// Reutiliza la entrega SMTP existente; una alarma adicional solo en producción.
+if (STAGE === 'prd') {
+  alarm('PaymentReconciliationDeadLetters', 'ApproximateNumberOfMessagesVisible', 'AWS/SQS', [{ Name: 'QueueName', Value: `\${cf:api-payment-${STAGE}.PaymentReconciliationDLQName}` }], 60);
+  (resources.PaymentReconciliationDeadLetters as { Properties: Record<string, unknown> }).Properties.AlarmDescription = 'Conciliación de cuotas detenida. Revisar logs del consumidor y recuperar la DLQ después de corregir la causa. No liberar pagos ambiguos.';
+}
+const productionAlarmIds = new Set(['ReceiverErrors', 'WorkerErrors', 'MonitorNotHealthy', 'EmailDeadLetters', 'PaymentReconciliationDeadLetters']);
 for (const [id, resource] of Object.entries(resources)) {
   if ((resource as { Type?: string }).Type === 'AWS::CloudWatch::Alarm' && (STAGE !== 'prd' || !productionAlarmIds.has(id))) {
     delete resources[id];

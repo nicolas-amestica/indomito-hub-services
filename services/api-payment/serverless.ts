@@ -116,6 +116,7 @@ const endpoints: GoHttpEndpoint[] = [
   ]},
   {name:'fn-conciliar-intento-khipu-v1',method:'POST',path:'/pagos/intentos/{attemptId}/conciliacion',public:false,timeout:29,policies:[activePlanCheck,{Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['ATTEMPT#*','ACCOUNT#*','TRIP#*','COMMAND#*','REFERENCE#*']}}},{Effect:'Allow',Action:['dynamodb:PutItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['ATTEMPT#*','ACCOUNT#*','TRIP#*','COMMAND#*','REFERENCE#*','RECEIPT#*','JOB#*','CASH#*','TAX_REQUEST#*','TAX_QUEUE#PENDING']}}},...secrets]},
   {name:'fn-conciliar-intentos-automaticamente-v1',timeout:29,memorySize:128,events:[{sqs:{arn:reconciliationQueueArn,batchSize:1,functionResponseType:'ReportBatchItemFailures'}}],policies:[
+    {Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringEquals':{'dynamodb:LeadingKeys':['RECONCILIATION#PENDING']}}},
     {Effect:'Allow',Action:['sqs:ReceiveMessage','sqs:DeleteMessage','sqs:GetQueueAttributes','sqs:ChangeMessageVisibility'],Resource:reconciliationQueueArn},
     activePlanCheck,
     {Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['ATTEMPT#*','ACCOUNT#*','TRIP#*','COMMAND#*','REFERENCE#*']}}},
@@ -168,6 +169,10 @@ const resources = configuration.resources.Resources as Record<string, unknown> |
   ...(resources ?? {}),
   PaymentReconciliationDLQ: { Type:'AWS::SQS::Queue', Properties:{MessageRetentionPeriod:1209600,SqsManagedSseEnabled:true}},
   PaymentReconciliationQueue: { Type:'AWS::SQS::Queue', Properties:{VisibilityTimeout:60,ReceiveMessageWaitTimeSeconds:20,MessageRetentionPeriod:1209600,SqsManagedSseEnabled:true,RedrivePolicy:{deadLetterTargetArn:{'Fn::GetAtt':['PaymentReconciliationDLQ','Arn']},maxReceiveCount:5}}},
+};
+configuration.resources.Outputs = {
+  ...configuration.resources.Outputs,
+  PaymentReconciliationDLQName: { Value: { 'Fn::GetAtt': ['PaymentReconciliationDLQ', 'QueueName'] } },
 };
 module.exports = configuration;
 

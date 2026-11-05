@@ -119,6 +119,13 @@ func (d *transactionDB) TransactWriteItems(ctx context.Context, in *dynamodb.Tra
 		}
 		old := d.items[itemKey(w.Put.Item)]
 		switch *w.Put.ConditionExpression {
+		case "attribute_not_exists(pk) OR checkedAt < :checked":
+			if old != nil {
+				var previous, next record
+				if attributevalue.UnmarshalMap(old, &previous) != nil || attributevalue.UnmarshalMap(w.Put.Item, &next) != nil || previous.CheckedAt >= next.CheckedAt {
+					return nil, &types.TransactionCanceledException{}
+				}
+			}
 		case "attribute_exists(pk) OR attribute_not_exists(pk)":
 			// Escritura de resultado protegida por checkpoint en la misma transacción.
 		case "attribute_exists(pk)":

@@ -69,11 +69,15 @@ func (a AutomaticReconciliationApp) process(ctx context.Context, message reconci
 		}
 	}
 	checkout, checkoutErr := a.Accounts.read(ctx, "ATTEMPT#"+job.AttemptID, "CHECKOUT")
-	if checkoutErr != nil || checkout.Checkout == nil {
+	if checkoutErr != nil {
 		return checkoutErr
 	}
+	if checkout.Checkout == nil {
+		return domain.ErrInvalid
+	}
 	if state.Status == "PENDING" && now.After(checkout.Checkout.ExpiresAt.Add(reconciliationReviewAfter)) {
-		portalStatus, state.Status = "PROVIDER_REVIEW_REQUIRED", "PROVIDER_REVIEW_REQUIRED"
+		// Escalar la presentación sin abandonar futuras confirmaciones del proveedor.
+		portalStatus = "PROVIDER_REVIEW_REQUIRED"
 	}
 	observation := record{PK: "ATTEMPT#" + job.AttemptID, SK: "PROVIDER_STATUS", AttemptID: job.AttemptID, AccountID: job.AccountID, Status: portalStatus, ProviderStatus: state.ProviderStatus, ProviderDetail: state.ProviderDetail, CheckedAt: now.Unix()}
 	if state.Status != "PENDING" {
