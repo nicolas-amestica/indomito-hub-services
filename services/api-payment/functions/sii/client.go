@@ -35,7 +35,7 @@ type SubmissionStatus struct {
 }
 
 func (s SubmissionStatus) Approved() bool {
-	return s.State == "EPR" && s.Informed > 0 && s.Rejected == 0 && s.Accepted+s.Repairs == s.Informed
+	return (s.State == "EPR" || s.State == "RPR") && s.Informed > 0 && s.Rejected == 0 && s.Accepted+s.Repairs == s.Informed
 }
 
 type HTTPClient interface {
@@ -86,7 +86,11 @@ func (c Client) SubmitSet(ctx context.Context, credentials Credentials, document
 // QuerySubmission consulta el resultado final del sobre. Un Track ID por si solo
 // acredita recepción, no aceptación de los DTE contenidos.
 func (c Client) QuerySubmission(ctx context.Context, credentials Credentials, trackID string) (SubmissionStatus, error) {
-	if c.HTTP == nil || c.Now == nil || strings.TrimSpace(trackID) == "" {
+	trackID = strings.TrimSpace(trackID)
+	if c.HTTP == nil || c.Now == nil || trackID == "" {
+		return SubmissionStatus{}, ErrInvalidConfiguration
+	}
+	if _, err := strconv.ParseUint(trackID, 10, 64); err != nil || len(trackID) > 15 {
 		return SubmissionStatus{}, ErrInvalidConfiguration
 	}
 	seed, err := c.seed(ctx, credentials.Environment)
@@ -101,17 +105,84 @@ func (c Client) QuerySubmission(ctx context.Context, credentials Credentials, tr
 	if !ok {
 		return SubmissionStatus{}, ErrInvalidConfiguration
 	}
+	if credentials.Environment == EnvironmentProduction {
+		return c.queryRESTSubmission(ctx, rut, dv, trackID, token)
+	}
+	return c.queryLegacySubmission(ctx, rut, dv, trackID, token)
+}
+
+// queryRESTSubmission usa el contrato oficial de Boleta Electrónica. Los
+// servicios SOAP QueryEstUp de Palena/Maullín corresponden al flujo DTE
+// tradicional y no deben usarse para consultar Track ID de boletas en PRD.
+func (c Client) queryRESTSubmission(ctx context.Context, rut, dv, trackID, token string) (SubmissionStatus, error) {
+	endpoint := "https://api.sii.cl/recursos/v1/boleta.electronica.envio/" + rut + "-" + dv + "-" + trackID
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return SubmissionStatus{}, err
+	}
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("Cookie", "TOKEN="+token)
+	response, err := c.do(request)
+	if err != nil {
+		return SubmissionStatus{}, err
+	}
+	var payload struct {
+		State      string `json:"estado"`
+		Statistics []struct {
+			Informed int64 `json:"informados"`
+			Accepted int64 `json:"aceptados"`
+			Rejected int64 `json:"rechazados"`
+			Repairs  int64 `json:"reparos"`
+		} `json:"estadistica"`
+		Details []struct {
+			Description string `json:"descripcion"`
+			Errors      []struct {
+				Code        int64  `json:"codigo"`
+				Description string `json:"descripcion"`
+				Detail      string `json:"detalle"`
+			} `json:"error"`
+		} `json:"detalle_rep_rech"`
+	}
+	if err = json.Unmarshal(response, &payload); err != nil || strings.TrimSpace(payload.State) == "" {
+		return SubmissionStatus{}, fmt.Errorf("invalid SII submission status response")
+	}
+	status := SubmissionStatus{State: strings.TrimSpace(payload.State)}
+	for _, statistic := range payload.Statistics {
+		status.Informed += statistic.Informed
+		status.Accepted += statistic.Accepted
+		status.Rejected += statistic.Rejected
+		status.Repairs += statistic.Repairs
+	}
+	var details []string
+	for _, item := range payload.Details {
+		if value := strings.TrimSpace(item.Description); value != "" {
+			details = append(details, value)
+		}
+		for _, issue := range item.Errors {
+			value := strings.TrimSpace(issue.Description)
+			if issue.Code != 0 {
+				value = fmt.Sprintf("%d: %s", issue.Code, value)
+			}
+			if diagnostic := strings.TrimSpace(issue.Detail); diagnostic != "" {
+				value += " (" + diagnostic + ")"
+			}
+			if value != "" {
+				details = append(details, value)
+			}
+		}
+	}
+	status.Detail = truncateDiagnostic(strings.Join(details, "; "), 1000)
+	return status, nil
+}
+
+func (c Client) queryLegacySubmission(ctx context.Context, rut, dv, trackID, token string) (SubmissionStatus, error) {
 	escape := func(value string) string {
 		var target bytes.Buffer
 		_ = xml.EscapeText(&target, []byte(value))
 		return target.String()
 	}
 	body := `<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><soapenv:Body><ns1:getEstUp soapenv:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/" xmlns:ns1="http://DefaultNamespace"><RutCompania xsi:type="xsd:string">` + escape(rut) + `</RutCompania><DvCompania xsi:type="xsd:string">` + escape(dv) + `</DvCompania><TrackId xsi:type="xsd:string">` + escape(trackID) + `</TrackId><Token xsi:type="xsd:string">` + escape(token) + `</Token></ns1:getEstUp></soapenv:Body></soapenv:Envelope>`
-	endpoint := "https://maullin.sii.cl/DTEWS/QueryEstUp.jws"
-	if credentials.Environment == EnvironmentProduction {
-		endpoint = "https://palena.sii.cl/DTEWS/QueryEstUp.jws"
-	}
-	response, err := c.soap(ctx, endpoint, []byte(body))
+	response, err := c.soap(ctx, "https://maullin.sii.cl/DTEWS/QueryEstUp.jws", []byte(body))
 	if err != nil {
 		return SubmissionStatus{}, err
 	}

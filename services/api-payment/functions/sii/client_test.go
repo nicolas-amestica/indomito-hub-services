@@ -80,6 +80,63 @@ func TestClientRejectsSuccessfulHTTPUploadWithoutTrackID(t *testing.T) {
 	}
 }
 
+func TestClientQueriesProductionBoletaStatusThroughREST(t *testing.T) {
+	now := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
+	credentials := testCredentials(t, now)
+	credentials.Environment = EnvironmentProduction
+	credentials.IssuerRUT = "77654796-4"
+	step := 0
+	client := Client{Now: func() time.Time { return now }, HTTP: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		step++
+		response := func(contentType, body string) *http.Response {
+			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{contentType}}, Body: io.NopCloser(strings.NewReader(body))}
+		}
+		switch step {
+		case 1:
+			if request.Method != http.MethodGet || request.URL.Host != "api.sii.cl" || request.URL.Path != "/recursos/v1/boleta.electronica.semilla" {
+				t.Fatalf("unexpected seed request: %s %s", request.Method, request.URL)
+			}
+			return response("application/xml", `<RESPUESTA><RESP_BODY><SEMILLA>1234567890</SEMILLA></RESP_BODY></RESPUESTA>`), nil
+		case 2:
+			body, readErr := io.ReadAll(request.Body)
+			if readErr != nil || request.Method != http.MethodPost || request.URL.Host != "api.sii.cl" || request.URL.Path != "/recursos/v1/boleta.electronica.token" || !strings.Contains(string(body), "<Signature") {
+				t.Fatalf("unexpected token request: %s %s", request.Method, request.URL)
+			}
+			return response("application/xml", `<RESPUESTA><RESP_BODY><TOKEN>TOKEN-BOLETA</TOKEN></RESP_BODY></RESPUESTA>`), nil
+		case 3:
+			if request.Method != http.MethodGet || request.URL.Host != "api.sii.cl" || request.URL.Path != "/recursos/v1/boleta.electronica.envio/77654796-4-24477625070" || request.Header.Get("Cookie") != "TOKEN=TOKEN-BOLETA" || request.Header.Get("Accept") != "application/json" {
+				t.Fatalf("unexpected status request: %s %s", request.Method, request.URL)
+			}
+			return response("application/json", `{"estado":"EPR","estadistica":[{"tipo":39,"informados":1,"aceptados":0,"rechazados":0,"reparos":1}],"detalle_rep_rech":[{"tipo":39,"folio":16004,"estado":"RPR","descripcion":"Dte Aceptado con reparos","error":[{"seccion":"DET","codigo":200,"descripcion":"Reparo de prueba","detalle":"detalle tecnico"}]}]}`), nil
+		default:
+			t.Fatalf("unexpected request %d", step)
+			return nil, nil
+		}
+	})}
+
+	status, err := client.QuerySubmission(context.Background(), credentials, "24477625070")
+	if err != nil {
+		t.Fatalf("query submission: %v", err)
+	}
+	if step != 3 || status.State != "EPR" || status.Informed != 1 || status.Accepted != 0 || status.Rejected != 0 || status.Repairs != 1 || !status.Approved() {
+		t.Fatalf("unexpected status: %+v after %d requests", status, step)
+	}
+	if !strings.Contains(status.Detail, "Dte Aceptado con reparos") || !strings.Contains(status.Detail, "200: Reparo de prueba") {
+		t.Fatalf("missing SII diagnostic: %q", status.Detail)
+	}
+}
+
+func TestClientRejectsInvalidBoletaTrackIDBeforeCallingSII(t *testing.T) {
+	client := Client{Now: time.Now, HTTP: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("SII must not be called for an invalid Track ID")
+		return nil, nil
+	})}
+	credentials := Credentials{Config: Config{Environment: EnvironmentProduction}, IssuerRUT: "77654796-4"}
+	if _, err := client.QuerySubmission(context.Background(), credentials, "not-a-track-id"); err == nil {
+		t.Fatal("expected invalid Track ID error")
+	}
+}
+
 func TestSubmissionStatusRequiresProcessedEnvelopeWithoutRejections(t *testing.T) {
 	accepted := SubmissionStatus{State: "EPR", Informed: 5, Accepted: 4, Repairs: 1}
 	if !accepted.Approved() {

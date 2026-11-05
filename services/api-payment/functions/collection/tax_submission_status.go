@@ -66,12 +66,12 @@ func (a TaxSubmissionStatusApp) Run(ctx context.Context) error {
 
 func finalSubmissionStatus(status sii.SubmissionStatus) bool {
 	switch status.State {
-	case "EPR":
+	case "EPR", "RPR":
 		// El SII puede informar primero que el sobre fue procesado y publicar
 		// las estadísticas de sus DTE en una consulta posterior. Sin esos
 		// contadores todavía no existe evidencia de aceptación ni rechazo.
 		return status.Informed > 0
-	case "RSC", "RFR", "RCT":
+	case "RCH", "RCO", "VOF", "RFR", "RPT", "RSC", "RCT":
 		return true
 	default:
 		return false

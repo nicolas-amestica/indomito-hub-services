@@ -35,6 +35,22 @@ func TestFinalSubmissionStatusWaitsForSIIStatistics(t *testing.T) {
 	}
 }
 
+func TestFinalSubmissionStatusRecognizesOfficialRESTTerminalStates(t *testing.T) {
+	for _, state := range []string{"RCH", "RCO", "VOF", "RFR", "RPT", "RSC", "RCT"} {
+		if !finalSubmissionStatus(sii.SubmissionStatus{State: state}) {
+			t.Fatalf("state %s must be terminal", state)
+		}
+	}
+	for _, state := range []string{"REC", "CRT", "FOK", "PRD", "SOK"} {
+		if finalSubmissionStatus(sii.SubmissionStatus{State: state}) {
+			t.Fatalf("state %s must remain pending", state)
+		}
+	}
+	if !finalSubmissionStatus(sii.SubmissionStatus{State: "RPR", Informed: 1, Repairs: 1}) {
+		t.Fatal("RPR with statistics must be terminal")
+	}
+}
+
 func TestValidSIINotificationEmail(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
