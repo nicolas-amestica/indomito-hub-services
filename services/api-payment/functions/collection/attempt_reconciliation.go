@@ -114,7 +114,20 @@ func (s Service) ReconcileProviderAttempt(ctx context.Context, inspector Payment
 	// Khipu puede conciliar una operación fuera de fecha. Sólo un detalle terminal
 	// explícito permite liberar la cuota sin intervención humana.
 	finalDetail := verified.StatusDetail == "rejected-by-payer" || verified.StatusDetail == "marked-as-abuse"
-	if verified.Status == "pending" && finalDetail && !verified.ExpiresDate.IsZero() && !verified.ExpiresDate.After(now) {
+	deletedUnpaid := verified.Status == "deleted" && verified.StatusDetail == "pending" && verified.ConciliationDate.IsZero()
+	if verified.Status == "deleted" {
+		// Una eliminación no revierte fondos registrados previamente ni sustituye
+		// la revisión de evidencia contradictoria del proveedor.
+		_, outcomeErr := s.read(ctx, "ATTEMPT#"+attemptID, "OUTCOME")
+		if outcomeErr == nil || !deletedUnpaid {
+			state.Status = "REVIEW_REQUIRED"
+			return state, nil
+		}
+		if !errors.Is(outcomeErr, ErrNotFound) {
+			return AttemptReconciliationState{}, outcomeErr
+		}
+	}
+	if deletedUnpaid || (verified.Status == "pending" && finalDetail && !verified.ExpiresDate.IsZero() && !verified.ExpiresDate.After(now)) {
 		account, e := s.GetAccount(ctx, attempt.AccountID)
 		if e != nil {
 			return AttemptReconciliationState{}, e

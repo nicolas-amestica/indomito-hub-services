@@ -187,7 +187,7 @@ func (k *Khipu) InspectPayment(ctx context.Context, paymentID, transactionID str
 		return VerifiedPayment{}, err
 	}
 	_, err := ConfirmedCLPAmount(out.Amount)
-	validStatus := out.Status == "pending" || out.Status == "verifying" || out.Status == "done"
+	validStatus := out.Status == "pending" || out.Status == "verifying" || out.Status == "done" || out.Status == "deleted"
 	validDetail := out.StatusDetail == "pending" || out.StatusDetail == "normal" || out.StatusDetail == "marked-paid-by-receiver" || out.StatusDetail == "rejected-by-payer" || out.StatusDetail == "marked-as-abuse" || out.StatusDetail == "reversed"
 	if err != nil || out.PaymentID != paymentID || out.TransactionID != transactionID || out.ReceiverID != k.receiverID || out.Currency != "CLP" || !validStatus || !validDetail {
 		return VerifiedPayment{}, ErrVerification
@@ -196,7 +196,15 @@ func (k *Khipu) InspectPayment(ctx context.Context, paymentID, transactionID str
 }
 
 func (k *Khipu) request(ctx context.Context, method, path string, body []byte, result any) error {
-	req, err := http.NewRequestWithContext(ctx, method, "https://payment-api.khipu.com"+path, bytes.NewReader(body))
+	requestCtx := ctx
+	if method == http.MethodGet {
+		// La conciliación puede verificar dos veces: reservar tiempo dentro de
+		// la Lambda de 29 segundos para persistir el siguiente trabajo.
+		var cancel context.CancelFunc
+		requestCtx, cancel = context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+	}
+	req, err := http.NewRequestWithContext(requestCtx, method, "https://payment-api.khipu.com"+path, bytes.NewReader(body))
 	if err != nil {
 		return ErrProvider
 	}
@@ -205,17 +213,20 @@ func (k *Khipu) request(ctx context.Context, method, path string, body []byte, r
 	req.Header.Set("Accept", "application/json")
 	resp, err := k.client.Do(req)
 	if err != nil {
-		return ErrProvider
+		return khipuTransportError(ctx, err)
 	}
 	// El error de cierre no cambia el resultado del cuerpo ya leído y validado.
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return ErrProvider
+		return khipuHTTPError(resp.StatusCode, resp.Header.Get("Retry-After"), time.Now().UTC())
 	}
 	const maxResponse = 64 * 1024
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse+1))
-	if err != nil || len(data) > maxResponse || json.Unmarshal(data, result) != nil {
-		return ErrProvider
+	if err != nil {
+		return khipuTransportError(ctx, err)
+	}
+	if len(data) > maxResponse || json.Unmarshal(data, result) != nil {
+		return &KhipuError{Code: "INVALID_RESPONSE", HTTPStatus: resp.StatusCode}
 	}
 	return nil
 }

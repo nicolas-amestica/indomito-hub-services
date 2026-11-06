@@ -47,6 +47,52 @@ func TestReconcileAttemptReleasesOnlyExpiredAuthoritativeUnpaid(t *testing.T) {
 	}
 }
 
+func TestReconcileDeletedPayment(t *testing.T) {
+	for _, scenario := range []string{"deleted unpaid", "already received", "provider conciliation"} {
+		t.Run(scenario, func(t *testing.T) {
+			s, db, v := confirmationFixture(t)
+			ctx := context.Background()
+			now := time.Now().UTC()
+			if scenario == "already received" {
+				if _, err := s.ConfirmProviderCheckout(ctx, v, "attempt", "abcdefghijkl", now, time.UTC); err != nil {
+					t.Fatal(err)
+				}
+			}
+			v.result.Status, v.result.StatusDetail = "deleted", "pending"
+			v.result.ConciliationDate = time.Time{}
+			v.result.ExpiresDate = now.Add(time.Hour)
+			if scenario == "provider conciliation" {
+				v.result.ConciliationDate = now
+			}
+			state, err := s.ReconcileProviderAttempt(ctx, v, v, "attempt", "abcdefghijkl", reconciliationAudit(), now, time.UTC)
+			want := "REVIEW_REQUIRED"
+			if scenario == "deleted unpaid" {
+				want = "UNPAID_FINAL"
+			}
+			if err != nil || state.Status != want {
+				t.Fatalf("state=%+v err=%v", state, err)
+			}
+			account, err := s.GetAccount(ctx, "account")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if scenario == "deleted unpaid" {
+				if account.OpenAttemptID != "" || account.Installments[0].Paid != 0 {
+					t.Fatal("deleted attempt not released safely")
+				}
+				commits := db.commits
+				if _, err := s.ReconcileProviderAttempt(ctx, v, v, "attempt", "", reconciliationAudit(), now, time.UTC); err != nil || db.commits != commits {
+					t.Fatal("replay changed resolved payment")
+				}
+			} else if scenario == "already received" && account.Installments[0].Paid != 20000 {
+				t.Fatal("deletion reversed received funds")
+			} else if scenario == "provider conciliation" && account.OpenAttemptID != "attempt" {
+				t.Fatal("contradictory payment released")
+			}
+		})
+	}
+}
+
 func TestReconcileProviderReversalReopensExactlyOriginalDebt(t *testing.T) {
 	s, db, v := confirmationFixture(t)
 	now := time.Date(2026, 10, 5, 15, 0, 0, 0, time.UTC)

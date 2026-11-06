@@ -3,6 +3,7 @@ package collection
 import (
 	"context"
 	"errors"
+	"os"
 
 	"github.com/aws/aws-lambda-go/events"
 	"go.uber.org/zap"
@@ -18,8 +19,9 @@ func AutomaticReconciliationHandler(ctx context.Context, event events.SQSEvent) 
 	if !ok {
 		return events.SQSEventResponse{}, errors.New("verificador Khipu no permite inspeccion")
 	}
-	worker := AutomaticReconciliationApp{Accounts: app.Accounts, Inspector: inspector, Verifier: app.Verifier, Zone: app.Zone, Now: app.Now}
-	return worker.handleBatch(ctx, event, zap.NewExample()), nil
+	log := zap.NewExample()
+	worker := AutomaticReconciliationApp{Accounts: app.Accounts, Inspector: inspector, Verifier: app.Verifier, Zone: app.Zone, Now: app.Now, Log: log, Stage: os.Getenv("APP_STAGE")}
+	return worker.handleBatch(ctx, event, log), nil
 }
 
 func (a AutomaticReconciliationApp) handleBatch(ctx context.Context, event events.SQSEvent, log *zap.Logger) events.SQSEventResponse {

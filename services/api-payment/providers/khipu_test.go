@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -96,7 +97,7 @@ func TestVerifyKhipuPayment(t *testing.T) {
 }
 
 func TestInspectKhipuSeparatesPendingManualAndReversed(t *testing.T) {
-	for _, detail := range []struct{ status, detail string }{{"pending", "pending"}, {"verifying", "pending"}, {"done", "marked-paid-by-receiver"}, {"done", "reversed"}} {
+	for _, detail := range []struct{ status, detail string }{{"pending", "pending"}, {"verifying", "pending"}, {"done", "marked-paid-by-receiver"}, {"done", "reversed"}, {"deleted", "pending"}} {
 		payment := VerifiedPayment{PaymentID: "abc123def456", TransactionID: "internal-attempt", ReceiverID: 123, Amount: "20000.0000", Currency: "CLP", Status: detail.status, StatusDetail: detail.detail, ExpiresDate: time.Now().Add(time.Hour)}
 		k, _ := NewKhipu("synthetic-test-key", 123)
 		k.client.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -144,7 +145,7 @@ func TestCreateKhipuDoesNotRetryOrSendEmails(t *testing.T) {
 		}
 		return &http.Response{StatusCode: 500, Body: io.NopCloser(strings.NewReader("private upstream error"))}, nil
 	})
-	if _, err := k.Create(context.Background(), in); err != ErrProvider || calls != 1 {
+	if _, err := k.Create(context.Background(), in); !errors.Is(err, ErrProvider) || calls != 1 {
 		t.Fatal("ambiguous create retried")
 	}
 	k.client.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {

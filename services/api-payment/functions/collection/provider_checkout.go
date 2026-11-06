@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	domain "ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
@@ -104,7 +106,11 @@ func (s Service) CreateCheckout(ctx context.Context, gateway CheckoutGateway, st
 	}
 	out, err := gateway.Create(ctx, providers.CheckoutRequest{BankID: bank, TransactionID: attempt.ID, Amount: attempt.Amount, Subject: subject, ReturnURL: urls.Return, CancelURL: urls.Cancel, NotifyURL: urls.Notify, ExpiresAt: expires})
 	if err != nil {
-		return CheckoutResult{}, ErrDispatchUncertain
+		var failure *providers.KhipuError
+		if errors.As(err, &failure) {
+			logProviderFailure(zap.NewExample(), stage, attemptID, failure, !failure.Retryable, now)
+		}
+		return CheckoutResult{}, errors.Join(ErrDispatchUncertain, err)
 	}
 	u, parseErr := url.Parse(out.PaymentURL)
 	if parseErr != nil || !secureCheckoutURL(out.PaymentURL) || u.Port() != "" || (u.Hostname() != "khipu.com" && u.Hostname() != "app.khipu.com") || !checkoutPaymentID.MatchString(out.PaymentID) {
@@ -116,12 +122,9 @@ func (s Service) CreateCheckout(ctx context.Context, gateway CheckoutGateway, st
 	if err != nil {
 		return CheckoutResult{}, ErrDispatchUncertain
 	}
-	firstCheck := now.UTC().Add(time.Minute)
-	job, jobErr := s.put(record{PK: reconciliationPendingPK, SK: reconciliationJobSK(firstCheck, attemptID), AttemptID: attemptID, AccountID: accountID, Status: "PENDING", NextAttemptAt: firstCheck.Unix()}, "attribute_not_exists(pk)", nil)
-	if jobErr != nil {
-		return CheckoutResult{}, ErrDispatchUncertain
-	}
-	if _, err = s.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{write, job}}); err != nil {
+	// El trabajo ya existe desde ClaimCheckoutDispatch: persistir la respuesta
+	// no vuelve a insertar ni reinicia la recuperación que pudo haber comenzado.
+	if _, err = s.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{write}}); err != nil {
 		stored, readErr := s.read(ctx, row.PK, row.SK)
 		if readErr != nil || stored.AccountID != accountID || stored.Checkout == nil || *stored.Checkout != result {
 			return CheckoutResult{}, ErrDispatchUncertain

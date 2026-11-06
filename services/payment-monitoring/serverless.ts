@@ -35,10 +35,14 @@ alarm('EmailDeadLetters', 'ApproximateNumberOfMessagesVisible', 'AWS/SQS', [{ Na
 
 // Reutiliza la entrega SMTP existente; una alarma adicional solo en producción.
 if (STAGE === 'prd') {
+  alarm('ProviderRecoveryRequired', 'ProviderRecoveryRequired', 'Indomito/Payments', dimensions, 60);
+  (resources.ProviderRecoveryRequired as { Properties: Record<string, unknown> }).Properties.AlarmDescription = 'Khipu: credenciales/permisos inválidos, respuesta no verificable o fallos temporales reiterados. Revisar failureCode/httpStatus en logs. No liberar cuotas ni repetir creación de cobros.';
+  alarm('CheckoutRecoveryRequired', 'CheckoutRecoveryRequired', 'Indomito/Payments', dimensions, 60);
+  (resources.CheckoutRecoveryRequired as { Properties: Record<string, unknown> }).Properties.AlarmDescription = 'Respuesta de creación Khipu ausente. Recuperar payment_id desde Khipu y conciliar el intento en Cobranza. No crear otro cobro ni liberar por timeout.';
   alarm('PaymentReconciliationDeadLetters', 'ApproximateNumberOfMessagesVisible', 'AWS/SQS', [{ Name: 'QueueName', Value: `\${cf:api-payment-${STAGE}.PaymentReconciliationDLQName}` }], 60);
   (resources.PaymentReconciliationDeadLetters as { Properties: Record<string, unknown> }).Properties.AlarmDescription = 'Conciliación de cuotas detenida. Revisar logs del consumidor y recuperar la DLQ después de corregir la causa. No liberar pagos ambiguos.';
 }
-const productionAlarmIds = new Set(['ReceiverErrors', 'WorkerErrors', 'MonitorNotHealthy', 'EmailDeadLetters', 'PaymentReconciliationDeadLetters']);
+const productionAlarmIds = new Set(['ReceiverErrors', 'WorkerErrors', 'MonitorNotHealthy', 'EmailDeadLetters', 'PaymentReconciliationDeadLetters', 'CheckoutRecoveryRequired', 'ProviderRecoveryRequired']);
 for (const [id, resource] of Object.entries(resources)) {
   if ((resource as { Type?: string }).Type === 'AWS::CloudWatch::Alarm' && (STAGE !== 'prd' || !productionAlarmIds.has(id))) {
     delete resources[id];

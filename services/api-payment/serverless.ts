@@ -123,6 +123,10 @@ const endpoints: GoHttpEndpoint[] = [
     {Effect:'Allow',Action:['dynamodb:PutItem','dynamodb:DeleteItem','dynamodb:TransactWriteItems'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['RECONCILIATION#PENDING','ATTEMPT#*','ACCOUNT#*','TRIP#*','COMMAND#*','REFERENCE#*','RECEIPT#*','JOB#*','CASH#*','TAX_REQUEST#*','TAX_QUEUE#PENDING']}}},
     ...secrets,
   ]},
+  {name:'fn-recuperar-conciliaciones-v1',timeout:29,memorySize:128,env:{PAYMENT_RECONCILIATION_QUEUE_URL:reconciliationQueueUrl},events:[{schedule:'rate(15 minutes)'}],policies:[
+    {Effect:'Allow',Action:['dynamodb:GetItem','dynamodb:Query','dynamodb:PutItem','dynamodb:TransactWriteItems'],Resource:tableArn,Condition:{'ForAllValues:StringEquals':{'dynamodb:LeadingKeys':['RECONCILIATION#PENDING','RECONCILIATION#RECOVERY']}}},
+    {Effect:'Allow',Action:['sqs:SendMessage'],Resource:reconciliationQueueArn},
+  ]},
   {name:'fn-programar-conciliacion-khipu-v1',timeout:10,memorySize:128,env:{PAYMENT_RECONCILIATION_QUEUE_URL:reconciliationQueueUrl},events:[{stream:{type:'dynamodb',arn:tableStreamArn,startingPosition:'LATEST',batchSize:1,maximumRetryAttempts:5,maximumRecordAgeInSeconds:3600,bisectBatchOnFunctionError:true,functionResponseType:'ReportBatchItemFailures',filterPatterns:[{eventName:['INSERT'],dynamodb:{NewImage:{pk:{S:['RECONCILIATION#PENDING']},status:{S:['PENDING']}}}}]}}],policies:[
     {Effect:'Allow',Action:['sqs:SendMessage'],Resource:reconciliationQueueArn},
     {Effect:'Allow',Action:['dynamodb:DescribeStream','dynamodb:GetRecords','dynamodb:GetShardIterator','dynamodb:ListStreams'],Resource:tableStreamArn},

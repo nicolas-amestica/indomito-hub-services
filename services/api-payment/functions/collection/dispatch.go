@@ -49,12 +49,19 @@ func (s Service) ClaimCheckoutDispatch(ctx context.Context, accountID, attemptID
 	if err != nil {
 		return domain.Attempt{}, err
 	}
+	// El trabajo se confirma junto con el permiso de envío, antes del POST.
+	// Incluso una respuesta perdida del commit deja recuperación durable.
+	firstCheck := now.UTC().Add(time.Minute)
+	job, err := s.put(record{PK: reconciliationPendingPK, SK: reconciliationJobSK(firstCheck, attemptID), AttemptID: attemptID, AccountID: accountID, Status: "PENDING", NextAttemptAt: firstCheck.Unix()}, "attribute_not_exists(pk)", nil)
+	if err != nil {
+		return domain.Attempt{}, err
+	}
 	// CAS sin cambio financiero: evita conceder envío sobre una cuenta modificada.
 	guard, err := s.put(record{PK: "ACCOUNT#" + a.ID, SK: "META", Version: a.Version, Account: &a}, "#version = :previous", map[string]types.AttributeValue{":previous": &types.AttributeValueMemberN{Value: strconv.FormatInt(a.Version, 10)}})
 	if err != nil {
 		return domain.Attempt{}, err
 	}
-	if _, err = s.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{guard, claim}}); err != nil {
+	if _, err = s.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{guard, claim, job}}); err != nil {
 		return domain.Attempt{}, ErrDispatchUncertain
 	}
 	return expected, nil

@@ -68,6 +68,10 @@ type record struct {
 	ProviderStatus       string                         `dynamodbav:"providerStatus,omitempty"`
 	ProviderDetail       string                         `dynamodbav:"providerDetail,omitempty"`
 	CheckedAt            int64                          `dynamodbav:"checkedAt,omitempty"`
+	ProviderRetryAt      int64                          `dynamodbav:"providerRetryAt,omitempty"`
+	ProviderFailures     int64                          `dynamodbav:"providerFailures,omitempty"`
+	RecoveryLeaseUntil   int64                          `dynamodbav:"recoveryLeaseUntil,omitempty"`
+	RecoveryCursor       string                         `dynamodbav:"recoveryCursor,omitempty"`
 	ProviderNotification *ProviderNotification          `dynamodbav:"providerNotification,omitempty"`
 	RelatedAccountID     string                         `dynamodbav:"relatedAccountId,omitempty"`
 	PendingAnnexID       string                         `dynamodbav:"pendingAnnexId,omitempty"`

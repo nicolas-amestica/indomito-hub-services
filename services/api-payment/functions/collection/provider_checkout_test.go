@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+
 	"ind-hub-api-gox-sls-pri-gh/services/api-payment/providers"
 )
 
@@ -18,6 +20,7 @@ type checkoutGatewayFake struct {
 	bankErr, errorCreate error
 	url                  string
 	afterCreate          func()
+	beforeCreate         func()
 }
 
 func (f *checkoutGatewayFake) DevelopmentBank(context.Context) (string, error) {
@@ -30,6 +33,9 @@ func (f *checkoutGatewayFake) Create(_ context.Context, in providers.CheckoutReq
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
+	if f.beforeCreate != nil {
+		f.beforeCreate()
+	}
 	f.input = in
 	if f.afterCreate != nil {
 		f.afterCreate()
@@ -101,7 +107,56 @@ func TestDevelopmentCheckoutAmbiguityDoesNotRepeatCreate(t *testing.T) {
 			if gateway.calls != expectedCalls {
 				t.Fatalf("calls=%d", gateway.calls)
 			}
+			jobs := 0
+			for _, item := range db.items {
+				if item["pk"].(*types.AttributeValueMemberS).Value == reconciliationPendingPK {
+					jobs++
+				}
+			}
+			if jobs != 1 {
+				t.Fatalf("ambiguous checkout has %d recovery jobs", jobs)
+			}
 		})
+	}
+}
+
+func TestCheckoutRecoveryIsDurableBeforeProviderCall(t *testing.T) {
+	s, _ := dispatchFixture(t)
+	now := time.Now().UTC()
+	gateway := &checkoutGatewayFake{beforeCreate: func() {
+		job, err := s.read(context.Background(), reconciliationPendingPK, reconciliationJobSK(now.Add(time.Minute), "attempt"))
+		if err != nil || job.AttemptID != "attempt" || job.AccountID != "account" || job.Status != "PENDING" {
+			t.Fatalf("provider called before durable job: %+v %v", job, err)
+		}
+	}}
+	if _, err := s.CreateCheckout(context.Background(), gateway, "prd", "account", "attempt", "session", testCheckoutURLs(), now); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCheckoutProviderErrorKeepsClassificationWithoutRepeatingPOST(t *testing.T) {
+	s, _ := dispatchFixture(t)
+	failure := &providers.KhipuError{Code: "AUTHENTICATION_FAILED", HTTPStatus: 401}
+	gateway := &checkoutGatewayFake{errorCreate: failure}
+	_, err := s.CreateCheckout(context.Background(), gateway, "prd", "account", "attempt", "session", testCheckoutURLs(), time.Now())
+	var classified *providers.KhipuError
+	if !errors.Is(err, ErrDispatchUncertain) || !errors.Is(err, providers.ErrProvider) || !errors.As(err, &classified) || classified.Code != failure.Code {
+		t.Fatalf("classification lost: %v", err)
+	}
+	if _, err := s.CreateCheckout(context.Background(), gateway, "prd", "account", "attempt", "session", testCheckoutURLs(), time.Now()); !errors.Is(err, ErrDispatchUncertain) || gateway.calls != 1 {
+		t.Fatal("creation retried after provider error")
+	}
+}
+
+func TestCheckoutNeverCallsProviderWhenRecoveryCannotBeCommitted(t *testing.T) {
+	s, db := dispatchFixture(t)
+	db.failOnCommit = 2
+	gateway := &checkoutGatewayFake{}
+	if _, err := s.CreateCheckout(context.Background(), gateway, "prd", "account", "attempt", "session", testCheckoutURLs(), time.Now()); !errors.Is(err, ErrDispatchUncertain) || gateway.calls != 0 {
+		t.Fatalf("unsafe dispatch: calls=%d err=%v", gateway.calls, err)
+	}
+	if _, err := s.read(context.Background(), "ATTEMPT#attempt", "DISPATCH"); !errors.Is(err, ErrNotFound) {
+		t.Fatal("partial claim committed")
 	}
 }
 

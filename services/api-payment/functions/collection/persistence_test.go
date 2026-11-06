@@ -119,6 +119,11 @@ func (d *transactionDB) TransactWriteItems(ctx context.Context, in *dynamodb.Tra
 		}
 		old := d.items[itemKey(w.Put.Item)]
 		switch *w.Put.ConditionExpression {
+		case recoveryJobCondition:
+			var previous record
+			if old == nil || attributevalue.UnmarshalMap(old, &previous) != nil || previous.Status != "PENDING" || previous.NextAttemptAt > attributeNumber(w.Put.ExpressionAttributeValues[":cutoff"]) || previous.RecoveryLeaseUntil > attributeNumber(w.Put.ExpressionAttributeValues[":now"]) || previous.ProviderRetryAt > attributeNumber(w.Put.ExpressionAttributeValues[":now"]) {
+				return nil, &types.TransactionCanceledException{}
+			}
 		case "attribute_not_exists(pk) OR checkedAt < :checked":
 			if old != nil {
 				var previous, next record

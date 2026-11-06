@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"go.uber.org/zap"
 	domain "ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
 )
 
@@ -29,6 +30,8 @@ type AutomaticReconciliationApp struct {
 	Verifier  PaymentVerifier
 	Zone      *time.Location
 	Now       func() time.Time
+	Log       *zap.Logger
+	Stage     string
 }
 
 func automaticReconciliationDelay(attempt int64) time.Duration {
@@ -56,24 +59,32 @@ func (a AutomaticReconciliationApp) process(ctx context.Context, message reconci
 		return ErrReplayMismatch
 	}
 	now := a.Now().UTC()
+	if job.ProviderRetryAt > now.Unix() {
+		return a.waitForProviderRetry(ctx, job, now)
+	}
+	job.ProviderRetryAt = 0
+	checkout, checkoutErr := a.Accounts.read(ctx, "ATTEMPT#"+job.AttemptID, "CHECKOUT")
+	if errors.Is(checkoutErr, ErrNotFound) {
+		return a.reconcileMissingCheckout(ctx, job, now)
+	}
+	if checkoutErr != nil {
+		return checkoutErr
+	}
+	if checkout.Checkout == nil || checkout.AccountID != job.AccountID {
+		return domain.ErrInvalid
+	}
 	audit := domain.Audit{CommandID: paymentOperationID(fmt.Sprintf("automatic-reconciliation:%s:%d", job.AttemptID, job.Count)), Actor: "system:khipu-reconciliation", Reason: "Conciliacion automatica de intento pendiente", RecordedAt: now}
 	state, err := a.Accounts.ReconcileProviderAttempt(ctx, a.Inspector, a.Verifier, job.AttemptID, "", audit, now, a.Zone)
 	if err != nil {
-		return err
+		return a.recoverProviderFailure(ctx, job, err, now)
 	}
+	job.ProviderFailures = 0
 	portalStatus := state.Status
 	if state.Status == "PENDING" {
 		portalStatus = "PENDING_PAYMENT"
 		if state.ProviderStatus == "verifying" {
 			portalStatus = "VERIFYING_PROVIDER"
 		}
-	}
-	checkout, checkoutErr := a.Accounts.read(ctx, "ATTEMPT#"+job.AttemptID, "CHECKOUT")
-	if checkoutErr != nil {
-		return checkoutErr
-	}
-	if checkout.Checkout == nil {
-		return domain.ErrInvalid
 	}
 	if state.Status == "PENDING" && now.After(checkout.Checkout.ExpiresAt.Add(reconciliationReviewAfter)) {
 		// Escalar la presentación sin abandonar futuras confirmaciones del proveedor.
@@ -85,6 +96,42 @@ func (a AutomaticReconciliationApp) process(ctx context.Context, message reconci
 	}
 	next := now.Add(automaticReconciliationDelay(job.Count + 1))
 	return a.Accounts.rescheduleReconciliation(ctx, job, observation, next)
+}
+
+// reconcileMissingCheckout espera evidencia durable: nunca repite el POST ni
+// interpreta la ausencia de payment_id como rechazo o falta de movimiento.
+func (a AutomaticReconciliationApp) reconcileMissingCheckout(ctx context.Context, job record, now time.Time) error {
+	attempt, err := a.Accounts.read(ctx, "ATTEMPT#"+job.AttemptID, "META")
+	if err != nil {
+		return err
+	}
+	if attempt.Attempt == nil || attempt.Attempt.ID != job.AttemptID || attempt.Attempt.AccountID != job.AccountID {
+		return ErrReplayMismatch
+	}
+	account, err := a.Accounts.GetAccount(ctx, job.AccountID)
+	if err != nil {
+		return err
+	}
+	// El webhook y la conciliación administrativa guardan resultados aunque
+	// nunca se haya podido persistir CHECKOUT. Reutilizar la vista validada.
+	view, err := (PortalApp{Accounts: a.Accounts, Now: a.Now}).attemptView(ctx, account, job.AttemptID)
+	if err != nil {
+		return err
+	}
+	observation := record{PK: "ATTEMPT#" + job.AttemptID, SK: "PROVIDER_STATUS", AttemptID: job.AttemptID, AccountID: job.AccountID, Status: view.Status, CheckedAt: now.Unix()}
+	switch view.Status {
+	case "CONFIRMED", "REVIEW_REQUIRED", "UNPAID_FINAL", "REVERSED":
+		return a.Accounts.finishReconciliation(ctx, job, observation)
+	}
+	observation.Status = "PROVIDER_REVIEW_REQUIRED"
+	observation.ProviderDetail = "CHECKOUT_RESPONSE_MISSING"
+	if err := a.Accounts.rescheduleReconciliation(ctx, job, observation, now.Add(automaticReconciliationDelay(job.Count+1))); err != nil {
+		return err
+	}
+	if a.Log != nil {
+		a.Log.Warn("Respuesta de creacion Khipu ausente; recuperar payment_id desde Khipu y conciliar el intento", zap.String("attemptId", job.AttemptID), zap.String("Stage", a.Stage), zap.Int("CheckoutRecoveryRequired", 1), zap.Any("_aws", map[string]any{"Timestamp": now.UnixMilli(), "CloudWatchMetrics": []any{map[string]any{"Namespace": "Indomito/Payments", "Dimensions": [][]string{{"Stage"}}, "Metrics": []any{map[string]string{"Name": "CheckoutRecoveryRequired", "Unit": "Count"}}}}}))
+	}
+	return nil
 }
 
 func decodeReconciliationMessage(body string) (reconciliationMessage, error) {
@@ -106,19 +153,30 @@ func (s Service) finishReconciliation(ctx context.Context, job, observation reco
 }
 
 func (s Service) rescheduleReconciliation(ctx context.Context, job, observation record, next time.Time) error {
-	observationWrite, err := s.put(observation, "attribute_not_exists(pk) OR checkedAt < :checked", map[string]types.AttributeValue{":checked": &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", observation.CheckedAt)}})
-	if err != nil {
-		return err
-	}
+	return s.writeRescheduledReconciliation(ctx, job, &observation, next)
+}
+
+// writeRescheduledReconciliation permite diferir trabajo sin fingir una consulta
+// nueva al proveedor cuando todavía no vence Retry-After.
+func (s Service) writeRescheduledReconciliation(ctx context.Context, job record, observation *record, next time.Time) error {
 	nextJob := job
 	nextJob.SK = reconciliationJobSK(next, job.AttemptID)
 	nextJob.Count++
 	nextJob.NextAttemptAt = next.Unix()
+	nextJob.RecoveryLeaseUntil = 0
 	nextWrite, err := s.put(nextJob, "attribute_not_exists(pk)", nil)
 	if err != nil {
 		return err
 	}
-	_, err = s.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{reconciliationDelete(s.Table, job), nextWrite, observationWrite}})
+	writes := []types.TransactWriteItem{reconciliationDelete(s.Table, job), nextWrite}
+	if observation != nil {
+		observationWrite, writeErr := s.put(*observation, "attribute_not_exists(pk) OR checkedAt < :checked", map[string]types.AttributeValue{":checked": &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", observation.CheckedAt)}})
+		if writeErr != nil {
+			return writeErr
+		}
+		writes = append(writes, observationWrite)
+	}
+	_, err = s.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: writes})
 	return err
 }
 
