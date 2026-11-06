@@ -3,6 +3,10 @@ package functions
 import (
 	"bytes"
 	"context"
+	"math"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -68,6 +72,67 @@ func TestRenderTaxDocumentCreatesPDFWithElectronicStamp(t *testing.T) {
 	}
 	if len(document) < 1000 || !bytes.HasPrefix(document, []byte("%PDF-")) {
 		t.Fatal("invalid tax PDF")
+	}
+	if output := os.Getenv("TAX_PDF_SAMPLE_PATH"); output != "" {
+		if err = os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
+			t.Fatalf("create sample directory: %v", err)
+		}
+		if err = os.WriteFile(output, document, 0o600); err != nil {
+			t.Fatalf("write sample PDF: %v", err)
+		}
+	}
+}
+
+func TestTaxDocumentVisualFormatting(t *testing.T) {
+	tests := []struct {
+		name, input, expected string
+		format                func(string) string
+	}{
+		{name: "date", input: "2026-11-05", expected: "05-11-2026", format: formatTaxDate},
+		{name: "invalid date is preserved", input: "05/11/2026", expected: "05/11/2026", format: formatTaxDate},
+		{name: "historical XML description preserved", input: "Pago 3 de gira 01M4HF0P3YMX9JA9QMDK34MRN7", expected: "Pago 3 de gira 01M4HF0P3YMX9JA9QMDK34MRN7", format: taxItemDescription},
+		{name: "canonical XML description preserved", input: "Cuota N.º 7 Contrato terminado en DK34MRN7", expected: "Cuota N.º 7 Contrato terminado en DK34MRN7", format: taxItemDescription},
+		{name: "unknown description is preserved", input: "Servicio especial", expected: "Servicio especial", format: taxItemDescription},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if actual := test.format(test.input); actual != test.expected {
+				t.Fatalf("expected %q, got %q", test.expected, actual)
+			}
+		})
+	}
+}
+
+func TestRenderTaxDocumentWithFullLengthTED(t *testing.T) {
+	model := validTaxPublicDocument()
+	// Simula el tamaño de un TED firmado, sin usar datos ni firmas reales.
+	model.TED = `<TED version="1.0"><DD><RE>77654796-4</RE><TD>39</TD><F>406</F><CAF>` + strings.Repeat("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 20) + `</CAF></DD></TED>`
+	before := model.TED
+	document, err := renderTaxDocument(model)
+	if err != nil || !bytes.HasPrefix(document, []byte("%PDF-")) {
+		t.Fatalf("render full-length TED: %v", err)
+	}
+	if model.TED != before {
+		t.Fatal("TED content changed")
+	}
+	width, height := taxStampSize(886, 116)
+	if width > 460+1e-9 || height > 102+1e-9 || math.Abs(width/height-float64(886)/116) > 1e-9 {
+		t.Fatalf("invalid stamp dimensions: %f x %f", width, height)
+	}
+}
+
+func TestRenderTaxDocumentSupportsLongDescriptionsAndMultipleItems(t *testing.T) {
+	model := validTaxPublicDocument()
+	model.Items = make([]taxPublicItem, 32)
+	for index := range model.Items {
+		model.Items[index] = taxPublicItem{Description: strings.Repeat("Descripción extensa para comprobar ajuste automático ", 4), Quantity: 1, UnitPrice: 11900}
+	}
+	document, err := renderTaxDocument(model)
+	if err != nil {
+		t.Fatalf("render multipage tax document: %v", err)
+	}
+	if len(document) < 2000 || bytes.Count(document, []byte("/Type /Page")) < 2 {
+		t.Fatal("expected a valid multipage tax PDF")
 	}
 }
 

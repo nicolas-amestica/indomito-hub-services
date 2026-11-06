@@ -112,7 +112,7 @@ func TestProviderConfirmationExactlyOnce(t *testing.T) {
 			}
 			taxID := paymentOperationID("khipu:abcdefghijkl")
 			tax, taxErr := s.read(context.Background(), "TAX_REQUEST#"+taxID, "META")
-			if taxErr != nil || tax.TaxRequest == nil || tax.TaxRequest.Status != taxStatusReady || tax.TaxRequest.IssuanceMode != "SII_DIRECT" || tax.TaxRequest.GrossAmount != 20000 || tax.TaxRequest.SourceEventID != taxID || len(tax.TaxRequest.Items) != 1 || tax.TaxRequest.Items[0].Description != "Pago 1 de gira trip" || tax.TaxRequest.Items[0].Quantity != 1 || tax.TaxRequest.Items[0].UnitPrice != 20000 {
+			if taxErr != nil || tax.TaxRequest == nil || tax.TaxRequest.Status != taxStatusReady || tax.TaxRequest.IssuanceMode != "SII_DIRECT" || tax.TaxRequest.GrossAmount != 20000 || tax.TaxRequest.SourceEventID != taxID || len(tax.TaxRequest.Items) != 1 || tax.TaxRequest.Items[0].Description != "Cuota N.º 1 Contrato terminado en trip" || tax.TaxRequest.Items[0].Quantity != 1 || tax.TaxRequest.Items[0].UnitPrice != 20000 {
 				t.Fatalf("missing idempotent tax request: %+v %v", tax.TaxRequest, taxErr)
 			}
 			if db.items["TAX_QUEUE#PENDING/"+tax.TaxRequest.RequestedAt.UTC().Format(time.RFC3339Nano)+"#"+taxID] == nil {

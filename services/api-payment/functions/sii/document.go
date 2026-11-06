@@ -45,10 +45,14 @@ type Document struct {
 
 // PublicDocumentData contiene solo los datos tributarios publicables de un DTE firmado.
 type PublicDocumentData struct {
-	NetAmount    int64
-	VATAmount    int64
-	ExemptAmount int64
-	TED          string
+	Folio                                                                          int64
+	IssueDate, IssuerRUT, IssuerName, IssuerActivity, IssuerAddress, IssuerCommune string
+	TotalAmount                                                                    int64
+	Items                                                                          []SaleItem
+	NetAmount                                                                      int64
+	VATAmount                                                                      int64
+	ExemptAmount                                                                   int64
+	TED                                                                            string
 }
 
 // ExtractPublicDocumentData obtiene totales y TED sin exponer llaves ni configuracion.
@@ -79,7 +83,33 @@ func ExtractPublicDocumentData(document Document) (PublicDocumentData, error) {
 	if err != nil {
 		return PublicDocumentData{}, err
 	}
-	return PublicDocumentData{NetAmount: netAmount, VATAmount: vatAmount, ExemptAmount: exemptAmount, TED: string(tedBytes)}, nil
+	readText := func(path string) string {
+		if element := parsed.FindElement(path); element != nil {
+			return element.Text()
+		}
+		return ""
+	}
+	folio, folioErr := readAmount("//IdDoc/Folio")
+	total, totalErr := readAmount("//Totales/MntTotal")
+	if folioErr != nil || totalErr != nil {
+		return PublicDocumentData{}, ErrInvalidConfiguration
+	}
+	items := []SaleItem{}
+	for _, detail := range parsed.FindElements("//Documento/Detalle") {
+		text := func(name string) string {
+			if element := detail.FindElement(name); element != nil {
+				return element.Text()
+			}
+			return ""
+		}
+		quantity, quantityErr := strconv.ParseInt(text("QtyItem"), 10, 64)
+		price, priceErr := strconv.ParseInt(text("PrcItem"), 10, 64)
+		if quantityErr != nil || priceErr != nil {
+			return PublicDocumentData{}, ErrInvalidConfiguration
+		}
+		items = append(items, SaleItem{Description: text("NmbItem"), Quantity: quantity, UnitPrice: price, Unit: text("UnmdItem"), Exempt: text("IndExe") == "1"})
+	}
+	return PublicDocumentData{Folio: folio, IssueDate: readText("//IdDoc/FchEmis"), IssuerRUT: readText("//Emisor/RUTEmisor"), IssuerName: readText("//Emisor/RznSocEmisor"), IssuerActivity: readText("//Emisor/GiroEmisor"), IssuerAddress: readText("//Emisor/DirOrigen"), IssuerCommune: readText("//Emisor/CmnaOrigen"), TotalAmount: total, Items: items, NetAmount: netAmount, VATAmount: vatAmount, ExemptAmount: exemptAmount, TED: string(tedBytes)}, nil
 }
 
 func BuildDocument(credentials Credentials, sale Sale, now time.Time) (Document, error) {

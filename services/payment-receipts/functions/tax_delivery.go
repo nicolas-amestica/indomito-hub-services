@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -173,58 +174,71 @@ func renderTaxDocument(model taxPublicDocument) ([]byte, error) {
 		return nil, err
 	}
 	pdf.AddPage()
-	writePDFText(pdf, "bold", 14, 28, 28, 28, 48, 48, model.IssuerName)
-	writePDFText(pdf, "regular", 9, 28, 28, 28, 48, 70, "RUT "+model.IssuerRUT)
-	writePDFText(pdf, "regular", 9, 28, 28, 28, 48, 86, model.IssuerActivity)
-	writePDFText(pdf, "regular", 9, 28, 28, 28, 48, 102, model.IssuerAddress+", "+model.IssuerCommune)
-	pdf.SetStrokeColor(180, 20, 20)
-	pdf.SetLineWidth(1.5)
-	pdf.RectFromUpperLeftWithStyle(350, 42, 197, 105, "D")
-	writeCenteredPDFText(pdf, "bold", 11, 180, 20, 20, 448, 58, "RUT "+model.IssuerRUT)
-	writeCenteredPDFText(pdf, "bold", 12, 180, 20, 20, 448, 82, "BOLETA ELECTRÓNICA")
-	writeCenteredPDFText(pdf, "bold", 12, 180, 20, 20, 448, 106, "Nº "+strconv.FormatInt(model.Folio, 10))
-	writeCenteredPDFText(pdf, "bold", 10, 180, 20, 20, 448, 130, "S.I.I.")
-	pdf.SetStrokeColor(28, 28, 28)
-	pdf.SetLineWidth(0.5)
-	pdf.Line(48, 166, 547, 166)
-	writePDFText(pdf, "regular", 10, 28, 28, 28, 390, 188, "Fecha de emisión: "+model.IssueDate)
-	writePDFText(pdf, "bold", 9, 28, 28, 28, 48, 222, "Descripción")
-	writePDFText(pdf, "bold", 9, 28, 28, 28, 330, 222, "Cantidad")
-	writePDFText(pdf, "bold", 9, 28, 28, 28, 405, 222, "Precio")
-	writePDFText(pdf, "bold", 9, 28, 28, 28, 492, 222, "Total")
-	pdf.Line(48, 232, 547, 232)
-	y := 250.0
+	drawTaxPageHeader(pdf, model, false)
+	y := 214.0
 	for _, item := range model.Items {
 		description := item.Description
 		if item.Exempt {
 			description += " (Exento)"
 		}
+		lines := wrapPDFText(pdf, "regular", 9, description, 270)
+		rowHeight := max(22, float64(len(lines))*12+8)
+		if y+rowHeight > 690 {
+			drawTaxPageFooter(pdf)
+			pdf.AddPage()
+			drawTaxPageHeader(pdf, model, true)
+			y = 214
+		}
 		quantity := strconv.FormatInt(item.Quantity, 10)
 		if strings.TrimSpace(item.Unit) != "" {
 			quantity += " " + strings.TrimSpace(item.Unit)
 		}
-		writePDFText(pdf, "regular", 9, 28, 28, 28, 48, y, description)
-		writePDFText(pdf, "regular", 9, 28, 28, 28, 340, y, quantity)
-		writePDFText(pdf, "regular", 9, 28, 28, 28, 405, y, formatCLP(item.UnitPrice))
-		writePDFText(pdf, "regular", 9, 28, 28, 28, 492, y, formatCLP(item.Quantity*item.UnitPrice))
-		pdf.Line(48, y+10, 547, y+10)
-		y += 22
+		for index, line := range lines {
+			writePDFText(pdf, "regular", 9, 28, 28, 28, 48, y+float64(index)*12, line)
+		}
+		writeRightAlignedPDFText(pdf, "regular", 9, 28, 28, 28, 382, y, quantity)
+		writeRightAlignedPDFText(pdf, "regular", 9, 28, 28, 28, 466, y, formatCLP(item.UnitPrice))
+		writeRightAlignedPDFText(pdf, "regular", 9, 28, 28, 28, 547, y, formatCLP(item.Quantity*item.UnitPrice))
+		pdf.SetStrokeColor(214, 218, 223)
+		pdf.Line(48, y+rowHeight-4, 547, y+rowHeight-4)
+		y += rowHeight
 	}
-	totalsY := max(y+18, 360)
+	totalsHeight := 52.0
 	if model.NetAmount > 0 {
-		writePDFText(pdf, "regular", 10, 28, 28, 28, 390, totalsY, "Neto: "+formatCLP(model.NetAmount))
-		totalsY += 20
+		totalsHeight += 18
 	}
 	if model.VATAmount > 0 {
-		writePDFText(pdf, "regular", 10, 28, 28, 28, 390, totalsY, "IVA 19%: "+formatCLP(model.VATAmount))
-		totalsY += 20
+		totalsHeight += 18
 	}
-	writePDFText(pdf, "bold", 12, 28, 28, 28, 390, totalsY, "Total: "+formatCLP(model.TotalAmount))
+	if y+totalsHeight+170 > 790 {
+		drawTaxPageFooter(pdf)
+		pdf.AddPage()
+		drawTaxPageHeader(pdf, model, true)
+		y = 214
+	}
+	totalsY := y + 16
+	if model.NetAmount > 0 {
+		writePDFText(pdf, "regular", 9, 75, 85, 99, 405, totalsY, "Neto")
+		writeRightAlignedPDFText(pdf, "regular", 9, 28, 28, 28, 547, totalsY, formatCLP(model.NetAmount))
+		totalsY += 18
+	}
+	if model.VATAmount > 0 {
+		writePDFText(pdf, "regular", 9, 75, 85, 99, 405, totalsY, "IVA 19%")
+		writeRightAlignedPDFText(pdf, "regular", 9, 28, 28, 28, 547, totalsY, formatCLP(model.VATAmount))
+		totalsY += 18
+	}
+	pdf.SetStrokeColor(28, 28, 28)
+	pdf.Line(405, totalsY-6, 547, totalsY-6)
+	writePDFText(pdf, "bold", 12, 28, 28, 28, 405, totalsY+4, "Total")
+	writeRightAlignedPDFText(pdf, "bold", 14, 28, 28, 28, 547, totalsY+2, formatCLP(model.TotalAmount))
+	stampY := totalsY + 34
 	code, err := pdf417.Encode(model.TED, 5)
 	if err != nil {
 		return nil, err
 	}
-	scaled, err := barcode.Scale(code, 460, 130)
+	// Rasterizar con módulos enteros; el tamaño en puntos se ajusta después.
+	// Un TED real puede superar los 360 píxeles de ancho.
+	scaled, err := barcode.Scale(code, code.Bounds().Dx()*2, code.Bounds().Dy()*2)
 	if err != nil {
 		return nil, err
 	}
@@ -238,14 +252,100 @@ func renderTaxDocument(model taxPublicDocument) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = pdf.ImageByHolder(holder, 68, 500, &gopdf.Rect{W: 460, H: 130}); err != nil {
+	stampWidth, stampHeight := taxStampSize(scaled.Bounds().Dx(), scaled.Bounds().Dy())
+	if err = pdf.ImageByHolder(holder, (receiptPageWidth-stampWidth)/2, stampY, &gopdf.Rect{W: stampWidth, H: stampHeight}); err != nil {
 		return nil, err
 	}
-	writeCenteredPDFText(pdf, "regular", 9, 28, 28, 28, receiptPageWidth/2, 638, "Timbre electrónico SII")
-	writeCenteredPDFText(pdf, "regular", 8, 28, 28, 28, receiptPageWidth/2, 656, fmt.Sprintf("Resolución SII Nº %d de %s", model.ResolutionNumber, model.ResolutionDate))
-	writeCenteredPDFText(pdf, "regular", 8, 28, 28, 28, receiptPageWidth/2, 674, "Verifique en www.sii.cl")
-	writeCenteredPDFText(pdf, "regular", 8, 28, 28, 28, receiptPageWidth/2, 692, "Consulta adicional: https://pagos.girasindomito.cl/consultar-boleta")
+	stampBottom := stampY + stampHeight
+	writeCenteredPDFText(pdf, "bold", 9, 28, 28, 28, receiptPageWidth/2, stampBottom+8, "Timbre electrónico SII")
+	writeCenteredPDFText(pdf, "regular", 8, 75, 85, 99, receiptPageWidth/2, stampBottom+22, fmt.Sprintf("Resolución SII Nº %d de %s", model.ResolutionNumber, formatTaxDate(model.ResolutionDate)))
+	writeCenteredPDFText(pdf, "regular", 8, 75, 85, 99, receiptPageWidth/2, stampBottom+36, "Verifique este documento en www.sii.cl")
+	writeCenteredPDFText(pdf, "regular", 8, 75, 85, 99, receiptPageWidth/2, stampBottom+50, "Consulta adicional: https://pagos.girasindomito.cl/consultar-boleta")
+	drawTaxPageFooter(pdf)
 	return pdf.GetBytesPdfReturnErr()
+}
+
+func taxStampSize(width, height int) (float64, float64) {
+	factor := min(460/float64(width), 102/float64(height))
+	return float64(width) * factor, float64(height) * factor
+}
+
+func drawTaxPageHeader(pdf *gopdf.GoPdf, model taxPublicDocument, continuation bool) {
+	writePDFText(pdf, "bold", 15, 28, 28, 28, 48, 44, model.IssuerName)
+	writePDFText(pdf, "regular", 9, 75, 85, 99, 48, 68, model.IssuerActivity)
+	address := strings.Trim(strings.Join(strings.Fields(strings.TrimSpace(model.IssuerAddress)), " "), " ,")
+	commune := strings.Trim(strings.Join(strings.Fields(strings.TrimSpace(model.IssuerCommune)), " "), " ,")
+	if commune != "" && !strings.EqualFold(address, commune) {
+		address = strings.TrimSpace(address + ", " + commune)
+	}
+	writeWrapped(pdf, "regular", 9, 75, 85, 99, 48, 84, 270, address)
+	pdf.SetStrokeColor(180, 20, 20)
+	pdf.SetLineWidth(1.5)
+	pdf.RectFromUpperLeftWithStyle(350, 38, 197, 100, "D")
+	writeCenteredPDFText(pdf, "bold", 11, 180, 20, 20, 448, 52, "RUT "+model.IssuerRUT)
+	writeCenteredPDFText(pdf, "bold", 12, 180, 20, 20, 448, 75, "BOLETA ELECTRÓNICA")
+	writeCenteredPDFText(pdf, "bold", 12, 180, 20, 20, 448, 98, "Nº "+strconv.FormatInt(model.Folio, 10))
+	writeCenteredPDFText(pdf, "bold", 10, 180, 20, 20, 448, 120, "S.I.I.")
+	pdf.SetStrokeColor(214, 218, 223)
+	pdf.SetLineWidth(0.5)
+	pdf.Line(48, 154, 547, 154)
+	dateLabel := "Fecha de emisión: " + formatTaxDate(model.IssueDate)
+	if continuation {
+		dateLabel += " · Continuación"
+	}
+	writeRightAlignedPDFText(pdf, "regular", 9, 75, 85, 99, 547, 169, dateLabel)
+	pdf.SetFillColor(243, 244, 246)
+	pdf.RectFromUpperLeftWithStyle(48, 190, 499, 24, "F")
+	writePDFText(pdf, "bold", 9, 28, 28, 28, 54, 197, "Descripción")
+	writeRightAlignedPDFText(pdf, "bold", 9, 28, 28, 28, 382, 197, "Cantidad")
+	writeRightAlignedPDFText(pdf, "bold", 9, 28, 28, 28, 466, 197, "Precio")
+	writeRightAlignedPDFText(pdf, "bold", 9, 28, 28, 28, 541, 197, "Total")
+}
+
+func drawTaxPageFooter(pdf *gopdf.GoPdf) {
+	pdf.SetStrokeColor(214, 218, 223)
+	pdf.Line(48, 812, 547, 812)
+	writeCenteredPDFText(pdf, "regular", 7, 107, 114, 128, receiptPageWidth/2, 818, "Representación impresa de boleta electrónica")
+}
+
+func formatTaxDate(value string) string {
+	parsed, err := time.Parse(time.DateOnly, strings.TrimSpace(value))
+	if err != nil {
+		return value
+	}
+	return parsed.Format("02-01-2006")
+}
+
+func taxItemDescription(value string) string {
+	return value
+}
+
+func wrapPDFText(pdf *gopdf.GoPdf, font string, size int, value string, width float64) []string {
+	_ = pdf.SetFont(font, "", size)
+	words := strings.FieldsFunc(value, unicode.IsSpace)
+	if len(words) == 0 {
+		return []string{""}
+	}
+	lines := []string{words[0]}
+	for _, word := range words[1:] {
+		candidate := lines[len(lines)-1] + " " + word
+		measured, err := pdf.MeasureTextWidth(candidate)
+		if err == nil && measured <= width {
+			lines[len(lines)-1] = candidate
+			continue
+		}
+		lines = append(lines, word)
+	}
+	return lines
+}
+
+func writeRightAlignedPDFText(pdf *gopdf.GoPdf, font string, size int, red, green, blue uint8, rightX, y float64, value string) {
+	_ = pdf.SetFont(font, "", size)
+	width, err := pdf.MeasureTextWidth(value)
+	if err != nil {
+		width = 0
+	}
+	writePDFText(pdf, font, size, red, green, blue, rightX-width, y, value)
 }
 
 func (m mailer) sendTax(ctx context.Context, to string, folio int64, concept string, document []byte) error {

@@ -140,7 +140,11 @@ type TaxDocumentsApp struct {
 func newManualSalesReceiptRequest(receiptID string, event domain.Event) TaxDocumentRequest {
 	request := TaxDocumentRequest{SchemaVersion: 2, RequestID: receiptID, SourceEventID: event.CommandID, ReceiptID: receiptID, AccountID: event.AccountID, TripID: event.TripID, Currency: "CLP", GrossAmount: event.Amount, EffectiveDate: event.EffectiveDate, RequestedAt: event.RecordedAt.UTC(), DocumentKind: "BOLETA", DocumentSubtype: manualSalesReceiptKind, IssuanceMode: "SII_DIRECT", Status: taxStatusReady}
 	if event.InstallmentNumber > 0 && event.TripID != "" {
-		request.Items = []TaxDocumentItem{{Description: fmt.Sprintf("Pago %d de gira %s", event.InstallmentNumber, event.TripID), Quantity: 1, UnitPrice: event.Amount}}
+		reference := event.TripID
+		if len(reference) > 8 {
+			reference = reference[len(reference)-8:]
+		}
+		request.Items = []TaxDocumentItem{{Description: fmt.Sprintf("Cuota N.º %d Contrato terminado en %s", event.InstallmentNumber, reference), Quantity: 1, UnitPrice: event.Amount}}
 	}
 	return request
 }

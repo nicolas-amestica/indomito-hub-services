@@ -51,12 +51,12 @@ func buildPublicTaxDocument(credentials sii.Credentials, request TaxDocumentRequ
 	if err != nil || request.SIIIssuance == nil || document.Folio != request.SIIIssuance.Folio {
 		return PublicTaxDocument{}, sii.ErrInvalidConfiguration
 	}
-	items := make([]PublicTaxDocumentItem, 0, len(request.Items))
-	for _, item := range request.Items {
+	items := make([]PublicTaxDocumentItem, 0, len(data.Items))
+	for _, item := range data.Items {
 		items = append(items, PublicTaxDocumentItem{Description: item.Description, Quantity: item.Quantity, UnitPrice: item.UnitPrice, Exempt: item.Exempt, Unit: item.Unit})
 	}
 	digest := sha256.Sum256(document.XML)
-	return PublicTaxDocument{Authentic: true, DocumentType: 39, Folio: document.Folio, IssueDate: request.EffectiveDate, IssuerRUT: credentials.IssuerRUT, IssuerName: credentials.IssuerName, IssuerActivity: credentials.IssuerActivity, IssuerAddress: credentials.IssuerAddress, IssuerCommune: credentials.IssuerCommune, ResolutionDate: credentials.ResolutionDate, ResolutionNumber: credentials.ResolutionNumber, NetAmount: data.NetAmount, VATAmount: data.VATAmount, ExemptAmount: data.ExemptAmount, TotalAmount: document.Amount, Items: items, TED: data.TED, SignedXMLBase64: base64.StdEncoding.EncodeToString(document.XML), SignedXMLSHA256: hex.EncodeToString(digest[:])}, nil
+	return PublicTaxDocument{Authentic: true, DocumentType: 39, Folio: data.Folio, IssueDate: data.IssueDate, IssuerRUT: data.IssuerRUT, IssuerName: data.IssuerName, IssuerActivity: data.IssuerActivity, IssuerAddress: data.IssuerAddress, IssuerCommune: data.IssuerCommune, ResolutionDate: credentials.ResolutionDate, ResolutionNumber: credentials.ResolutionNumber, NetAmount: data.NetAmount, VATAmount: data.VATAmount, ExemptAmount: data.ExemptAmount, TotalAmount: data.TotalAmount, Items: items, TED: data.TED, SignedXMLBase64: base64.StdEncoding.EncodeToString(document.XML), SignedXMLSHA256: hex.EncodeToString(digest[:])}, nil
 }
 
 type PublicTaxDocumentQuery struct {

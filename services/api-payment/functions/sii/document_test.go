@@ -25,6 +25,10 @@ func TestBuildDocumentUsesReservedFolioAndExactReconciledAmount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build document: %v", err)
 	}
+	data, extractErr := ExtractPublicDocumentData(document)
+	if extractErr != nil || data.Folio != 7 || data.TotalAmount != 287500 || len(data.Items) != 1 || data.Items[0].Description != "Cuota de gira de estudios" || data.IssueDate != "2026-10-29" || data.IssuerName != credentials.IssuerName {
+		t.Fatalf("XML projection differs from emitted document: %+v, %v", data, extractErr)
+	}
 	parsed := etree.NewDocument()
 	if err = parsed.ReadFromBytes(document.XML); err != nil {
 		t.Fatalf("parse result: %v", err)

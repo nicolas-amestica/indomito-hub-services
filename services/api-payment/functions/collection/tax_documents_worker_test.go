@@ -25,7 +25,7 @@ type taxIssuerFake struct {
 func (f *taxIssuerFake) Issue(_ context.Context, _ sii.Credentials, request TaxDocumentRequest, folio int64, _ time.Time) (TaxIssuanceResult, error) {
 	f.requests = append(f.requests, request)
 	f.folios = append(f.folios, folio)
-	xml := []byte(`<?xml version="1.0" encoding="ISO-8859-1"?><DTE><Documento><Encabezado><Totales><MntNeto>` + fmt.Sprint(request.GrossAmount) + `</MntNeto><IVA>0</IVA><MntTotal>` + fmt.Sprint(request.GrossAmount) + `</MntTotal></Totales></Encabezado><TED><DD><F>` + fmt.Sprint(folio) + `</F></DD></TED></Documento></DTE>`)
+	xml := []byte(`<?xml version="1.0" encoding="ISO-8859-1"?><DTE><Documento><Encabezado><IdDoc><Folio>` + fmt.Sprint(folio) + `</Folio><FchEmis>` + request.EffectiveDate + `</FchEmis></IdDoc><Totales><MntNeto>` + fmt.Sprint(request.GrossAmount) + `</MntNeto><IVA>0</IVA><MntTotal>` + fmt.Sprint(request.GrossAmount) + `</MntTotal></Totales></Encabezado><TED><DD><F>` + fmt.Sprint(folio) + `</F></DD></TED></Documento></DTE>`)
 	return TaxIssuanceResult{Submission: sii.Submission{TrackID: "123456789", Status: taxStatusSubmitted}, Document: sii.Document{XML: xml, Folio: folio, IssuerRUT: "77654796-4", Amount: request.GrossAmount}}, nil
 }
 

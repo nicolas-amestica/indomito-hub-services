@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,17 @@ import (
 
 type taxStorageFake struct {
 	objects map[string][]byte
+}
+
+func TestTaxRequestUsesPaidInstallmentAndContractSuffix(t *testing.T) {
+	for _, number := range []int{3, 7} {
+		event := domain.Event{TripID: "01M4HF0P3YMX9JA9QMDK34MRN7", InstallmentNumber: number, Amount: 34748}
+		request := newManualSalesReceiptRequest("receipt", event)
+		want := "Cuota N.º " + strconv.Itoa(number) + " Contrato terminado en DK34MRN7"
+		if len(request.Items) != 1 || request.Items[0].Description != want || request.Items[0].UnitPrice != event.Amount || request.Items[0].Quantity != 1 {
+			t.Fatalf("unexpected tax detail: %+v", request.Items)
+		}
+	}
 }
 
 type taxDocumentSignerFake struct {
