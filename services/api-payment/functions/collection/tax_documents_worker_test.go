@@ -100,3 +100,29 @@ func TestTaxDocumentWorkerStartsAtNewCAFRangeAfterRotation(t *testing.T) {
 func testPaymentEvent(now time.Time, amount int64) domain.Event {
 	return domain.Event{Audit: domain.Audit{CommandID: approvedID, RecordedAt: now}, AccountID: "account", TripID: "trip", Amount: amount, EffectiveDate: now.Format(time.DateOnly)}
 }
+
+func TestTaxDocumentWorkerResumesReservedFolioWithoutAllocatingAnother(t *testing.T) {
+	service, db := serviceFixture(t)
+	now := time.Date(2026, 11, 5, 23, 0, 0, 0, time.UTC)
+	request := newManualSalesReceiptRequest(approvedID, testPaymentEvent(now, 287500))
+	queue := request
+	request.Status = taxStatusIssuing
+	request.SIIIssuance = &SIIIssuance{Folio: 405}
+	saveLookupRow(t, db, record{PK: "TAX_REQUEST#" + request.RequestID, SK: "META", TaxRequest: &request, Status: request.Status})
+	saveLookupRow(t, db, record{PK: "TAX_FOLIO#39", SK: "META", Count: 405, Status: "RESERVED"})
+	saveLookupRow(t, db, record{PK: "TAX_QUEUE#PENDING", SK: queue.RequestedAt.UTC().Format(time.RFC3339Nano) + "#" + queue.RequestID, TaxRequest: &queue, Status: queue.Status})
+	issuer := &taxIssuerFake{}
+	app := TaxDocumentWorkerApp{Accounts: service, Config: taxConfigFake{credentials: sii.Credentials{FolioFrom: 400, FolioTo: 500}}, Issuer: issuer, Now: func() time.Time { return now }}
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := app.Process(context.Background(), request.RequestID); err != nil {
+			t.Fatalf("resume attempt %d: %v", attempt, err)
+		}
+	}
+	if len(issuer.folios) != 1 || issuer.folios[0] != 405 {
+		t.Fatalf("reserved folio was not reused exactly once: %v", issuer.folios)
+	}
+	counter, err := service.read(context.Background(), "TAX_FOLIO#39", "META")
+	if err != nil || counter.Count != 405 {
+		t.Fatalf("folio counter changed: %+v %v", counter, err)
+	}
+}

@@ -105,17 +105,15 @@ func (c Client) QuerySubmission(ctx context.Context, credentials Credentials, tr
 	if !ok {
 		return SubmissionStatus{}, ErrInvalidConfiguration
 	}
-	if credentials.Environment == EnvironmentProduction {
-		return c.queryRESTSubmission(ctx, rut, dv, trackID, token)
-	}
-	return c.queryLegacySubmission(ctx, rut, dv, trackID, token)
+	return c.queryRESTSubmission(ctx, credentials.Environment, rut, dv, trackID, token)
 }
 
 // queryRESTSubmission usa el contrato oficial de Boleta Electrónica. Los
 // servicios SOAP QueryEstUp de Palena/Maullín corresponden al flujo DTE
-// tradicional y no deben usarse para consultar Track ID de boletas en PRD.
-func (c Client) queryRESTSubmission(ctx context.Context, rut, dv, trackID, token string) (SubmissionStatus, error) {
-	endpoint := "https://api.sii.cl/recursos/v1/boleta.electronica.envio/" + rut + "-" + dv + "-" + trackID
+// tradicional y no deben usarse para consultar Track ID de boletas.
+func (c Client) queryRESTSubmission(ctx context.Context, environment Environment, rut, dv, trackID, token string) (SubmissionStatus, error) {
+	seedURL, _, _ := endpoints(environment)
+	endpoint := strings.TrimSuffix(seedURL, "boleta.electronica.semilla") + "boleta.electronica.envio/" + rut + "-" + dv + "-" + trackID
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return SubmissionStatus{}, err
@@ -203,9 +201,6 @@ func endpoints(environment Environment) (string, string, string) {
 }
 
 func (c Client) seed(ctx context.Context, environment Environment) (string, error) {
-	if environment == EnvironmentCertification {
-		return c.soapSeed(ctx)
-	}
 	seedURL, _, _ := endpoints(environment)
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, seedURL, nil)
 	if err != nil {
@@ -223,9 +218,6 @@ func (c Client) token(ctx context.Context, credentials Credentials, seed string)
 	signedXML, err := signedSeedXML(credentials, seed)
 	if err != nil {
 		return "", err
-	}
-	if credentials.Environment == EnvironmentCertification {
-		return c.soapToken(ctx, signedXML)
 	}
 	_, tokenURL, _ := endpoints(credentials.Environment)
 	tokenRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, bytes.NewReader(signedXML))
@@ -368,7 +360,7 @@ func (c Client) upload(ctx context.Context, credentials Credentials, token strin
 
 func (c Client) uploadNamed(ctx context.Context, credentials Credentials, token string, envelope []byte, filePrefix string) (Submission, error) {
 	_, _, endpoint := endpoints(credentials.Environment)
-	if credentials.Environment == EnvironmentCertification {
+	if credentials.Environment == EnvironmentCertification && filePrefix == "ConsumoFolios" {
 		endpoint = "https://maullin.sii.cl/cgi_dte/UPL/DTEUpload"
 	}
 	issuerNumber, issuerDV, ok := splitRUT(credentials.IssuerRUT)
@@ -411,7 +403,7 @@ func (c Client) uploadNamed(ctx context.Context, credentials Credentials, token 
 	request.Header.Set("Content-Type", writer.FormDataContentType())
 	request.Header.Set("Cookie", "TOKEN="+token)
 	request.Header.Set("User-Agent", "Mozilla/4.0 ( compatible; PROG 1.0; Windows NT)")
-	if credentials.Environment == EnvironmentCertification {
+	if credentials.Environment == EnvironmentCertification && filePrefix == "ConsumoFolios" {
 		request.Header.Set("Accept", "*/*")
 		request.Header.Set("Connection", "keep-alive")
 	} else {

@@ -101,6 +101,22 @@ func (c Client) SubmitConsumption(ctx context.Context, credentials Credentials, 
 	if c.HTTP == nil || c.Now == nil || len(contents) == 0 {
 		return Submission{}, ErrInvalidConfiguration
 	}
+	// El RCOF de certificación conserva autenticación DTE; las boletas usan REST.
+	if credentials.Environment == EnvironmentCertification {
+		seed, err := c.soapSeed(ctx)
+		if err != nil {
+			return Submission{}, err
+		}
+		signedXML, err := signedSeedXML(credentials, seed)
+		if err != nil {
+			return Submission{}, err
+		}
+		token, err := c.soapToken(ctx, signedXML)
+		if err != nil {
+			return Submission{}, err
+		}
+		return c.uploadNamed(ctx, credentials, token, contents, "ConsumoFolios")
+	}
 	seed, err := c.seed(ctx, credentials.Environment)
 	if err != nil {
 		return Submission{}, err

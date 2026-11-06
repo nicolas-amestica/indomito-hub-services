@@ -20,52 +20,57 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) Do(request *http.Request) (*http.Response, error) { return f(request) }
 
 func TestClientSubmitsSignedBoletaThroughCertificationFlow(t *testing.T) {
-	now := time.Date(2026, 10, 29, 21, 30, 0, 0, time.UTC)
-	credentials := testCredentials(t, now)
-	document, err := BuildDocument(credentials, Sale{RequestID: "01K8R8TV0J6V3N3V5W9Z6B8A7C", Folio: 7, Amount: 287500, IssueDate: now, Description: "Cuota de gira de estudios"}, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	step := 0
-	client := Client{Now: func() time.Time { return now }, HTTP: roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		step++
-		response := func(contentType, body string) *http.Response {
-			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{contentType}}, Body: io.NopCloser(strings.NewReader(body))}
-		}
-		switch step {
-		case 1:
-			body, readErr := io.ReadAll(request.Body)
-			if readErr != nil || request.Method != http.MethodPost || request.URL.Host != "maullin.sii.cl" || !strings.Contains(string(body), "getSeed") {
-				t.Fatalf("unexpected seed request: %s %s", request.Method, request.URL)
+	for _, environment := range []Environment{EnvironmentCertification, EnvironmentProduction} {
+		t.Run(string(environment), func(t *testing.T) {
+			now := time.Date(2026, 10, 29, 21, 30, 0, 0, time.UTC)
+			credentials := testCredentials(t, now)
+			credentials.Environment = environment
+			seedURL, tokenURL, uploadURL := endpoints(environment)
+			document, err := BuildDocument(credentials, Sale{RequestID: "01K8R8TV0J6V3N3V5W9Z6B8A7C", Folio: 7, Amount: 287500, IssueDate: now, Description: "Cuota de gira de estudios"}, now)
+			if err != nil {
+				t.Fatal(err)
 			}
-			return response("text/xml", `<Envelope><Body><getSeedResponse><getSeedReturn>&lt;RESPUESTA&gt;&lt;SEMILLA&gt;1234567890&lt;/SEMILLA&gt;&lt;/RESPUESTA&gt;</getSeedReturn></getSeedResponse></Body></Envelope>`), nil
-		case 2:
-			body, readErr := io.ReadAll(request.Body)
-			contents := string(body)
-			if readErr != nil || request.Method != http.MethodPost || request.URL.Host != "maullin.sii.cl" ||
-				!strings.Contains(contents, "<ns1:getToken") || !strings.Contains(contents, "&lt;Signature") ||
-				!strings.Contains(contents, "&lt;RSAKeyValue&gt;") || !strings.Contains(contents, "&lt;X509Certificate&gt;") {
-				t.Fatal("invalid token request")
-			}
-			return response("text/xml", `<Envelope><Body><getTokenResponse><getTokenReturn>&lt;RESPUESTA&gt;&lt;TOKEN&gt;TOKEN-DE-PRUEBA&lt;/TOKEN&gt;&lt;/RESPUESTA&gt;</getTokenReturn></getTokenResponse></Body></Envelope>`), nil
-		case 3:
-			body, readErr := io.ReadAll(request.Body)
-			if readErr != nil || request.URL.Host != "maullin.sii.cl" || request.URL.Path != "/cgi_dte/UPL/DTEUpload" || request.Header.Get("Cookie") != "TOKEN=TOKEN-DE-PRUEBA" || !strings.Contains(string(body), "EnvioBOLETA") || !strings.Contains(request.Header.Get("Content-Type"), "multipart/form-data") {
-				t.Fatal("invalid upload request")
-			}
-			return response("application/json", `{"trackid":123456}`), nil
-		default:
-			t.Fatalf("unexpected request %d", step)
-			return nil, nil
-		}
-	})}
+			step := 0
+			client := Client{Now: func() time.Time { return now }, HTTP: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				step++
+				response := func(contentType, body string) *http.Response {
+					return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{contentType}}, Body: io.NopCloser(strings.NewReader(body))}
+				}
+				switch step {
+				case 1:
+					if request.Method != http.MethodGet || request.URL.String() != seedURL || request.Header.Get("Accept") != "application/xml" {
+						t.Fatalf("unexpected seed request: %s %s", request.Method, request.URL)
+					}
+					return response("application/xml", `<RESPUESTA><RESP_BODY><SEMILLA>1234567890</SEMILLA></RESP_BODY></RESPUESTA>`), nil
+				case 2:
+					body, readErr := io.ReadAll(request.Body)
+					contents := string(body)
+					if readErr != nil || request.Method != http.MethodPost || request.URL.String() != tokenURL || request.Header.Get("Content-Type") != "application/xml" ||
+						!strings.Contains(contents, "<getToken>") || !strings.Contains(contents, "<Signature") ||
+						!strings.Contains(contents, "<RSAKeyValue>") || !strings.Contains(contents, "<X509Certificate>") {
+						t.Fatal("invalid token request")
+					}
+					return response("application/xml", `<RESPUESTA><RESP_BODY><TOKEN>TOKEN-DE-PRUEBA</TOKEN></RESP_BODY></RESPUESTA>`), nil
+				case 3:
+					body, readErr := io.ReadAll(request.Body)
+					if readErr != nil || request.Method != http.MethodPost || request.URL.String() != uploadURL || request.Header.Get("Accept") != "application/json" || request.Header.Get("Cookie") != "TOKEN=TOKEN-DE-PRUEBA" || !strings.Contains(string(body), "EnvioBOLETA") || !strings.Contains(request.Header.Get("Content-Type"), "multipart/form-data") {
+						t.Fatal("invalid upload request")
+					}
+					return response("application/json", `{"trackid":123456}`), nil
+				default:
+					t.Fatalf("unexpected request %d", step)
+					return nil, nil
+				}
+			})}
 
-	submission, err := client.Submit(context.Background(), credentials, document)
-	if err != nil {
-		t.Fatalf("submit: %v", err)
-	}
-	if submission.TrackID != "123456" || submission.Status != "SUBMITTED" || step != 3 {
-		t.Fatalf("unexpected submission: %+v after %d requests", submission, step)
+			submission, err := client.Submit(context.Background(), credentials, document)
+			if err != nil {
+				t.Fatalf("submit: %v", err)
+			}
+			if submission.TrackID != "123456" || submission.Status != "SUBMITTED" || step != 3 {
+				t.Fatalf("unexpected submission: %+v after %d requests", submission, step)
+			}
+		})
 	}
 }
 
@@ -81,48 +86,56 @@ func TestClientRejectsSuccessfulHTTPUploadWithoutTrackID(t *testing.T) {
 }
 
 func TestClientQueriesProductionBoletaStatusThroughREST(t *testing.T) {
-	now := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
-	credentials := testCredentials(t, now)
-	credentials.Environment = EnvironmentProduction
-	credentials.IssuerRUT = "77654796-4"
-	step := 0
-	client := Client{Now: func() time.Time { return now }, HTTP: roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		step++
-		response := func(contentType, body string) *http.Response {
-			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{contentType}}, Body: io.NopCloser(strings.NewReader(body))}
-		}
-		switch step {
-		case 1:
-			if request.Method != http.MethodGet || request.URL.Host != "api.sii.cl" || request.URL.Path != "/recursos/v1/boleta.electronica.semilla" {
-				t.Fatalf("unexpected seed request: %s %s", request.Method, request.URL)
+	for _, environment := range []Environment{EnvironmentCertification, EnvironmentProduction} {
+		t.Run(string(environment), func(t *testing.T) {
+			now := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
+			credentials := testCredentials(t, now)
+			credentials.Environment = environment
+			apiHost := "api.sii.cl"
+			if environment == EnvironmentCertification {
+				apiHost = "apicert.sii.cl"
 			}
-			return response("application/xml", `<RESPUESTA><RESP_BODY><SEMILLA>1234567890</SEMILLA></RESP_BODY></RESPUESTA>`), nil
-		case 2:
-			body, readErr := io.ReadAll(request.Body)
-			if readErr != nil || request.Method != http.MethodPost || request.URL.Host != "api.sii.cl" || request.URL.Path != "/recursos/v1/boleta.electronica.token" || !strings.Contains(string(body), "<Signature") {
-				t.Fatalf("unexpected token request: %s %s", request.Method, request.URL)
-			}
-			return response("application/xml", `<RESPUESTA><RESP_BODY><TOKEN>TOKEN-BOLETA</TOKEN></RESP_BODY></RESPUESTA>`), nil
-		case 3:
-			if request.Method != http.MethodGet || request.URL.Host != "api.sii.cl" || request.URL.Path != "/recursos/v1/boleta.electronica.envio/77654796-4-24477625070" || request.Header.Get("Cookie") != "TOKEN=TOKEN-BOLETA" || request.Header.Get("Accept") != "application/json" {
-				t.Fatalf("unexpected status request: %s %s", request.Method, request.URL)
-			}
-			return response("application/json", `{"estado":"EPR","estadistica":[{"tipo":39,"informados":1,"aceptados":0,"rechazados":0,"reparos":1}],"detalle_rep_rech":[{"tipo":39,"folio":16004,"estado":"RPR","descripcion":"Dte Aceptado con reparos","error":[{"seccion":"DET","codigo":200,"descripcion":"Reparo de prueba","detalle":"detalle tecnico"}]}]}`), nil
-		default:
-			t.Fatalf("unexpected request %d", step)
-			return nil, nil
-		}
-	})}
+			credentials.IssuerRUT = "77654796-4"
+			step := 0
+			client := Client{Now: func() time.Time { return now }, HTTP: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				step++
+				response := func(contentType, body string) *http.Response {
+					return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{contentType}}, Body: io.NopCloser(strings.NewReader(body))}
+				}
+				switch step {
+				case 1:
+					if request.Method != http.MethodGet || request.URL.Host != apiHost || request.URL.Path != "/recursos/v1/boleta.electronica.semilla" {
+						t.Fatalf("unexpected seed request: %s %s", request.Method, request.URL)
+					}
+					return response("application/xml", `<RESPUESTA><RESP_BODY><SEMILLA>1234567890</SEMILLA></RESP_BODY></RESPUESTA>`), nil
+				case 2:
+					body, readErr := io.ReadAll(request.Body)
+					if readErr != nil || request.Method != http.MethodPost || request.URL.Host != apiHost || request.URL.Path != "/recursos/v1/boleta.electronica.token" || !strings.Contains(string(body), "<Signature") {
+						t.Fatalf("unexpected token request: %s %s", request.Method, request.URL)
+					}
+					return response("application/xml", `<RESPUESTA><RESP_BODY><TOKEN>TOKEN-BOLETA</TOKEN></RESP_BODY></RESPUESTA>`), nil
+				case 3:
+					if request.Method != http.MethodGet || request.URL.Host != apiHost || request.URL.Path != "/recursos/v1/boleta.electronica.envio/77654796-4-24477625070" || request.Header.Get("Cookie") != "TOKEN=TOKEN-BOLETA" || request.Header.Get("Accept") != "application/json" {
+						t.Fatalf("unexpected status request: %s %s", request.Method, request.URL)
+					}
+					return response("application/json", `{"estado":"EPR","estadistica":[{"tipo":39,"informados":1,"aceptados":0,"rechazados":0,"reparos":1}],"detalle_rep_rech":[{"tipo":39,"folio":16004,"estado":"RPR","descripcion":"Dte Aceptado con reparos","error":[{"seccion":"DET","codigo":200,"descripcion":"Reparo de prueba","detalle":"detalle tecnico"}]}]}`), nil
+				default:
+					t.Fatalf("unexpected request %d", step)
+					return nil, nil
+				}
+			})}
 
-	status, err := client.QuerySubmission(context.Background(), credentials, "24477625070")
-	if err != nil {
-		t.Fatalf("query submission: %v", err)
-	}
-	if step != 3 || status.State != "EPR" || status.Informed != 1 || status.Accepted != 0 || status.Rejected != 0 || status.Repairs != 1 || !status.Approved() {
-		t.Fatalf("unexpected status: %+v after %d requests", status, step)
-	}
-	if !strings.Contains(status.Detail, "Dte Aceptado con reparos") || !strings.Contains(status.Detail, "200: Reparo de prueba") {
-		t.Fatalf("missing SII diagnostic: %q", status.Detail)
+			status, err := client.QuerySubmission(context.Background(), credentials, "24477625070")
+			if err != nil {
+				t.Fatalf("query submission: %v", err)
+			}
+			if step != 3 || status.State != "EPR" || status.Informed != 1 || status.Accepted != 0 || status.Rejected != 0 || status.Repairs != 1 || !status.Approved() {
+				t.Fatalf("unexpected status: %+v after %d requests", status, step)
+			}
+			if !strings.Contains(status.Detail, "Dte Aceptado con reparos") || !strings.Contains(status.Detail, "200: Reparo de prueba") {
+				t.Fatalf("missing SII diagnostic: %q", status.Detail)
+			}
+		})
 	}
 }
 
