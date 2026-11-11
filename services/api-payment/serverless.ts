@@ -45,7 +45,20 @@ const siiConfig:IamStatement={Effect:'Allow',Action:['ssm:GetParameter','ssm:Get
 const taxConfigurationActiveParameter:IamStatement={Effect:'Allow',Action:['ssm:GetParameter','ssm:GetParameters','ssm:PutParameter'],Resource:siiParameterArn};
 const taxFolioConfigurationRead:IamStatement={Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringEquals':{'dynamodb:LeadingKeys':['TAX_FOLIO#39']}}};
 const taxDocumentObjects:IamStatement={Effect:'Allow',Action:['s3:PutObject','s3:GetObject'],Resource:`${receiptsBucketArn}/tax-documents/*`};
+const receivedRead:IamStatement={Effect:'Allow',Action:['dynamodb:GetItem','dynamodb:Query'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['DTE_RECEIVED#*','DTE_RECEIVED_ID#*','DTE_INBOX#*','DTE_MAIL#*','DTE_ACTION#*']}}};
+const receivedWrite:IamStatement={Effect:'Allow',Action:['dynamodb:PutItem','dynamodb:TransactWriteItems'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['DTE_RECEIVED#*','DTE_RECEIVED_ID#*','DTE_INBOX#*','DTE_MAIL#*','DTE_ACTION#*']}}};
+const receivedObjects:IamStatement={Effect:'Allow',Action:['s3:PutObject','s3:GetObject'],Resource:`${receiptsBucketArn}/tax-documents/received/*`};
+const receivedLease:IamStatement={Effect:'Allow',Action:['dynamodb:DeleteItem'],Resource:tableArn,Condition:{'ForAllValues:StringEquals':{'dynamodb:LeadingKeys':['DTE_INBOX#LEASE']}}};
+const receivedGmail=ssmReadPolicy({'Fn::Sub':`arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/${STAGE}/payments/sii/received-gmail`});
+const receivedRequestWrite:IamStatement={Effect:'Allow',Action:['dynamodb:PutItem'],Resource:tableArn,Condition:{'ForAllValues:StringEquals':{'dynamodb:LeadingKeys':['DTE_INBOX#REQUESTS']}}};
+const receivedManualRequests:IamStatement={Effect:'Allow',Action:['dynamodb:GetItem','dynamodb:PutItem','dynamodb:TransactWriteItems'],Resource:tableArn,Condition:{'ForAllValues:StringEquals':{'dynamodb:LeadingKeys':['DTE_INBOX#MANUAL','DTE_INBOX#REQUESTS']}}};
 const endpoints: GoHttpEndpoint[] = [
+  {name:'fn-solicitar-sincronizacion-dte-recibidos-v1',method:'POST',path:'/pagos/documentos-tributarios/recibidos/sincronizaciones',public:false,timeout:10,policies:[receivedManualRequests,{Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringEquals':{'dynamodb:LeadingKeys':['DTE_INBOX#SYNC']}}},{Effect:'Allow',Action:['lambda:InvokeFunction'],Resource:{'Fn::GetAtt':['FnDashsincronizarDashdteDashrecibidosDashv1LambdaFunction','Arn']}}]},
+  {name:'fn-obtener-sincronizacion-dte-recibidos-v1',method:'GET',path:'/pagos/documentos-tributarios/recibidos/sincronizaciones/{requestId}',public:false,timeout:10,policies:[receivedRead,receivedRequestWrite]},
+  {name:'fn-sincronizar-dte-recibidos-v1',timeout:300,memorySize:256,policies:[receivedRead,receivedWrite,receivedLease,receivedObjects,receivedGmail,siiConfig,{Effect:'Allow',Action:['sqs:SendMessage'],Resource:{'Fn::GetAtt':['ReceivedDteDLQ','Arn']}}]},
+  {name:'fn-listar-dte-recibidos-v1',method:'GET',path:'/pagos/documentos-tributarios/recibidos',public:false,timeout:10,policies:[receivedRead,receivedRequestWrite]},
+  {name:'fn-consultar-dte-recibido-v1',method:'POST',path:'/pagos/documentos-tributarios/recibidos/{documentId}/eventos',public:false,timeout:29,policies:[receivedRead,receivedWrite,siiConfig]},
+  {name:'fn-descargar-dte-recibido-v1',method:'GET',path:'/pagos/documentos-tributarios/recibidos/{documentId}/descarga',public:false,timeout:10,policies:[receivedRead,{Effect:'Allow',Action:['s3:GetObject'],Resource:`${receiptsBucketArn}/tax-documents/received/xml/*`}]},
   ...renditionEndpoints(),
 	{name:'fn-verificar-comprobante-publico-v1',method:'POST',path:'/pagos/comprobantes/verificaciones',public:true,timeout:10,policies:[{Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['RECEIPT#*','ATTEMPT#*','RATE#*']}}},rateWrite,lookupSecret]},
 	{name:'fn-consultar-boleta-electronica-v1',method:'POST',path:'/pagos/boletas/consultas',public:true,timeout:10,policies:[{Effect:'Allow',Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['TAX_PUBLIC#39#*','RATE#*']}}},rateWrite,lookupSecret]},
@@ -167,16 +180,22 @@ const deployEndpoints = STAGE === 'prd'
 const configuration = buildGoServiceServerless(ApiServices.Payment, deployEndpoints, {
 	env: { PAYMENTS_TABLE_NAME: tableName, CONFIGURATIONS_TABLE_NAME:configurationsName, PAYMENTS_BASE_URL: baseUrl, PAYMENTS_PORTAL_URL:portalUrl, PAYMENTS_CHECKOUT_ENABLED:'true', PROGRAMS_TABLE_NAME:contractsName, RECEIPTS_BUCKET_NAME:receiptsBucketName },
 });
+Object.assign(configuration.functions!['fn-sincronizar-dte-recibidos-v1'], {onError:{'Fn::GetAtt':['ReceivedDteDLQ','Arn']}, maximumRetryAttempts:2, maximumEventAge:3600});
 configuration.resources ??= { Resources: {} };
 const resources = configuration.resources.Resources as Record<string, unknown> | undefined;
 (configuration.resources as { Resources: Record<string, unknown> }).Resources = {
   ...(resources ?? {}),
+  ReceivedDteDLQ: {Type:'AWS::SQS::Queue',Properties:{MessageRetentionPeriod:1209600,SqsManagedSseEnabled:true}},
+  ReceivedDteScheduleRole: {Type:'AWS::IAM::Role',Properties:{AssumeRolePolicyDocument:{Version:'2012-10-17',Statement:[{Effect:'Allow',Principal:{Service:'scheduler.amazonaws.com'},Action:'sts:AssumeRole'}]},Policies:[{PolicyName:'invoke-dte-inbox',PolicyDocument:{Version:'2012-10-17',Statement:[{Effect:'Allow',Action:'lambda:InvokeFunction',Resource:{'Fn::GetAtt':['FnDashsincronizarDashdteDashrecibidosDashv1LambdaFunction','Arn']}},{Effect:'Allow',Action:'sqs:SendMessage',Resource:{'Fn::GetAtt':['ReceivedDteDLQ','Arn']}}]}}]}},
+  ReceivedDteSchedule: {Type:'AWS::Scheduler::Schedule',Properties:{ScheduleExpression:STAGE==='prd'?'rate(20 minutes)':'rate(1 hour)',FlexibleTimeWindow:{Mode:'OFF'},Target:{Arn:{'Fn::GetAtt':['FnDashsincronizarDashdteDashrecibidosDashv1LambdaFunction','Arn']},RoleArn:{'Fn::GetAtt':['ReceivedDteScheduleRole','Arn']},RetryPolicy:{MaximumRetryAttempts:2,MaximumEventAgeInSeconds:3600},DeadLetterConfig:{Arn:{'Fn::GetAtt':['ReceivedDteDLQ','Arn']}}}}},
   PaymentReconciliationDLQ: { Type:'AWS::SQS::Queue', Properties:{MessageRetentionPeriod:1209600,SqsManagedSseEnabled:true}},
   PaymentReconciliationQueue: { Type:'AWS::SQS::Queue', Properties:{VisibilityTimeout:60,ReceiveMessageWaitTimeSeconds:20,MessageRetentionPeriod:1209600,SqsManagedSseEnabled:true,RedrivePolicy:{deadLetterTargetArn:{'Fn::GetAtt':['PaymentReconciliationDLQ','Arn']},maxReceiveCount:5}}},
 };
 configuration.resources.Outputs = {
   ...configuration.resources.Outputs,
   PaymentReconciliationDLQName: { Value: { 'Fn::GetAtt': ['PaymentReconciliationDLQ', 'QueueName'] } },
+  ReceivedDteDLQUrl: {Value:{Ref:'ReceivedDteDLQ'}},
+  ReceivedDteDLQArn: {Value:{'Fn::GetAtt':['ReceivedDteDLQ','Arn']}},
 };
 module.exports = configuration;
 

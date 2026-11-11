@@ -12,13 +12,16 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"go.uber.org/zap"
 )
 
 // App contiene clientes y metadatos de ejecución; no conserva secretos en logs.
 type App struct {
+	received             receivedProbe
 	db                   dynamoStore
 	ssm                  parameterAPI
 	stage, topic, region string
@@ -35,7 +38,15 @@ func New(ctx context.Context) (*App, error) {
 	if err != nil {
 		return nil, errors.New("MONITOR_AWS_CONFIG_FAILED")
 	}
-	return &App{db: dynamoStore{client: dynamodb.NewFromConfig(cfg), table: table}, ssm: ssm.NewFromConfig(cfg), stage: stage, topic: topic, region: cfg.Region, log: zap.NewExample()}, nil
+	app := &App{db: dynamoStore{client: dynamodb.NewFromConfig(cfg), table: table}, ssm: ssm.NewFromConfig(cfg), stage: stage, topic: topic, region: cfg.Region, log: zap.NewExample()}
+	if stage == "prd" {
+		queueURL := os.Getenv("RECEIVED_DTE_DLQ_URL")
+		if queueURL == "" {
+			return nil, errors.New("DTE_MONITOR_ENV_INVALID")
+		}
+		app.received = receivedAWSProbe{db: app.db.client, metrics: cloudwatch.NewFromConfig(cfg), queue: sqs.NewFromConfig(cfg), table: table, queueURL: queueURL, stage: stage}
+	}
+	return app, nil
 }
 func (a *App) dependencies(ctx context.Context, now time.Time) (config, mailer, error) {
 	raw, err := parameter(ctx, a.ssm, a.stage, "khipu/renditions/monitoring-config")
@@ -88,7 +99,12 @@ func (a *App) Monitor(ctx context.Context) (resultErr error) {
 			resultErr = errors.Join(resultErr, err)
 		}
 	}()
-	if err := runMonitor(ctx, a.db, mail, c, now); err != nil {
+	var receivedErr error
+	if a.received != nil {
+		receivedErr = runReceivedMonitor(ctx, a.received, a.db, mail, c, now)
+	}
+	renditionErr := runMonitor(ctx, a.db, mail, c, now)
+	if receivedErr != nil || renditionErr != nil {
 		return errors.New("MONITOR_RUN_FAILED")
 	}
 	a.log.Info("monitor heartbeat", zap.Any("_aws", map[string]any{"Timestamp": time.Now().UnixMilli(), "CloudWatchMetrics": []any{map[string]any{"Namespace": "Indomito/Renditions", "Dimensions": [][]string{{"Stage"}}, "Metrics": []any{map[string]any{"Name": "MonitorHeartbeat", "Unit": "Count"}}}}}), zap.String("Stage", a.stage), zap.Int("MonitorHeartbeat", 1))
@@ -109,7 +125,11 @@ func alarmMessage(record events.SNSEventRecord, stage, topic, region string) (st
 	if (alarm.NewStateValue != "ALARM" && alarm.NewStateValue != "OK") || !regexp.MustCompile(`^khipu-renditions-`+regexp.QuoteMeta(stage)+`-[A-Za-z0-9-]+$`).MatchString(alarm.AlarmName) {
 		return "", "", errors.New("MONITOR_ALARM_INVALID")
 	}
-	return "Alarma Khipu: " + alarm.NewStateValue, alarm.AlarmName + "\nEstado: " + alarm.NewStateValue + "\nRevisa la alarma en CloudWatch (" + region + ").", nil
+	subject := "Alarma Khipu: "
+	if alarm.AlarmName == "khipu-renditions-"+stage+"-MonitorNotHealthy" {
+		subject = "Alarma del monitor de pagos y DTE: "
+	}
+	return subject + alarm.NewStateValue, alarm.AlarmName + "\nEstado: " + alarm.NewStateValue + "\nRevisa la alarma en CloudWatch (" + region + ").", nil
 }
 
 // Alarm recibe exclusivamente notificaciones del topic SNS propio del ambiente.

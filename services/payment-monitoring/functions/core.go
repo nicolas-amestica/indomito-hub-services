@@ -140,6 +140,10 @@ func inspect(ctx context.Context, row item, db store, c config, now time.Time) (
 }
 
 func notifyFindings(ctx context.Context, findings []finding, db store, mail sender, c config, now time.Time) error {
+	return notifyFindingsWithSubject(ctx, findings, db, mail, c, now, "Rendiciones Khipu: revisión requerida")
+}
+
+func notifyFindingsWithSubject(ctx context.Context, findings []finding, db store, mail sender, c config, now time.Time, subject string) error {
 	var due []item
 	var labels []string
 	for _, f := range findings {
@@ -164,7 +168,7 @@ func notifyFindings(ctx context.Context, findings []finding, db store, mail send
 	if len(due) == 0 {
 		return nil
 	}
-	if err := mail.Send(ctx, "Rendiciones Khipu: revisión requerida", strings.Join(labels, "\n")); err != nil {
+	if err := mail.Send(ctx, subject, strings.Join(labels, "\n")); err != nil {
 		return err
 	}
 	// Persistir solo después de aceptación SMTP. Un fallo puede repetir el aviso,

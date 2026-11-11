@@ -28,6 +28,7 @@ for (const [id, name] of [['Receiver', 'fn-recibir-rendicion-khipu-v1'], ['Worke
 }
 alarm('ReceiverRejected', 'ReceiverRejected', namespace, dimensions);
 alarm('MonitorNotHealthy', 'MonitorHeartbeat', namespace, dimensions, 3600, 1, 'breaching', 'LessThanThreshold');
+(resources.MonitorNotHealthy as {Properties:Record<string,unknown>}).Properties.AlarmDescription = 'El monitor de pagos y recepción DTE no confirmó salud. Revisar SSM/SMTP, permisos, métricas Lambda, cola de fallos DTE y estado de última lectura; las alertas internas podrían estar detenidas.';
 alarm('MonitorErrors', 'Errors', 'AWS/Lambda', [{ Name: 'FunctionName', Value: `payment-monitoring-${STAGE}-monitor` }]);
 // Sin acción circular: si SMTP falla, queda alarma y cola de fallos en AWS.
 alarm('EmailDeliveryErrors', 'Errors', 'AWS/Lambda', [{ Name: 'FunctionName', Value: `payment-monitoring-${STAGE}-alarm` }], 300, 1, 'notBreaching', 'GreaterThanOrEqualToThreshold', false);
@@ -54,12 +55,19 @@ const configuration: AWS = {
   provider: {
     name: 'aws', runtime: 'provided.al2023', architecture: 'arm64', stage: STAGE, region: REGION,
     deploymentBucket: { name: DEPLOYMENT_BUCKET }, timeout: 180, memorySize: 256, logRetentionInDays: 30,
-    environment: { APP_STAGE: STAGE, PAYMENTS_TABLE_NAME: tableName, ALARM_TOPIC_ARN: topic },
+    environment: { APP_STAGE: STAGE, PAYMENTS_TABLE_NAME: tableName, ALARM_TOPIC_ARN: topic,
+      ...(STAGE === 'prd' ? {RECEIVED_DTE_DLQ_URL:`\${cf:api-payment-${STAGE}.ReceivedDteDLQUrl}`} : {}),
+    },
     iam: { role: { statements: [
       { Effect: 'Allow', Action: ['ssm:GetParameter'], Resource: ['receipt-smtp', 'khipu/renditions/monitoring-config'].map(suffix => ({ 'Fn::Sub': `arn:\${AWS::Partition}:ssm:\${AWS::Region}:\${AWS::AccountId}:parameter/indomito/${STAGE}/payments/${suffix}` })) },
       { Effect: 'Allow', Action: ['dynamodb:Query', 'dynamodb:GetItem'], Resource: tableArn, Condition: { 'ForAllValues:StringLike': { 'dynamodb:LeadingKeys': ['RENDITION_MONTH#*', 'RENDITION#*', 'CASH#*', 'TRIP#*', 'RENDITION_MONITOR'] } } },
       { Effect: 'Allow', Action: ['dynamodb:PutItem', 'dynamodb:DeleteItem'], Resource: tableArn, Condition: { 'ForAllValues:StringEquals': { 'dynamodb:LeadingKeys': ['RENDITION_MONITOR'] } } },
       { Effect: 'Allow', Action: ['sqs:SendMessage'], Resource: { 'Fn::GetAtt': ['AlertDeliveryFailures', 'Arn'] } },
+      ...(STAGE === 'prd' ? [
+        {Effect:'Allow' as const,Action:['dynamodb:GetItem'],Resource:tableArn,Condition:{'ForAllValues:StringEquals':{'dynamodb:LeadingKeys':['DTE_INBOX#SYNC']}}},
+        {Effect:'Allow' as const,Action:['sqs:GetQueueAttributes'],Resource:`\${cf:api-payment-${STAGE}.ReceivedDteDLQArn}`},
+        {Effect:'Allow' as const,Action:['cloudwatch:GetMetricStatistics'],Resource:'*'},
+      ] : []),
     ] } },
   },
   package: { individually: true },

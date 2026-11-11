@@ -1,5 +1,46 @@
 {
   "paths": {
+    "/pagos/documentos-tributarios/recibidos/sincronizaciones": {
+      "post": {
+        "summary": "Solicita sincronización manual asíncrona del correo tributario",
+        "responses": { "202": { "description": "Envelope queued/request/lastSuccess. request contiene id ULID, status PENDING/RUNNING/COMPLETED/FAILED, fechas y detail. queued=false reutiliza una solicitud activa o reciente. El 202 no confirma procesamiento." }, "403": { "description": "Solo administrador de pagos" }, "502": { "description": "No fue posible solicitar la sincronización" } }
+      }
+    },
+    "/pagos/documentos-tributarios/recibidos/sincronizaciones/{requestId}": {
+      "get": {
+        "summary": "Consulta el estado persistido de una sincronización manual",
+        "parameters": [{"name":"requestId","in":"path","required":true,"schema":{"type":"string","pattern":"^[0-9A-HJKMNP-TV-Z]{26}$"}}],
+        "responses": {"200":{"description":"Envelope request; no-store. Solo COMPLETED confirma lectura terminada. Las esperas vencidas quedan FAILED."},"403":{"description":"Solo administrador de pagos"},"404":{"description":"Solicitud no encontrada"}}
+      }
+    },
+    "/pagos/documentos-tributarios/recibidos": {
+      "get": {
+        "summary": "Lista DTE recibidos por mes de emisión",
+        "parameters": [
+          { "name": "month", "in": "query", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$" } },
+          { "name": "cursor", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Envelope con items, nextCursor, sync, issues y manualSync (última solicitud manual o null); no-store" }, "403": { "description": "Solo administrador de pagos" } }
+      }
+    },
+    "/pagos/documentos-tributarios/recibidos/{documentId}/eventos": {
+      "parameters": [
+        { "name": "documentId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-f0-9]{64}$" } },
+        { "name": "month", "in": "query", "required": true, "schema": { "type": "string" } }
+      ],
+      "post": {
+        "summary": "Consulta o registra aceptación, acuse o reclamo SII",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "action": { "type": "string", "enum": ["", "ACD", "ERM", "RCD", "RFP", "RFT"] }, "commandId": { "type": "string" }, "reason": { "type": "string", "maxLength": 500 }, "confirmed": { "type": "boolean" } } } } } },
+        "responses": { "200": { "description": "Envelope document/result/successful; revisar result.code, no solo HTTP" }, "409": { "description": "Conflicto, comando usado o decisión incompatible" }, "503": { "description": "Servicio no disponible; consultar SII antes de repetir decisión" } }
+      }
+    },
+    "/pagos/documentos-tributarios/recibidos/{documentId}/descarga": {
+      "parameters": [
+        { "name": "documentId", "in": "path", "required": true, "schema": { "type": "string" } },
+        { "name": "month", "in": "query", "required": true, "schema": { "type": "string" } }
+      ],
+      "get": { "summary": "Descarga original XML mediante URL temporal privada", "responses": { "200": { "description": "Envelope con url firmada por dos minutos" } } }
+    },
     "/pagos/boletas/consultas": {
       "post": {
         "summary": "Consulta publica de una boleta electronica",

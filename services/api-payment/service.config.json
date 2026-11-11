@@ -13,6 +13,12 @@
     "PAYMENTS_PORTAL_URL"
   ],
   "functions": [
+    {"name":"fn-obtener-sincronizacion-dte-recibidos-v1","entrypoint":"./cmd/fn-obtener-sincronizacion-dte-recibidos-v1"},
+    {"name":"fn-solicitar-sincronizacion-dte-recibidos-v1","entrypoint":"./cmd/fn-solicitar-sincronizacion-dte-recibidos-v1"},
+    {"name":"fn-sincronizar-dte-recibidos-v1","entrypoint":"./cmd/fn-sincronizar-dte-recibidos-v1"},
+    {"name":"fn-listar-dte-recibidos-v1","entrypoint":"./cmd/fn-listar-dte-recibidos-v1"},
+    {"name":"fn-consultar-dte-recibido-v1","entrypoint":"./cmd/fn-consultar-dte-recibido-v1"},
+    {"name":"fn-descargar-dte-recibido-v1","entrypoint":"./cmd/fn-descargar-dte-recibido-v1"},
     {"name":"fn-capturar-rendicion-khipu-v1","entrypoint":"./cmd/fn-capturar-rendicion-khipu-v1","stages":["prd"]},
     {"name":"fn-recibir-rendicion-khipu-v1","entrypoint":"./cmd/fn-recibir-rendicion-khipu-v1"},
     {"name":"fn-procesar-rendiciones-khipu-v1","entrypoint":"./cmd/fn-procesar-rendiciones-khipu-v1"},
