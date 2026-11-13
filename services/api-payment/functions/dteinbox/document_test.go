@@ -21,6 +21,14 @@ func signedFixture(t *testing.T) []byte {
 }
 
 func signedFixtureProfile(t *testing.T, standalone bool) []byte {
+	return signedFixtureContext(t, standalone, false)
+}
+
+func signedFixtureContext(t *testing.T, standalone, envelope bool) []byte {
+	return signedFixturePayment(t, standalone, envelope, "")
+}
+
+func signedFixturePayment(t *testing.T, standalone, envelope bool, payment string) []byte {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -37,6 +45,9 @@ func signedFixtureProfile(t *testing.T, standalone bool) []byte {
 		t.Fatal(err)
 	}
 	signer, err := dsig.NewSigningContext(key, [][]byte{der})
+	if payment != "" {
+		doc.Root().FindElement("Documento/Encabezado/IdDoc").CreateElement("FmaPago").SetText(payment)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,6 +58,9 @@ func signedFixtureProfile(t *testing.T, standalone bool) []byte {
 		t.Fatal(err)
 	}
 	target := doc.Root().FindElement("Documento")
+	if envelope {
+		signer.Prefix = ""
+	}
 	if standalone {
 		target = target.Copy()
 		signer.Prefix = ""
@@ -56,7 +70,7 @@ func signedFixtureProfile(t *testing.T, standalone bool) []byte {
 		t.Fatal(err)
 	}
 	doc.Root().AddChild(signature)
-	if standalone {
+	if standalone || envelope {
 		envelope := etree.NewDocument()
 		root := envelope.CreateElement("EnvioDTE")
 		root.CreateAttr("xmlns", "http://www.sii.cl/SiiDte")
@@ -69,6 +83,52 @@ func signedFixtureProfile(t *testing.T, standalone bool) []byte {
 		t.Fatal(err)
 	}
 	return raw
+}
+
+func TestSignedPaymentForms(t *testing.T) {
+	for _, tc := range []struct {
+		name, value string
+		expected    int
+		valid       bool
+	}{
+		{"ausente es credito", "", 2, true},
+		{"contado", "1", 1, true},
+		{"credito", "2", 2, true},
+		{"gratuito", "3", 3, true},
+		{"invalido", "4", 0, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			docs, err := ParseDocuments(signedFixturePayment(t, false, false, tc.value), "76111111-1", time.Now())
+			if (err == nil) != tc.valid {
+				t.Fatalf("valid=%v err=%v", tc.valid, err)
+			}
+			if tc.valid && docs[0].PaymentForm != tc.expected {
+				t.Fatal("forma de pago incorrecta")
+			}
+		})
+	}
+}
+
+func TestNamespacedSignatureBeforeEnvelope(t *testing.T) {
+	original := signedFixtureContext(t, false, true)
+	for _, test := range []struct {
+		name  string
+		raw   []byte
+		valid bool
+	}{
+		{"namespace SII previo al sobre xsi", original, true},
+		{"monto alterado", []byte(strings.Replace(string(original), "11900", "11901", 1)), false},
+		{"receptor alterado", []byte(strings.Replace(string(original), "76111111-1", "76111111-2", 1)), false},
+		{"namespace alterado", []byte(strings.Replace(string(original), `<Documento ID=`, `<Documento xmlns="urn:other" ID=`, 1)), false},
+		{"firma alterada", []byte(strings.Replace(string(original), "<SignatureValue>", "<SignatureValue>AAAA", 1)), false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := ParseDocuments(test.raw, "76111111-1", time.Now())
+			if (err == nil) != test.valid {
+				t.Fatalf("valid=%v err=%v", test.valid, err)
+			}
+		})
+	}
 }
 
 func TestStandaloneProviderSignatureAndTampering(t *testing.T) {

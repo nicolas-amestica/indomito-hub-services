@@ -180,7 +180,19 @@ func ReceivedTaxDocumentsHandler(ctx context.Context, req events.APIGatewayV2HTT
 	}
 	client := sii.Client{HTTP: &http.Client{Timeout: 6 * time.Second}, Now: time.Now}
 	if input.Action != "" {
+		if restriction := document.RegistryRestriction(); restriction != "" {
+			code := 27
+			return reply(map[string]any{"document": document, "result": sii.ReceivedResult{Code: &code, Description: restriction, Events: []sii.ReceivedEvent{}}, "successful": false})
+		}
 		prior, e := client.ReceivedRegistry(ctx, credentials, document.IssuerRUT, document.Kind, document.Folio, "")
+		if e == nil && prior.Code != nil && *prior.Code == 27 {
+			document.Registry = &prior
+			document.LastCheckedAt = time.Now().UTC().Format(time.RFC3339)
+			if err = store.Update(ctx, document); err != nil {
+				return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
+			}
+			return reply(map[string]any{"document": document, "result": prior, "successful": false})
+		}
 		if e != nil || prior.Code == nil || (*prior.Code != 15 && *prior.Code != 16) {
 			return adminFailure(req, 409, "PAYMENT_STATE_CONFLICT")
 		}

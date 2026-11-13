@@ -34,6 +34,7 @@ type Document struct {
 	IssuerName    string              `json:"issuerName"`
 	ReceiverRUT   string              `json:"receiverRut"`
 	Kind          int                 `json:"kind"`
+	PaymentForm   int                 `json:"paymentForm,omitempty"`
 	Folio         int64               `json:"folio"`
 	IssueDate     string              `json:"issueDate"`
 	Total         int64               `json:"total"`
@@ -224,6 +225,13 @@ func ParseDocuments(raw []byte, receiver string, now time.Time) ([]Document, err
 		if err != nil {
 			return nil, err
 		}
+		item.PaymentForm = 2 // El formato SII asume crédito cuando FmaPago está ausente.
+		if payment := value("IdDoc/FmaPago"); payment != "" {
+			item.PaymentForm, err = strconv.Atoi(payment)
+			if err != nil || item.PaymentForm < 1 || item.PaymentForm > 3 {
+				return nil, errors.New("forma de pago inválida")
+			}
+		}
 		item.Folio, err = strconv.ParseInt(value("IdDoc/Folio"), 10, 64)
 		if err != nil || item.Folio < 1 {
 			return nil, errors.New("folio inválido")
@@ -347,6 +355,17 @@ func verifySignature(node *etree.Element, cert *x509.Certificate) error {
 	standaloneInfo := signatureCopy.FindElement("SignedInfo")
 	if standaloneInfo == nil {
 		return standardErr
+	}
+	// El Portal MiPyme firma con el namespace SII del DTE, antes de incorporar
+	// el sobre que declara xsi. Reconstruir ese contexto conserva el namespace
+	// del documento y el de XMLDSIG, sin heredar declaraciones del transporte.
+	// La restricción anterior impide retirar namespaces usados por el contenido.
+	if document.NamespaceURI() == "http://www.sii.cl/SiiDte" {
+		standaloneDocument := document.Copy()
+		standaloneDocument.CreateAttr("xmlns", "http://www.sii.cl/SiiDte")
+		if err = verify(standaloneDocument, standaloneInfo); err == nil {
+			return nil
+		}
 	}
 	if err = verify(document.Copy(), standaloneInfo); err != nil {
 		return standardErr
