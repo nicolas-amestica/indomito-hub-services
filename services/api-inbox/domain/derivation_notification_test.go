@@ -3,7 +3,11 @@ package domain
 import (
 	"context"
 	"errors"
+	"fmt"
+	gomail "github.com/wneessen/go-mail"
+	"strings"
 	"testing"
+	"time"
 )
 
 type derivationNotifierFake struct {
@@ -101,5 +105,49 @@ func TestEmailDerivationNotifierValidatesConfiguration(t *testing.T) {
 	_, err = NewEmailDerivationNotifier(DerivationSMTPConfig{Host: "smtp.example.com", Port: 25, User: "user", Password: "secret", From: "no-reply@girasindomito.cl"}, "info@girasindomito.cl")
 	if err == nil {
 		t.Fatal("expected invalid SMTP port")
+	}
+}
+
+func TestDerivationEmailIncludesBrandedHTMLAndCompleteEscapedTranscript(t *testing.T) {
+	notifier, err := NewEmailDerivationNotifier(DerivationSMTPConfig{Host: "smtp.example.com", Port: 587, User: "user", Password: "secret", From: "no-reply@girasindomito.cl"}, "info@girasindomito.cl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	notification := DerivationNotification{SourcePhone: "56911112222", MessageID: "wamid.reference", ReasonLabel: "Atención humana", Detail: "Sur de Chile y Bariloche", ConversationURL: "https://nuevo.admin.girasindomito.cl/comunicaciones/conversaciones?telefono=56911112222"}
+	for i := range 10 {
+		notification.History = append(notification.History, DerivationTranscriptMessage{Author: "Cliente", Text: fmt.Sprintf("Mensaje %d: <script>unsafe</script>\n%s", i, strings.Repeat("Texto largo ", 300)), CreatedAt: time.Date(2026, 11, 13, 12, i, 0, 0, time.UTC)})
+	}
+	message, err := notifier.derivationMessage(notification)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := message.GetParts()
+	if len(parts) != 2 {
+		t.Fatalf("expected plain and HTML, got %d", len(parts))
+	}
+	for _, part := range parts {
+		raw, err := part.GetContent()
+		if err != nil {
+			t.Fatal(err)
+		}
+		body := string(raw)
+		for i := range 10 {
+			if !strings.Contains(body, fmt.Sprintf("Mensaje %d:", i)) {
+				t.Fatalf("missing message %d", i)
+			}
+		}
+		if !strings.Contains(body, strings.Repeat("Texto largo ", 300)) {
+			t.Fatal("transcript was truncated")
+		}
+		if part.GetContentType() == gomail.TypeTextHTML {
+			for _, expected := range []string{"Giras Indómito", "Últimos mensajes", "&lt;script&gt;", "Abrir conversación en Hub"} {
+				if !strings.Contains(body, expected) {
+					t.Fatalf("missing %s", expected)
+				}
+			}
+			if strings.Contains(body, "<script>") || strings.Contains(body, "documento correspondiente se encuentra adjunto") {
+				t.Fatal("unsafe HTML or payment-specific copy")
+			}
+		}
 	}
 }

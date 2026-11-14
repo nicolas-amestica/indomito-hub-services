@@ -122,6 +122,11 @@ func handle(ctx context.Context, event events.SQSEvent) (events.SQSEventResponse
 		return events.SQSEventResponse{}, err
 	}
 	processor.SetManagedConfig(managed)
+	access, accessErr := domain.NewDerivationAccessService(db, table, derivationNotification.HubBaseURL)
+	if accessErr != nil {
+		return events.SQSEventResponse{}, accessErr
+	}
+	processor.SetDerivationAccess(access)
 	var emailNotifier *domain.EmailDerivationNotifier
 	if managed != nil && strings.TrimSpace(managed.Policies.HandoffEmail) != "" {
 		var smtp domain.DerivationSMTPConfig
@@ -141,6 +146,7 @@ func handle(ctx context.Context, event events.SQSEvent) (events.SQSEventResponse
 			if notifierErr != nil {
 				return events.SQSEventResponse{}, notifierErr
 			}
+			notifier.SetAccessLinks(access)
 			notifiers = append(notifiers, notifier)
 		}
 		if derivationNotification.EmailEnabled && emailNotifier != nil {

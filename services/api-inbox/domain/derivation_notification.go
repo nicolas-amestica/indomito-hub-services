@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -11,8 +12,10 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	_ "time/tzdata"
 
-	"crypto/tls"
+	"ind-hub-api-gox-sls-pri-gh/libs/brandedemail"
+
 	gomail "github.com/wneessen/go-mail"
 )
 
@@ -26,6 +29,7 @@ type DerivationNotificationConfig struct {
 	Enabled           bool   `json:"enabled"`
 	TemplateName      string `json:"templateName"`
 	Language          string `json:"language"`
+	HubBaseURL        string `json:"hubBaseUrl"`
 	SMTPParameterPath string `json:"smtpParameterPath"`
 	RecipientPhone    string `json:"-"`
 	EmailEnabled      bool   `json:"-"`
@@ -44,10 +48,15 @@ type DerivationSMTPConfig struct {
 // DerivationNotification contains the safe context rendered in the approved
 // WhatsApp template.
 type DerivationNotification struct {
-	SourcePhone string
-	MessageID   string
-	Detail      string
-	ReasonLabel string
+	SourcePhone        string
+	MessageID          string
+	Detail             string
+	ReasonLabel        string
+	Alias              string
+	DerivedAt          time.Time
+	History            []DerivationTranscriptMessage
+	HistoryUnavailable bool
+	ConversationURL    string
 }
 
 // DerivationNotifier alerts the internal team without exposing provider
@@ -78,6 +87,7 @@ type derivationTemplateSender interface {
 type WhatsAppDerivationNotifier struct {
 	sender derivationTemplateSender
 	config DerivationNotificationConfig
+	access *DerivationAccessService
 }
 
 // NewWhatsAppDerivationNotifier validates and constructs the internal alert.
@@ -91,21 +101,38 @@ func NewWhatsAppDerivationNotifier(sender derivationTemplateSender, config Deriv
 	return &WhatsAppDerivationNotifier{sender: sender, config: config}, nil
 }
 
-// NotifyDerivation sends customer phone, latest question and derivation label.
+// SetAccessLinks habilita el enlace temporal dentro del detalle de la plantilla existente.
+func (n *WhatsAppDerivationNotifier) SetAccessLinks(access *DerivationAccessService) {
+	n.access = access
+}
+
+// NotifyDerivation conserva las tres variables de la plantilla aprobada.
 func (n *WhatsAppDerivationNotifier) NotifyDerivation(ctx context.Context, notification DerivationNotification) error {
 	contactURL, err := whatsappContactURL(notification.SourcePhone)
 	if err != nil {
 		return err
 	}
-	detail := normalizeDerivationText(notification.Detail, 900)
+	detail := normalizeDerivationText(strings.Join(strings.Fields(notification.Detail), " "), 900)
 	if detail == "" {
 		detail = "Consulta sin texto disponible"
 	}
-	label := normalizeDerivationText(notification.ReasonLabel, 120)
+	label := normalizeDerivationText(strings.Join(strings.Fields(notification.ReasonLabel), " "), 120)
 	if label == "" {
 		label = "Requiere atencion del equipo"
 	}
-	digest := sha256.Sum256([]byte(notification.SourcePhone + "\x00" + notification.MessageID + "\x00" + detail + "\x00" + label))
+	if n.access != nil {
+		link, linkErr := n.access.CreateLink(ctx, notification)
+		linkLabel := " | Ver conversación en Hub (enlace de un uso; abrir en 24 h): "
+		if linkErr != nil {
+			// La derivación sigue llegando aunque falle la emisión del permiso.
+			emitProviderFailure("DerivationAccessFailures", "create")
+			link = n.access.ConversationURL(notification.SourcePhone)
+			linkLabel = " | Abrir conversación en Hub (requiere iniciar sesión): "
+		}
+		suffix := linkLabel + link
+		detail = normalizeDerivationText(detail, 900-len([]rune(suffix))) + suffix
+	}
+	digest := sha256.Sum256([]byte(notification.SourcePhone + "\x00" + notification.MessageID + "\x00" + label))
 	clientMessageID := "derivation-" + hex.EncodeToString(digest[:16])
 	_, err = n.sender.SendTemplate(ctx, "agent-derivation", n.config.RecipientPhone, clientMessageID, SendTemplate{
 		Name:       n.config.TemplateName,
@@ -115,7 +142,7 @@ func (n *WhatsAppDerivationNotifier) NotifyDerivation(ctx context.Context, notif
 	return err
 }
 
-// EmailDerivationNotifier sends a plain-text backup to the configured mailbox.
+// EmailDerivationNotifier envía el contexto con diseño de marca y alternativa de texto plano.
 type EmailDerivationNotifier struct {
 	config    DerivationSMTPConfig
 	recipient string
@@ -132,42 +159,81 @@ func NewEmailDerivationNotifier(config DerivationSMTPConfig, recipient string) (
 }
 
 func (n *EmailDerivationNotifier) NotifyDerivation(ctx context.Context, notification DerivationNotification) error {
-	contactURL, err := whatsappContactURL(notification.SourcePhone)
+	message, err := n.derivationMessage(notification)
 	if err != nil {
 		return err
 	}
-	detail := normalizeDerivationText(notification.Detail, 2000)
-	if detail == "" {
-		detail = "Consulta sin texto disponible"
+	return n.send(ctx, message)
+}
+
+func (n *EmailDerivationNotifier) derivationMessage(notification DerivationNotification) (*gomail.Msg, error) {
+	contactURL, err := whatsappContactURL(notification.SourcePhone)
+	if err != nil {
+		return nil, err
 	}
 	label := normalizeDerivationText(notification.ReasonLabel, 200)
 	if label == "" {
-		label = "Requiere atencion del equipo"
+		label = "Requiere atención del equipo"
+	}
+	detail := notification.Detail
+	if strings.TrimSpace(detail) == "" {
+		detail = "Consulta sin texto disponible"
+	}
+	content := brandedemail.Content{Preheader: "Una conversación de WhatsApp necesita atención del equipo", Eyebrow: "Derivación de WhatsApp", Title: "Una conversación necesita tu atención", Lead: "Revisa el contexto antes de contactar al cliente.", Body: detail, Details: []brandedemail.Detail{{Label: "Teléfono del cliente", Value: notification.SourcePhone}, {Label: "Motivo", Value: label}}, Actions: []brandedemail.Action{{Label: "Contactar por WhatsApp", URL: contactURL}}}
+	if notification.Alias != "" && notification.Alias != notification.SourcePhone {
+		content.Details = append(content.Details, brandedemail.Detail{Label: "Cliente", Value: notification.Alias})
+	}
+	if !notification.DerivedAt.IsZero() {
+		content.Details = append(content.Details, brandedemail.Detail{Label: "Fecha de derivación", Value: derivationEmailTime(notification.DerivedAt)})
+	}
+	if notification.ConversationURL != "" {
+		content.Actions = append(content.Actions, brandedemail.Action{Label: "Abrir conversación en Hub", URL: notification.ConversationURL})
+	}
+	var plain strings.Builder
+	fmt.Fprintf(&plain, "Teléfono del cliente: %s\nMotivo: %s\nDetalle: %s\nWhatsApp: %s\n", notification.SourcePhone, label, detail, contactURL)
+	if notification.ConversationURL != "" {
+		fmt.Fprintf(&plain, "Conversación en Hub: %s\n", notification.ConversationURL)
+	}
+	plain.WriteString("\nÚltimos mensajes de la conversación (del más antiguo al más reciente):\n")
+	for _, m := range notification.History {
+		timestamp := derivationEmailTime(m.CreatedAt)
+		content.Messages = append(content.Messages, brandedemail.Message{Author: m.Author, Timestamp: timestamp, Text: m.Text})
+		fmt.Fprintf(&plain, "\n[%s] %s:\n%s\n", timestamp, m.Author, m.Text)
+	}
+	if notification.HistoryUnavailable {
+		content.HistoryNotice = "No se pudo recuperar todo el historial. Abre la conversación en Hub para revisar el contexto completo."
+	} else {
+		content.HistoryNotice = fmt.Sprintf("Se incluyen los últimos %d mensajes disponibles entre el cliente y el agente IA, en orden cronológico.", len(notification.History))
+	}
+	content.Notice = "Para responder o gestionar la conversación, ingresa a Indómito Hub con tu cuenta."
+	fmt.Fprintf(&plain, "\n%s\nReferencia técnica: %s\n", content.HistoryNotice, notification.MessageID)
+	content.Reference = notification.MessageID
+	rendered, err := brandedemail.Render(content)
+	if err != nil {
+		return nil, err
 	}
 	message := gomail.NewMsg()
-	if err := message.From(n.config.From); err != nil {
-		return fmt.Errorf("configure derivation email sender: %w", err)
+	if err = message.From(n.config.From); err != nil {
+		return nil, fmt.Errorf("configure derivation email sender: %w", err)
 	}
-	if err := message.To(n.recipient); err != nil {
-		return fmt.Errorf("configure derivation email recipient: %w", err)
+	if err = message.To(n.recipient); err != nil {
+		return nil, fmt.Errorf("configure derivation email recipient: %w", err)
 	}
-	message.Subject("Conversacion de WhatsApp derivada")
-	message.SetBodyString(gomail.TypeTextPlain, fmt.Sprintf("Telefono del cliente: %s\nWhatsApp: %s\nMotivo: %s\nDetalle: %s\nMensaje: %s\n", notification.SourcePhone, contactURL, label, detail, notification.MessageID))
-	message.AddAlternativeString(gomail.TypeTextHTML, fmt.Sprintf("<p><strong>Telefono del cliente:</strong> <a href=\"%s\">%s</a></p><p><strong>Motivo:</strong> %s</p><p><strong>Detalle:</strong> %s</p><p><strong>Mensaje:</strong> %s</p>", html.EscapeString(contactURL), html.EscapeString(notification.SourcePhone), html.EscapeString(label), html.EscapeString(detail), html.EscapeString(notification.MessageID)))
-	options := []gomail.Option{gomail.WithPort(n.config.Port), gomail.WithUsername(n.config.User), gomail.WithPassword(n.config.Password), gomail.WithSMTPAuth(gomail.SMTPAuthPlain), gomail.WithTLSConfig(&tls.Config{ServerName: n.config.Host, MinVersion: tls.VersionTLS12}), gomail.WithTimeout(20 * time.Second)}
-	if n.config.Port == 465 {
-		options = append(options, gomail.WithSSL())
-	} else {
-		options = append(options, gomail.WithTLSPolicy(gomail.TLSMandatory))
+	message.Subject("Conversación de WhatsApp derivada")
+	message.SetBodyString(gomail.TypeTextPlain, plain.String())
+	message.AddAlternativeString(gomail.TypeTextHTML, rendered)
+	return message, nil
+}
+
+func derivationEmailTime(value time.Time) string {
+	if value.IsZero() {
+		return "Fecha no disponible"
 	}
-	client, err := gomail.NewClient(n.config.Host, options...)
+	location, err := time.LoadLocation("America/Santiago")
 	if err != nil {
-		return fmt.Errorf("configure derivation SMTP: %w", err)
+		return value.UTC().Format("02/01/2006 15:04 UTC")
 	}
-	if err = client.DialAndSendWithContext(ctx, message); err != nil {
-		return fmt.Errorf("send derivation SMTP: %w", err)
-	}
-	return nil
+	return value.In(location).Format("02/01/2006 15:04 -07:00")
 }
 
 // NotifyAgentQuota emits a high-visibility operational alert without exposing the API key.

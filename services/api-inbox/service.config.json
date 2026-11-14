@@ -20,6 +20,8 @@
     "INBOX_WEBSOCKET_URL"
   ],
   "functions": [
+    { "name": "fn-canjear-derivacion-v1", "entrypoint": "./cmd/fn-canjear-derivacion-v1" },
+    { "name": "fn-leer-derivacion-v1", "entrypoint": "./cmd/fn-leer-derivacion-v1" },
     {
       "name": "fn-obtener-conversaciones-v1",
       "entrypoint": "./cmd/fn-obtener-conversaciones-v1"

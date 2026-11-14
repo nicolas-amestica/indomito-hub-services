@@ -20,6 +20,7 @@ func (r Route) Register(e *echo.Echo, handler echo.HandlerFunc) {
 
 // Routes contiene la superficie HTTP normativa del servicio.
 var Routes = []Route{
+	RedeemDerivationRoute, ReadDerivationRoute,
 	GetAgentManagementRoute,
 	GetOperationalMetricsRoute,
 	SaveAgentDraftRoute,
@@ -83,5 +84,8 @@ var RestoreAgentConfigRoute = Route{Method: http.MethodPost, Path: "/configuraci
 var PrepareAgentAssetRoute = Route{Method: http.MethodPost, Path: "/configuracion-agente/programas/cargas"}
 var PrepareAgentAssetDownloadRoute = Route{Method: http.MethodGet, Path: "/configuracion-agente/programas/descargas"}
 
+var RedeemDerivationRoute = Route{Method: http.MethodPost, Path: "/derivaciones/canjes"}
+var ReadDerivationRoute = Route{Method: http.MethodPost, Path: "/derivaciones/lecturas"}
+
 // ImplementedRoutes contiene sólo endpoints con handler y binario desplegable.
-var ImplementedRoutes = []Route{GetAgentManagementRoute, GetOperationalMetricsRoute, SaveAgentDraftRoute, PublishAgentConfigRoute, RestoreAgentConfigRoute, PrepareAgentAssetRoute, PrepareAgentAssetDownloadRoute, ListConversationsRoute, GetConversationRoute, SendReplyRoute, ListTemplatesRoute, SendTemplateRoute, SendReactionRoute, SendRichMessageRoute, PrepareAttachmentsRoute, SendAttachmentRoute, UpdateContactRoute, MarkUnreadRoute, ReactivateAgentRoute, DeleteConversationRoute, StartMarkAllReadRoute, StartRecalculateUnreadRoute, CreateSubscriptionRoute, GetSendRoute, RetrySendRoute, ResolveSendRoute, GetActiveBulkRoute, GetBulkRoute, VerifyWhatsAppWebhookRoute, ReceiveWhatsAppWebhookRoute}
+var ImplementedRoutes = []Route{RedeemDerivationRoute, ReadDerivationRoute, GetAgentManagementRoute, GetOperationalMetricsRoute, SaveAgentDraftRoute, PublishAgentConfigRoute, RestoreAgentConfigRoute, PrepareAgentAssetRoute, PrepareAgentAssetDownloadRoute, ListConversationsRoute, GetConversationRoute, SendReplyRoute, ListTemplatesRoute, SendTemplateRoute, SendReactionRoute, SendRichMessageRoute, PrepareAttachmentsRoute, SendAttachmentRoute, UpdateContactRoute, MarkUnreadRoute, ReactivateAgentRoute, DeleteConversationRoute, StartMarkAllReadRoute, StartRecalculateUnreadRoute, CreateSubscriptionRoute, GetSendRoute, RetrySendRoute, ResolveSendRoute, GetActiveBulkRoute, GetBulkRoute, VerifyWhatsAppWebhookRoute, ReceiveWhatsAppWebhookRoute}

@@ -96,6 +96,7 @@ type AgentService struct {
 	now           func() time.Time
 	tools         *AgentToolbox
 	mutations     *ConversationMutationService
+	accessLinks   *DerivationAccessService
 	notifier      DerivationNotifier
 	quotaNotifier AgentQuotaNotifier
 	managed       *AgentManagedConfig
@@ -104,6 +105,9 @@ type AgentService struct {
 var meetLinkPattern = regexp.MustCompile(`https://meet\.google\.com/[a-z0-9-]+`)
 
 func (s *AgentService) SetManagedConfig(config *AgentManagedConfig) { s.managed = config }
+
+// SetDerivationAccess agrega el destino autenticado de Hub a los correos.
+func (s *AgentService) SetDerivationAccess(access *DerivationAccessService) { s.accessLinks = access }
 
 // SetDerivationNotifier enables the optional internal WhatsApp alert.
 func (s *AgentService) SetDerivationNotifier(notifier DerivationNotifier) {
@@ -291,7 +295,29 @@ func (s *AgentService) notifyDerivation(ctx context.Context, phone, messageID st
 	if detail == "" && len(latest.Attachments) > 0 {
 		detail = "Adjunto: " + latest.Attachments[0].FileName
 	}
-	if err := s.notifier.NotifyDerivation(ctx, DerivationNotification{SourcePhone: phone, MessageID: messageID, Detail: detail, ReasonLabel: label}); err != nil {
+	notification := DerivationNotification{SourcePhone: phone, MessageID: messageID, Detail: detail, ReasonLabel: label, DerivedAt: time.Now().UTC()}
+	if s.now != nil {
+		notification.DerivedAt = s.now().UTC()
+	}
+	if s.accessLinks != nil {
+		notification.ConversationURL = s.accessLinks.ConversationURL(phone)
+	}
+	if s.db != nil {
+		summary, summaryErr := s.conversationSummary(ctx, phone)
+		if summaryErr == nil {
+			notification.Alias = summary.Alias
+		}
+		history, historyErr := s.derivationHistory(ctx, phone, latest)
+		notification.History = history
+		notification.HistoryUnavailable = historyErr != nil
+	} else {
+		notification.HistoryUnavailable = true
+	}
+	if len(notification.History) == 0 {
+		notification.HistoryUnavailable = true
+		notification.History = []DerivationTranscriptMessage{derivationTranscript(latest)}
+	}
+	if err := s.notifier.NotifyDerivation(ctx, notification); err != nil {
 		emitProviderFailure("DerivationNotificationFailures", "notify")
 		log.Printf("derivation notification failed: %v", err)
 	}

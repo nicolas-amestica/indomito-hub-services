@@ -24,6 +24,9 @@ const INBOX_WEBSOCKET_MANAGEMENT_ENDPOINT = `\${cf:${WEBSOCKET_STACK}.WebSocketM
 const INBOX_PARAMETER_ARN = {
   "Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/${STAGE}/inbox/*`,
 };
+const DERIVATION_PARAMETER_ARN = {
+  "Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/${STAGE}/inbox/derivation-notification-config`,
+};
 const GOOGLE_CALENDAR_OAUTH_PARAMETER_ARN = {
   "Fn::Sub": `arn:\${AWS::Partition}:ssm:${REGION}:\${AWS::AccountId}:parameter/indomito/${STAGE}/google/calendar-oauth`,
 };
@@ -34,6 +37,40 @@ const INBOX_OPERATIONAL_ALERTS_TOPIC = { Ref: "InboxOperationalAlerts" };
 const FREE_TIER_READ_ROLE_ARN = "arn:aws:iam::691725736887:role/IndomitoHubFreeTierReadRole";
 
 const endpoints: GoHttpEndpoint[] = [
+  // El canje es público; la lectura usa exclusivamente el contexto del authorizer compartido.
+  {
+    name: "fn-canjear-derivacion-v1",
+    method: "POST",
+    path: "/derivaciones/canjes",
+    public: true, memorySize: 128, timeout: 12,
+    description: "Canjea una derivacion de un uso por 30 minutos de lectura",
+    policies: [
+      { Effect: "Allow", Action: ["dynamodb:GetItem"], Resource: TABLE_ARN,
+        Condition: { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["DERIVATION_LINK#*"] } } },
+      // DynamoDB autoriza cada operación de la transacción por su acción subyacente.
+      { Effect: "Allow", Action: ["dynamodb:DeleteItem"], Resource: TABLE_ARN,
+        Condition: { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["DERIVATION_LINK#*"] },
+          "ForAnyValue:StringEquals": { "dynamodb:EnclosingOperation": ["TransactWriteItems"] } } },
+      { Effect: "Allow", Action: ["dynamodb:PutItem"], Resource: TABLE_ARN,
+        Condition: { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["DERIVATION_SESSION#*"] },
+          "ForAnyValue:StringEquals": { "dynamodb:EnclosingOperation": ["TransactWriteItems"] } } },
+      ssmReadPolicy(DERIVATION_PARAMETER_ARN),
+    ],
+  },
+  {
+    name: "fn-leer-derivacion-v1",
+    method: "POST",
+    path: "/derivaciones/lecturas",
+    public: false, memorySize: 128, timeout: 12,
+    description: "Lee exclusivamente la conversacion del permiso temporal",
+    policies: [
+      { Effect: "Allow", Action: ["dynamodb:GetItem"], Resource: TABLE_ARN,
+        Condition: { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["DERIVATION_SESSION#*"] } } },
+      { Effect: "Allow", Action: ["dynamodb:Query"], Resource: TABLE_ARN,
+        Condition: { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["CONV#*"] } } },
+      ssmReadPolicy(DERIVATION_PARAMETER_ARN),
+    ],
+  },
   {
     name: "fn-obtener-configuracion-agente-v1",
     method: "GET",

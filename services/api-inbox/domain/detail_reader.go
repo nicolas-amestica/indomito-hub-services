@@ -138,8 +138,8 @@ func readMessages(ctx context.Context, reader detailReader, tableName, phone, be
 		return nil, false, "", fmt.Errorf("decode conversation messages: %w", err)
 	}
 	normalizeMessages(messages)
-	hasMore := len(messages) > pageSize
-	if hasMore {
+	hasMore := len(messages) > pageSize || len(output.LastEvaluatedKey) > 0
+	if len(messages) > pageSize {
 		messages = messages[:pageSize]
 	}
 	slices.Reverse(messages)

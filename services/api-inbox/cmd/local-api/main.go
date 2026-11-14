@@ -8,10 +8,12 @@ import (
 
 	"ind-hub-api-gox-sls-pri-gh/libs/logger"
 	"ind-hub-api-gox-sls-pri-gh/services/api-inbox/functions"
+	redeemderivation "ind-hub-api-gox-sls-pri-gh/services/api-inbox/functions/canjear-derivacion-v1"
 	subscription "ind-hub-api-gox-sls-pri-gh/services/api-inbox/functions/crear-suscripcion-v1"
 	deleteconversation "ind-hub-api-gox-sls-pri-gh/services/api-inbox/functions/eliminar-conversacion-v1"
 	markallread "ind-hub-api-gox-sls-pri-gh/services/api-inbox/functions/iniciar-marcar-leidas-v1"
 	recalculateunread "ind-hub-api-gox-sls-pri-gh/services/api-inbox/functions/iniciar-recalcular-no-leidas-v1"
+	readderivation "ind-hub-api-gox-sls-pri-gh/services/api-inbox/functions/leer-derivacion-v1"
 	markunread "ind-hub-api-gox-sls-pri-gh/services/api-inbox/functions/marcar-no-leida-v1"
 	detail "ind-hub-api-gox-sls-pri-gh/services/api-inbox/functions/obtener-conversacion-v1"
 	endpoint "ind-hub-api-gox-sls-pri-gh/services/api-inbox/functions/obtener-conversaciones-v1"
@@ -24,7 +26,7 @@ import (
 
 func main() {
 	log := logger.New("api-inbox-local", "startup", "local")
-	if err := functions.RunLocal(context.Background(), endpoint.Register, detail.Register, markunread.Register, reactivateagent.Register, deleteconversation.Register, markallread.Register, recalculateunread.Register, subscription.Register, activeoperation.Register, operation.Register, verifywebhook.Register, receivewebhook.Register); err != nil {
+	if err := functions.RunLocal(context.Background(), redeemderivation.Register, readderivation.Register, endpoint.Register, detail.Register, markunread.Register, reactivateagent.Register, deleteconversation.Register, markallread.Register, recalculateunread.Register, subscription.Register, activeoperation.Register, operation.Register, verifywebhook.Register, receivewebhook.Register); err != nil {
 		log.Error("localServerError", zap.Error(err))
 		_ = log.Sync()
 		os.Exit(1)

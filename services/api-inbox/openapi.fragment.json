@@ -6,6 +6,12 @@
   },
   "components": {
     "securitySchemes": {
+      "DerivationSessionAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque",
+        "description": "Permiso temporal de lectura emitido por el canje; no es un JWT ni una sesión administrativa."
+      },
       "BearerAuth": {
         "type": "http",
         "scheme": "bearer",
@@ -13,6 +19,113 @@
       }
     },
     "schemas": {
+      "DerivationRedeem": {"type": "object", "additionalProperties": false, "properties": {"token": {"type": "string", "pattern": "^[A-Za-z0-9_-]{43}$"}}, "required": ["token"]},
+      "DerivationRead": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "before": {
+            "type": "string",
+            "pattern": "^$|^MSG#[0-9A-HJKMNP-TV-Z]{26}$",
+            "description": "Vacío para la primera página; luego usar nextBefore."
+          }
+        },
+        "required": [
+          "before"
+        ]
+      },
+      "DerivationSession": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "sessionToken": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "sessionToken",
+          "expiresAt"
+        ]
+      },
+      "DerivationTranscriptMessage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "customer",
+              "ai_agent",
+              "team"
+            ]
+          },
+          "author": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "author",
+          "createdAt",
+          "text"
+        ]
+      },
+      "DerivationPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "phone": {
+            "type": "string"
+          },
+          "alias": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "derivedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DerivationTranscriptMessage"
+            }
+          },
+          "nextBefore": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "phone",
+          "alias",
+          "reason",
+          "derivedAt",
+          "expiresAt",
+          "messages"
+        ]
+      },
       "MetaReferral": {
         "type": "object",
         "additionalProperties": false,
@@ -232,6 +345,118 @@
     }
   },
   "paths": {
+    "/derivaciones/canjes": {
+      "post": {
+        "tags": [
+          "Inbox"
+        ],
+        "operationId": "derivationCanjes",
+        "summary": "Canjear un enlace de derivación de un uso (24 horas)",
+        "security": [],
+        "description": "Permiso opaco de alcance exclusivo a una conversación. Tokens en el cuerpo POST; sin JWT, mutaciones ni sesiones de Hub. Respuestas Cache-Control: no-store. Un canje atómico invalida el enlace; las vistas previas GET nunca lo consumen.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DerivationRedeem"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Permiso válido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/DerivationSession"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida"
+          },
+          "410": {
+            "description": "Permiso desconocido, utilizado o vencido"
+          },
+          "500": {
+            "description": "Error interno sin información del permiso"
+          }
+        }
+      }
+    },
+    "/derivaciones/lecturas": {
+      "post": {
+        "tags": [
+          "Inbox"
+        ],
+        "operationId": "derivationLecturas",
+        "summary": "Leer una conversación con sesión temporal de 30 minutos",
+        "security": [
+          {
+            "DerivationSessionAuth": []
+          }
+        ],
+        "description": "El Lambda Authorizer compartido valida la sesión opaca Bearer de 30 minutos en DynamoDB en cada solicitud. El backend solo acepta el contexto de sesión verificado y no recibe el token en el cuerpo. Alcance exclusivo a una conversación, sin mutaciones ni permisos administrativos.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DerivationRead"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Permiso válido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/DerivationPage"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida"
+          },
+          "410": {
+            "description": "Permiso desconocido, utilizado o vencido"
+          },
+          "500": {
+            "description": "Error interno sin información del permiso"
+          },
+          "401": {
+            "description": "Cabecera Authorization ausente"
+          },
+          "403": {
+            "description": "Sesión desconocida, vencida o no autorizada por el authorizer"
+          }
+        }
+      }
+    },
     "/configuracion-agente": {
       "get": { "operationId": "getAgentManagement", "security": [{ "BearerAuth": [] }], "responses": { "200": { "description": "Borrador, version publicada e historial" }, "401": { "description": "No autenticado" }, "500": { "description": "Fallo interno" } } }
     },

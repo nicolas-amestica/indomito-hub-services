@@ -37,7 +37,7 @@
 
 ## Seguridad
 
-- Auth: JWT propio HMAC-SHA256, validado por el Lambda Authorizer del repo `authorizer` (stack `iam-auth-{stage}`) en el API Gateway compartido. Un solo punto de autorizacion: los microservicios no validan tokens por su cuenta
+- Auth: JWT propio HMAC-SHA256, validado por el Lambda Authorizer del repo `authorizer` (stack `iam-auth-{stage}`) en el API Gateway compartido. Un solo punto de autorización: también valida las sesiones opacas de lectura temporal de Inbox; los microservicios consumen su contexto y no validan tokens de sesión por su cuenta
 - Azure EntraID: el codigo existe en el authorizer pero esta **deshabilitado** (`azureEnabled: false`). El proyecto no usa Azure como proveedor de identidad
 - Credenciales: AWS Secrets Manager / SSM Parameter Store, nunca hardcodeadas
 - **Variables de entorno**: unicamente via AWS SSM Parameter Store tipo **SecureString**. Prohibido usar variables de entorno planas (no encriptadas), archivos `.env` en producción, u otro servicio distinto de SSM SecureString para este fin.
