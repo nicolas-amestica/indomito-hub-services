@@ -138,12 +138,14 @@ func TestVerifyCreatedMeetingRequiresPersistedCalendarEvidence(t *testing.T) {
 
 func TestCreateMeetingAcceptsContactExplicitInLatestMessage(t *testing.T) {
 	t.Parallel()
+	calendarWrites := 0
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Host {
 		case "oauth2.googleapis.com":
 			return jsonResponse(http.StatusOK, `{"access_token":"token"}`), nil
 		case "www.googleapis.com":
 			if request.Method == http.MethodPost {
+				calendarWrites++
 				var body struct {
 					ExtendedProperties struct {
 						Private map[string]string `json:"private"`
@@ -155,6 +157,9 @@ func TestCreateMeetingAcceptsContactExplicitInLatestMessage(t *testing.T) {
 				}
 				if body.ExtendedProperties.Private["agent"] != "true" || body.ExtendedProperties.Private["phoneNumber"] != "56959139687" {
 					t.Fatalf("unexpected private meeting metadata %#v", body.ExtendedProperties.Private)
+				}
+				if body.ExtendedProperties.Private["hostSk"] != "MEET_HOST#configured" || body.ExtendedProperties.Private["hostName"] != "Coordinadora" || body.ExtendedProperties.Private["hostColor"] != "#6366f1" {
+					t.Fatalf("missing configured default host: %#v", body.ExtendedProperties.Private)
 				}
 				if body.ExtendedProperties.Shared["createdBy"] != "indomito-inbox-agent" {
 					t.Fatalf("unexpected shared meeting metadata %#v", body.ExtendedProperties.Shared)
@@ -176,6 +181,16 @@ func TestCreateMeetingAcceptsContactExplicitInLatestMessage(t *testing.T) {
 		oauth:   GoogleOAuthConfig{ClientID: "client", ClientSecret: "secret", RefreshToken: "refresh"},
 		http:    client,
 		now:     func() time.Time { return now },
+	}
+	toolbox.defaultMeetingHost = func(context.Context) (*MeetingHost, error) { return nil, nil }
+	missing, missingErr := toolbox.createMeeting(context.Background(), "56959139687", map[string]any{
+		"nombreCliente": "Nicolás", "emailCliente": "niamesvi3@gmail.com", "fechaSugerida": "2026-10-29", "horaSugerida": "14:30",
+	})
+	if missingErr != nil || stringArg(missing, "codigo") != "MEETING_DEFAULT_HOST_NOT_CONFIGURED" || calendarWrites != 0 {
+		t.Fatalf("created without a configured default host: result=%#v err=%v writes=%d", missing, missingErr, calendarWrites)
+	}
+	toolbox.defaultMeetingHost = func(context.Context) (*MeetingHost, error) {
+		return &MeetingHost{SK: "MEET_HOST#configured", Name: "Coordinadora", Color: "#6366f1", Active: true}, nil
 	}
 	state := &agentExecutionState{latestCustomerMessage: "Nicolas niamesvi3@gmail.com", currentCustomerTurn: "Nicolas niamesvi3@gmail.com"}
 	result, _, err := toolbox.execute(context.Background(), "56959139687", "message-1", "crear_reunion", map[string]any{

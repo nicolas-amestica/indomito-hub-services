@@ -11,6 +11,8 @@ const S3_STACK = `indomito-hub-infra-s3-${STAGE}`;
 const WEBSOCKET_STACK = `indomito-hub-infra-websocket-${STAGE}`;
 const TABLE_NAME = `\${cf:${DDB_STACK}.ConversacionesTableName}`;
 const TABLE_ARN = `\${cf:${DDB_STACK}.ConversacionesTableArn}`;
+const CONFIGURATIONS_TABLE_NAME = `\${cf:${DDB_STACK}.ConfiguracionesTableName}`;
+const CONFIGURATIONS_TABLE_ARN = `\${cf:${DDB_STACK}.ConfiguracionesTableArn}`;
 const TABLE_STREAM_ARN = `\${cf:${DDB_STACK}.ConversacionesTableStreamArn}`;
 const INBOX_BUCKET_NAME = `\${cf:${S3_STACK}.InboxTemporaryBucketName}`;
 const INBOX_BUCKET_OBJECTS_ARN = `\${cf:${S3_STACK}.InboxTemporaryBucketArn}/*`;
@@ -342,8 +344,11 @@ const endpoints: GoHttpEndpoint[] = [
     memorySize: 512,
     timeout: 180,
     description: "Procesa el agente Gemini, audio y controles de frecuencia de Inbox",
+    env: { CONFIGURATIONS_TABLE_NAME },
     events: [{ sqs: { arn: { "Fn::GetAtt": ["InboxAgentQueue", "Arn"] }, batchSize: 1, functionResponseType: "ReportBatchItemFailures" } }],
     policies: [
+      { Effect: "Allow", Action: ["dynamodb:GetItem"], Resource: CONFIGURATIONS_TABLE_ARN,
+        Condition: { "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["CONFIGURATION"] } } },
       dynamodbCrudPolicy(TABLE_ARN), s3ObjectPolicy(INBOX_BUCKET_OBJECTS_ARN), ssmReadPolicy(INBOX_PARAMETER_ARN), ssmReadPolicy(GOOGLE_CALENDAR_OAUTH_PARAMETER_ARN), ssmReadPolicy(PAYMENTS_RECEIPT_SMTP_PARAMETER_ARN),
       { Effect: "Allow", Action: ["s3:ListBucket"], Resource: INBOX_ASSETS_BUCKET_ARN },
       { Effect: "Allow", Action: ["s3:GetObject"], Resource: INBOX_ASSETS_BUCKET_OBJECTS_ARN },

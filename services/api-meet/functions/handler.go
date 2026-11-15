@@ -64,8 +64,11 @@ func toView(e calendarEvent)map[string]any{
  if link==""{for _,entry:=range e.ConferenceData.EntryPoints{if entry.EntryPointType=="video"{link=entry.URI;break}}}
  meetingCode:=e.ConferenceData.ConferenceID
  if meetingCode==""&&link!="" {if parsed,parseErr:=url.Parse(link);parseErr==nil&&parsed.Host=="meet.google.com"{meetingCode=strings.Trim(parsed.Path,"/")}}
- agent:=e.ExtendedProperties.Private["agent"]=="true"||e.ExtendedProperties.Shared["createdBy"]=="indomito-inbox-agent"
- return map[string]any{"id":e.ID,"title":e.Summary,"date":date,"startTime":start,"endTime":end,"description":e.Description,"guests":guests,"googleMeetLink":link,"meetingCode":meetingCode,"createdAt":e.Created,"hostSk":e.ExtendedProperties.Private["hostSk"],"hostName":e.ExtendedProperties.Private["hostName"],"hostColor":e.ExtendedProperties.Private["hostColor"],"phoneNumber":e.ExtendedProperties.Private["phoneNumber"],"agent":agent}
+ agent:=isAgentMeeting(e)
+ hostSK,hostName:=e.ExtendedProperties.Private["hostSk"],e.ExtendedProperties.Private["hostName"]
+ if hostSK==""{hostSK=e.ExtendedProperties.Shared["defaultHostSk"]}
+ if hostName==""{hostName=e.ExtendedProperties.Shared["defaultHostName"]}
+ return map[string]any{"id":e.ID,"title":e.Summary,"date":date,"startTime":start,"endTime":end,"description":e.Description,"guests":guests,"googleMeetLink":link,"meetingCode":meetingCode,"createdAt":e.Created,"hostSk":hostSK,"hostName":hostName,"hostColor":e.ExtendedProperties.Private["hostColor"],"phoneNumber":e.ExtendedProperties.Private["phoneNumber"],"agent":agent}
 }
 func deterministicEventID(calendarID,key string)string{
  hash:=sha256.Sum256([]byte(calendarID+"|"+key))
@@ -125,6 +128,7 @@ func handleWithClient(ctx context.Context,req events.APIGatewayV2HTTPRequest,cli
   original,fetchErr:=client.Request(ctx,"GET",id,nil,nil)
   if fetchErr!=nil{return fail(502,"google_calendar_error"),nil}
   if json.Unmarshal(original,&existing)!=nil{return fail(502,"invalid_calendar_response"),nil}
+  if isAgentMeeting(existing)&&input.Title!=existing.Summary{return reply(409,map[string]string{"error":"agent_meeting_title_locked","code":"MEETING_AGENT_TITLE_LOCKED"}),nil}
   for k,v:=range existing.ExtendedProperties.Private{private[k]=v}
  }
  if method=="POST" && input.IdempotencyKey!="" {
@@ -141,7 +145,8 @@ func handleWithClient(ctx context.Context,req events.APIGatewayV2HTTPRequest,cli
  if input.HostSK!=nil{private["hostSk"]=*input.HostSK}
  if input.HostName!=nil{private["hostName"]=*input.HostName}
  if input.HostColor!=nil{private["hostColor"]=*input.HostColor}
- if input.Agent!=nil{private["agent"]=strconv.FormatBool(*input.Agent)}
+ // El origen lo establece el creador, nunca un checkbox de edición.
+ if method=="PUT" {private["agent"]=strconv.FormatBool(isAgentMeeting(existing))} else {private["agent"]="false"}
  if input.PhoneNumber!=nil{private["phoneNumber"]=*input.PhoneNumber}
  description:=input.Description
  if link:=private["meetLink"];link!=""&&!strings.Contains(description,link){

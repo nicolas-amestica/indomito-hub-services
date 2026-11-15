@@ -61,14 +61,15 @@ type agentAssetStore interface {
 
 // AgentToolbox executes trusted side effects requested through Gemini function calling.
 type AgentToolbox struct {
-	storage agentAssetStore
-	sender  AgentSender
-	assets  AgentAssetConfig
-	meeting AgentMeetingConfig
-	oauth   GoogleOAuthConfig
-	http    *http.Client
-	now     func() time.Time
-	managed *AgentManagedConfig
+	storage            agentAssetStore
+	sender             AgentSender
+	assets             AgentAssetConfig
+	meeting            AgentMeetingConfig
+	oauth              GoogleOAuthConfig
+	http               *http.Client
+	now                func() time.Time
+	managed            *AgentManagedConfig
+	defaultMeetingHost func(context.Context) (*MeetingHost, error)
 }
 
 func (t *AgentToolbox) SetManagedConfig(config *AgentManagedConfig) { t.managed = config }
@@ -853,13 +854,23 @@ func (t *AgentToolbox) createMeeting(ctx context.Context, phone string, args map
 	if err != nil {
 		return nil, err
 	}
+	host := &MeetingHost{SK: t.meeting.DefaultHostSK, Name: t.meeting.DefaultHostName}
+	if t.defaultMeetingHost != nil {
+		host, err = t.defaultMeetingHost(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if host == nil {
+			return map[string]any{"exito": false, "codigo": "MEETING_DEFAULT_HOST_NOT_CONFIGURED", "mensaje": "No hay un anfitrión predeterminado activo configurado."}, nil
+		}
+	}
 	attendees := t.attendees(email)
 	body := map[string]any{
 		"summary": fmt.Sprintf("AG — %s [%s]", name, code), "description": "Reunión informativa sobre giras de estudio.", "colorId": "4",
 		"start": map[string]string{"dateTime": date + "T" + clockValue + ":00", "timeZone": t.meeting.Timezone},
 		"end":   map[string]string{"dateTime": t.endDateTime(date, clockValue), "timeZone": t.meeting.Timezone}, "attendees": attendees,
 		"reminders":          map[string]any{"useDefault": false, "overrides": []map[string]any{{"method": "popup", "minutes": 60}, {"method": "popup", "minutes": 15}}},
-		"extendedProperties": map[string]any{"private": map[string]string{"phoneNumber": strings.TrimPrefix(phone, "+"), "eventCode": code, "agent": "true"}, "shared": map[string]string{"createdBy": "indomito-inbox-agent", "defaultHostSk": t.meeting.DefaultHostSK, "defaultHostName": t.meeting.DefaultHostName}},
+		"extendedProperties": map[string]any{"private": map[string]string{"phoneNumber": strings.TrimPrefix(phone, "+"), "eventCode": code, "agent": "true", "hostSk": host.SK, "hostName": host.Name, "hostColor": host.Color}, "shared": map[string]string{"createdBy": "indomito-inbox-agent", "defaultHostSk": host.SK, "defaultHostName": host.Name}},
 		"conferenceData":     map[string]any{"createRequest": map[string]any{"requestId": code + "-" + strconv.FormatInt(t.now().UnixNano(), 10), "conferenceSolutionKey": map[string]string{"type": "hangoutsMeet"}}},
 	}
 	var event calendarEvent

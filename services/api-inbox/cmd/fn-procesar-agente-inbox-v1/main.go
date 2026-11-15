@@ -116,6 +116,7 @@ func handle(ctx context.Context, event events.SQSEvent) (events.SQSEventResponse
 	if err != nil {
 		return events.SQSEventResponse{}, err
 	}
+	toolbox.SetDefaultMeetingHost(db, os.Getenv("CONFIGURATIONS_TABLE_NAME"))
 	toolbox.SetManagedConfig(managed)
 	processor, err := domain.NewAgentService(db, storage, transcribe.NewFromConfig(cfg), sender, toolbox, table, agent, gemini)
 	if err != nil {

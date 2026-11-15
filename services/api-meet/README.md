@@ -51,3 +51,11 @@ Para aprobar la integración real, en un calendario exclusivo de pruebas:
 7. Restaurar el identificador del calendario DEV previsto, sin modificar registros reales.
 
 No declarar producción lista hasta disponer de evidencia de todas estas pruebas.
+
+## Origen y anfitrión de las reuniones
+
+El campo `agent` de la respuesta indica origen, no activa al agente. POST crea reuniones manuales (`agent=false`) y PUT conserva el origen guardado en Calendar, aunque el cliente envíe otro valor. En reuniones de IA, PUT rechaza un título distinto del original con HTTP 409 y `code=MEETING_AGENT_TITLE_LOCKED`, para preservar el código incorporado por Inbox. Horario, descripción, invitados y anfitrión siguen siendo editables; DELETE conserva su comportamiento.
+
+Inbox consulta el puntero vigente `CONFIGURATION / MEET_HOST_DEFAULT` y después `CONFIGURATION / MEET_HOST#<hostId>` en la tabla de configuraciones, con lecturas consistentes por clave. Guarda `hostSk`, `hostName` y `hostColor` como propiedades privadas del evento. Si no existe un predeterminado activo, no crea el evento. El procesador requiere `CONFIGURATIONS_TABLE_NAME` y permiso `dynamodb:GetItem` limitado a esa partición, declarados en `api-inbox/serverless.ts`.
+
+GET también reconoce los metadatos históricos `shared.createdBy`, `shared.defaultHostSk` y `shared.defaultHostName`; no reescribe eventos existentes.
