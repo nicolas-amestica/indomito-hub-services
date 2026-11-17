@@ -12,11 +12,12 @@ import (
 	"strings"
 	"time"
 
+	"ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
 )
 
 // Database permite probar las garantías transaccionales sin depender de AWS.
@@ -346,10 +347,7 @@ func (s Service) Apply(ctx context.Context, command Command, transition func(col
 		if command.Reference == "" || c.Event.Amount <= 0 || (c.Event.Type != "PAYMENT_RECEIVED" && c.Event.Type != "PAYMENT_REQUIRES_REVIEW" && c.Event.Type != "DEPOSIT_RECEIVED") {
 			return collection.Change{}, collection.ErrInvalid
 		}
-		receipt := record{PK: "RECEIPT#" + command.ReceiptID, SK: "META", ReceiptID: command.ReceiptID, ReceiptEmail: command.ReceiptEmail, Event: &c.Event, Status: "PENDING_DOCUMENT"}
-		if identity, identityErr := s.read(ctx, "TRIP#"+a.TripID, "MEMBER#"+a.ID); identityErr == nil && identity.Roster != nil && strings.TrimSpace(identity.Roster.Name) != "" && strings.TrimSpace(identity.Roster.Document) != "" {
-			receipt.DocumentVersion, receipt.PassengerName, receipt.PassengerDocument = 3, strings.TrimSpace(identity.Roster.Name), strings.TrimSpace(identity.Roster.Document)
-		}
+		receipt := record{PK: "RECEIPT#" + command.ReceiptID, SK: "META", ReceiptID: command.ReceiptID, ReceiptEmail: command.ReceiptEmail, Event: &c.Event, Status: "PENDING_DOCUMENT", DocumentVersion: currentReceiptDocumentVersion}
 		rows = append(rows, receipt)
 		rows = append(rows, record{PK: "ACCOUNT#" + a.ID, SK: "RECEIPT#" + command.ReceiptID, ReceiptID: command.ReceiptID, AccountID: a.ID, Event: &collection.Event{Type: c.Event.Type, Amount: c.Event.Amount, EffectiveDate: c.Event.EffectiveDate}})
 		rows = append(rows, record{PK: "JOB#" + c.Event.RecordedAt.UTC().Format("2006-01-02"), SK: "PENDING#" + command.ReceiptID, ReceiptID: command.ReceiptID, Status: "PENDING"})

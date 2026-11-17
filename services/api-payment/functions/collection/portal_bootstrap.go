@@ -2,19 +2,36 @@ package collection
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"time"
 
+	"ind-hub-api-gox-sls-pri-gh/bootstrap"
+
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"ind-hub-api-gox-sls-pri-gh/bootstrap"
 )
+
+func checkoutEnabledFromEnvironment() (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("PAYMENTS_CHECKOUT_ENABLED"))) {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, errors.New("configuración de checkout inválida")
+	}
+}
 
 // PortalCheckoutHandler exige el contexto de pasajero antes de resolver secretos del proveedor.
 func PortalCheckoutHandler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	if req.RequestContext.Authorizer == nil || req.RequestContext.Authorizer.Lambda["paymentAccess"] != "passenger" {
 		return portalFailure(403), nil
+	}
+	checkoutEnabled, configErr := checkoutEnabledFromEnvironment()
+	if configErr != nil {
+		return portalFailureCode(503, "PAYMENT_CHECKOUT_CONFIGURATION_INVALID"), nil
 	}
 	app, err := getWebhookApp(ctx)
 	if err != nil {
@@ -37,7 +54,7 @@ func PortalCheckoutHandler(ctx context.Context, req events.APIGatewayV2HTTPReque
 	if err != nil {
 		return portalFailure(503), nil
 	}
-	portal := PortalApp{Accounts: app.Accounts, Gateway: gateway, Recaptcha: recaptcha, Now: time.Now, Stage: stage, URLs: CheckoutURLs{Return: portalBase + "/retorno", Cancel: portalBase + "/cancelado", Notify: base + "/pagos/cuotas/khipu/notificaciones"}}
+	portal := PortalApp{Accounts: app.Accounts, Gateway: gateway, Recaptcha: recaptcha, Now: time.Now, CheckoutEnabled: checkoutEnabled, Stage: stage, URLs: CheckoutURLs{Return: portalBase + "/retorno", Cancel: portalBase + "/cancelado", Notify: base + "/pagos/cuotas/khipu/notificaciones"}}
 	return portal.HandleCheckout(ctx, req), nil
 }
 

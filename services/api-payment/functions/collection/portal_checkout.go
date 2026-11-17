@@ -8,10 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-lambda-go/events"
-	"github.com/oklog/ulid/v2"
 	domain "ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
 	"ind-hub-api-gox-sls-pri-gh/services/api-payment/providers"
+
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/oklog/ulid/v2"
 )
 
 // PortalApp coordina acciones de una cuenta autorizada sin recibir importes del navegador.
@@ -29,12 +30,18 @@ type PortalApp struct {
 
 // PortalAttempt excluye correo, referencias bancarias y datos internos de la cuenta.
 type PortalAttempt struct {
-	ID                string `json:"id"`
-	Status            string `json:"status"`
-	InstallmentNumber int    `json:"installmentNumber,omitempty"`
-	PaymentURL        string `json:"paymentUrl,omitempty"`
-	ReceiptReady      bool   `json:"receiptReady,omitempty"`
-	LastCheckedAt     string `json:"lastCheckedAt,omitempty"`
+	ID                           string `json:"id"`
+	Status                       string `json:"status"`
+	InstallmentNumber            int    `json:"installmentNumber,omitempty"`
+	PaymentURL                   string `json:"paymentUrl,omitempty"`
+	ReceiptReady                 bool   `json:"receiptReady,omitempty"`
+	ReceiptStatus                string `json:"receiptStatus,omitempty"`
+	ReceiptDeliveryStatus        string `json:"receiptDeliveryStatus,omitempty"`
+	ReceiptRecoveryAvailable     bool   `json:"receiptRecoveryAvailable,omitempty"`
+	TaxDocumentStatus            string `json:"taxDocumentStatus,omitempty"`
+	TaxDocumentDeliveryStatus    string `json:"taxDocumentDeliveryStatus,omitempty"`
+	TaxDocumentRecoveryAvailable bool   `json:"taxDocumentRecoveryAvailable,omitempty"`
+	LastCheckedAt                string `json:"lastCheckedAt,omitempty"`
 }
 
 func portalResponse(status int, data any) events.APIGatewayV2HTTPResponse {
@@ -112,6 +119,11 @@ func (a PortalApp) HandleCheckout(ctx context.Context, req events.APIGatewayV2HT
 	id := paymentOperationID("checkout:" + account.ID + ":" + requestID)
 	stored, err := a.Accounts.read(ctx, "ATTEMPT#"+id, "META")
 	if errors.Is(err, ErrNotFound) {
+		// La bandera solo impide crear reservas nuevas. Los intentos ya persistidos
+		// siguen disponibles para consulta, conciliación y repetición idempotente.
+		if !a.CheckoutEnabled {
+			return portalFailureCode(409, "PAYMENT_CHECKOUT_DISABLED")
+		}
 		audit := domain.Audit{CommandID: id, Actor: "passenger:" + account.ID, Reason: "Solicitud de pago de cuota completa", RecordedAt: a.Now().UTC()}
 		_, reserveErr := a.Accounts.ReserveCheckout(ctx, account.ID, account.Version, audit, id, sessionID, body.Email)
 		if reserveErr != nil && !errors.Is(reserveErr, domain.ErrConflict) && !errors.Is(reserveErr, ErrReplayMismatch) {
@@ -201,7 +213,7 @@ func (a PortalApp) attemptView(ctx context.Context, account domain.Account, id s
 		switch outcome.Event.Type {
 		case "PAYMENT_RECEIVED":
 			view.Status = "CONFIRMED"
-			view.ReceiptReady = a.receiptReady(ctx, account.ID, id, outcome.Event)
+			a.addDocumentStates(ctx, account.ID, id, outcome.Event, &view)
 		case "PAYMENT_REQUIRES_REVIEW":
 			view.Status = "REVIEW_REQUIRED"
 		default:
@@ -241,7 +253,7 @@ func (a PortalApp) attemptView(ctx context.Context, account domain.Account, id s
 		if c.Event.Type == "PAYMENT_REQUIRES_REVIEW" {
 			view.Status = "REVIEW_REQUIRED"
 		} else {
-			view.ReceiptReady = a.receiptReady(ctx, account.ID, id, &c.Event)
+			a.addDocumentStates(ctx, account.ID, id, &c.Event, &view)
 		}
 		return view, nil
 	}
@@ -255,13 +267,72 @@ func (a PortalApp) attemptView(ctx context.Context, account domain.Account, id s
 	return view, nil
 }
 
-func (a PortalApp) receiptReady(ctx context.Context, accountID, attemptID string, event *domain.Event) bool {
-	if event == nil || event.Type != "PAYMENT_RECEIVED" || event.AccountID != accountID || event.AttemptID != attemptID || !strings.HasPrefix(event.Reference, "khipu:") {
-		return false
+func (a PortalApp) addDocumentStates(ctx context.Context, accountID, attemptID string, event *domain.Event, view *PortalAttempt) {
+	if view == nil || event == nil || event.Type != "PAYMENT_RECEIVED" || event.AccountID != accountID || event.AttemptID != attemptID || !strings.HasPrefix(event.Reference, "khipu:") {
+		return
 	}
 	receiptID := paymentOperationID(event.Reference)
-	r, err := a.Accounts.read(ctx, "RECEIPT#"+receiptID, "META")
-	return err == nil && r.Event != nil && r.Event.Type == "PAYMENT_RECEIVED" && validReceiptDocument(r, accountID, receiptID, attemptID)
+	view.ReceiptStatus = "PREPARING"
+	view.ReceiptDeliveryStatus = "PENDING"
+	receipt, receiptErr := a.Accounts.read(ctx, "RECEIPT#"+receiptID, "META")
+	if receiptErr == nil && receipt.Event != nil && receipt.Event.Type == "PAYMENT_RECEIVED" {
+		view.ReceiptReady = validReceiptDocument(receipt, accountID, receiptID, attemptID)
+		if view.ReceiptReady {
+			view.ReceiptStatus = "AVAILABLE"
+		}
+		switch receipt.Status {
+		case "SENT":
+			view.ReceiptDeliveryStatus = "SMTP_ACCEPTED"
+		case "DELIVERY_RETRY":
+			view.ReceiptDeliveryStatus = "FAILED_RETRYING"
+			view.ReceiptRecoveryAvailable = true
+		case "DELIVERY_FAILED":
+			view.ReceiptDeliveryStatus = "FAILED"
+			view.ReceiptRecoveryAvailable = true
+		case "DOCUMENT_READY":
+			if receipt.DeliveryMode == "DOCUMENT_ONLY" {
+				view.ReceiptDeliveryStatus = "NOT_REQUESTED"
+			}
+		case "PENDING_DOCUMENT", "":
+			// Estado compatible con registros anteriores y trabajos aún pendientes.
+		default:
+			view.ReceiptDeliveryStatus = "UNKNOWN"
+			view.ReceiptRecoveryAvailable = true
+		}
+	}
+
+	view.TaxDocumentStatus = "PREPARING"
+	tax, taxErr := a.Accounts.read(ctx, "TAX_REQUEST#"+receiptID, "META")
+	if taxErr != nil || tax.TaxRequest == nil {
+		return
+	}
+	request := tax.TaxRequest
+	switch request.Status {
+	case taxStatusReady, taxStatusIssuing, taxStatusPending:
+		view.TaxDocumentStatus = "PREPARING"
+	case taxStatusSubmitted:
+		view.TaxDocumentStatus = "SUBMITTED"
+	case taxStatusAccepted:
+		view.TaxDocumentStatus = "ACCEPTED"
+	case taxStatusAcceptedRepair:
+		view.TaxDocumentStatus = "ACCEPTED_WITH_REPAIRS"
+	case taxStatusRejected:
+		if request.ReissuedBy != "" {
+			view.TaxDocumentStatus = "REISSUE_PENDING"
+		} else {
+			view.TaxDocumentStatus = "REJECTED"
+		}
+		view.TaxDocumentRecoveryAvailable = true
+	default:
+		view.TaxDocumentStatus = "UNKNOWN"
+		view.TaxDocumentRecoveryAvailable = true
+	}
+	if request.DeliveryStatus != "" {
+		view.TaxDocumentDeliveryStatus = request.DeliveryStatus
+	}
+	if request.DeliveryStatus == "FAILED" || request.DeliveryStatus == "FAILED_RETRYING" || request.DeliveryStatus == "UNKNOWN" {
+		view.TaxDocumentRecoveryAvailable = true
+	}
 }
 
 // HandleAttempt consulta solo intentos pertenecientes a la cuenta autorizada.

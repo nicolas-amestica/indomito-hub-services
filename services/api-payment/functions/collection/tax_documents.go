@@ -16,14 +16,15 @@ import (
 	"strings"
 	"time"
 
+	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
+	domain "ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
+
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
-	domain "ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
 )
 
 const (
@@ -41,28 +42,32 @@ const (
 
 // TaxDocumentRequest separa la obligación tributaria del pago y del comprobante interno.
 type TaxDocumentRequest struct {
-	SchemaVersion   int                `json:"schemaVersion" dynamodbav:"schemaVersion"`
-	RequestID       string             `json:"requestId" dynamodbav:"requestId"`
-	SourceEventID   string             `json:"sourceEventId" dynamodbav:"sourceEventId"`
-	ReceiptID       string             `json:"receiptId" dynamodbav:"receiptId"`
-	AccountID       string             `json:"accountId" dynamodbav:"accountId"`
-	TripID          string             `json:"tripId" dynamodbav:"tripId"`
-	Currency        string             `json:"currency" dynamodbav:"currency"`
-	GrossAmount     int64              `json:"grossAmount" dynamodbav:"grossAmount"`
-	EffectiveDate   string             `json:"effectiveDate" dynamodbav:"effectiveDate"`
-	RequestedAt     time.Time          `json:"requestedAt" dynamodbav:"requestedAt"`
-	DocumentKind    string             `json:"documentKind" dynamodbav:"documentKind"`
-	DocumentSubtype string             `json:"documentSubtype" dynamodbav:"documentSubtype"`
-	IssuanceMode    string             `json:"issuanceMode" dynamodbav:"issuanceMode"`
-	Status          string             `json:"status" dynamodbav:"status"`
-	ManualIssuance  *ManualTaxIssuance `json:"manualIssuance,omitempty" dynamodbav:"manualIssuance,omitempty"`
-	SIIIssuance     *SIIIssuance       `json:"siiIssuance,omitempty" dynamodbav:"siiIssuance,omitempty"`
-	Items           []TaxDocumentItem  `json:"items,omitempty" dynamodbav:"items,omitempty"`
-	Reference       string             `json:"reference,omitempty" dynamodbav:"reference,omitempty"`
-	CustomerRUT     string             `json:"customerRut,omitempty" dynamodbav:"customerRut,omitempty"`
-	DeliveryEmail   string             `json:"deliveryEmail,omitempty" dynamodbav:"deliveryEmail,omitempty"`
-	ReissuesRequest string             `json:"reissuesRequest,omitempty" dynamodbav:"reissuesRequest,omitempty"`
-	ReissuedBy      string             `json:"reissuedBy,omitempty" dynamodbav:"reissuedBy,omitempty"`
+	SchemaVersion     int                `json:"schemaVersion" dynamodbav:"schemaVersion"`
+	RequestID         string             `json:"requestId" dynamodbav:"requestId"`
+	SourceEventID     string             `json:"sourceEventId" dynamodbav:"sourceEventId"`
+	ReceiptID         string             `json:"receiptId" dynamodbav:"receiptId"`
+	AccountID         string             `json:"accountId" dynamodbav:"accountId"`
+	TripID            string             `json:"tripId" dynamodbav:"tripId"`
+	Currency          string             `json:"currency" dynamodbav:"currency"`
+	GrossAmount       int64              `json:"grossAmount" dynamodbav:"grossAmount"`
+	EffectiveDate     string             `json:"effectiveDate" dynamodbav:"effectiveDate"`
+	RequestedAt       time.Time          `json:"requestedAt" dynamodbav:"requestedAt"`
+	DocumentKind      string             `json:"documentKind" dynamodbav:"documentKind"`
+	DocumentSubtype   string             `json:"documentSubtype" dynamodbav:"documentSubtype"`
+	IssuanceMode      string             `json:"issuanceMode" dynamodbav:"issuanceMode"`
+	Status            string             `json:"status" dynamodbav:"status"`
+	ManualIssuance    *ManualTaxIssuance `json:"manualIssuance,omitempty" dynamodbav:"manualIssuance,omitempty"`
+	SIIIssuance       *SIIIssuance       `json:"siiIssuance,omitempty" dynamodbav:"siiIssuance,omitempty"`
+	Items             []TaxDocumentItem  `json:"items,omitempty" dynamodbav:"items,omitempty"`
+	Reference         string             `json:"reference,omitempty" dynamodbav:"reference,omitempty"`
+	CustomerRUT       string             `json:"customerRut,omitempty" dynamodbav:"customerRut,omitempty"`
+	DeliveryEmail     string             `json:"deliveryEmail,omitempty" dynamodbav:"deliveryEmail,omitempty"`
+	DeliveryStatus    string             `json:"deliveryStatus,omitempty" dynamodbav:"deliveryStatus,omitempty"`
+	DeliveryAttempts  int64              `json:"deliveryAttempts,omitempty" dynamodbav:"deliveryAttempts,omitempty"`
+	DeliveryLastError string             `json:"deliveryLastError,omitempty" dynamodbav:"deliveryLastError,omitempty"`
+	DeliveryUpdatedAt *time.Time         `json:"deliveryUpdatedAt,omitempty" dynamodbav:"deliveryUpdatedAt,omitempty"`
+	ReissuesRequest   string             `json:"reissuesRequest,omitempty" dynamodbav:"reissuesRequest,omitempty"`
+	ReissuedBy        string             `json:"reissuedBy,omitempty" dynamodbav:"reissuedBy,omitempty"`
 }
 
 type TaxDocumentItem struct {
@@ -213,6 +218,10 @@ func (a TaxDocumentsApp) reissue(ctx context.Context, req events.APIGatewayV2HTT
 	replacement.RequestedAt = now
 	replacement.Status = taxStatusReady
 	replacement.SIIIssuance = nil
+	replacement.DeliveryStatus = ""
+	replacement.DeliveryAttempts = 0
+	replacement.DeliveryLastError = ""
+	replacement.DeliveryUpdatedAt = nil
 	replacement.ReissuesRequest = requestID
 	replacement.ReissuedBy = ""
 	original := *originalRow.TaxRequest
@@ -221,7 +230,23 @@ func (a TaxDocumentsApp) reissue(ctx context.Context, req events.APIGatewayV2HTT
 	canonical, _ := a.Accounts.put(record{PK: "TAX_REQUEST#" + replacement.RequestID, SK: "META", TaxRequest: &replacement, Status: replacement.Status, AccountID: replacement.AccountID, TripID: replacement.TripID}, "attribute_not_exists(pk)", nil)
 	queue, _ := a.Accounts.put(record{PK: "TAX_QUEUE#PENDING", SK: now.Format(time.RFC3339Nano) + "#" + replacement.RequestID, TaxRequest: &replacement, Status: replacement.Status, AccountID: replacement.AccountID, TripID: replacement.TripID}, "attribute_not_exists(pk)", nil)
 	command, _ := a.Accounts.put(record{PK: "COMMAND#" + replacement.RequestID, SK: "META", TaxRequest: &replacement, Status: replacement.Status, RequestedBy: actor}, "attribute_not_exists(pk)", nil)
-	if _, err = a.Accounts.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{updateOriginal, canonical, queue, command}}); err != nil {
+	writes := []types.TransactWriteItem{updateOriginal, canonical, queue, command}
+	if original.SIIIssuance != nil && original.SIIIssuance.Folio > 0 {
+		publicRow, publicErr := a.Accounts.read(ctx, "TAX_PUBLIC#39#"+strconv.FormatInt(original.SIIIssuance.Folio, 10), "META")
+		if publicErr != nil || publicRow.PublicTaxDocument == nil {
+			return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
+		}
+		publicDocument := *publicRow.PublicTaxDocument
+		publicDocument.IssuedByIndomito = true
+		publicDocument.SIIStatus = "REJECTED"
+		publicDocument.ReplacementPending = true
+		publicUpdate, putErr := a.Accounts.put(record{PK: publicRow.PK, SK: publicRow.SK, PublicTaxDocument: &publicDocument, Status: taxStatusRejected}, "#status = :previous", map[string]types.AttributeValue{":previous": &types.AttributeValueMemberS{Value: publicRow.Status}})
+		if putErr != nil {
+			return adminFailure(req, 503, "PAYMENT_SERVICE_UNAVAILABLE")
+		}
+		writes = append(writes, publicUpdate)
+	}
+	if _, err = a.Accounts.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: writes}); err != nil {
 		return adminFailure(req, 409, "PAYMENT_STATE_CONFLICT")
 	}
 	return lambdautil.SuccessResponseWithHeaders(202, replacement, map[string]string{"cache-control": "no-store"})

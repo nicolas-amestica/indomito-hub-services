@@ -4,14 +4,16 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
+
+	"ind-hub-api-gox-sls-pri-gh/services/api-payment/functions/sii"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"ind-hub-api-gox-sls-pri-gh/services/api-payment/functions/sii"
 )
 
 type SIISubmissionQuerier interface {
@@ -80,7 +82,11 @@ func finalSubmissionStatus(status sii.SubmissionStatus) bool {
 
 func (a TaxSubmissionStatusApp) finish(ctx context.Context, queue record, status sii.SubmissionStatus) error {
 	now := a.Now().UTC()
-	request := *queue.TaxRequest
+	current, currentErr := a.Accounts.read(ctx, "TAX_REQUEST#"+queue.TaxRequest.RequestID, "META")
+	if currentErr != nil || current.TaxRequest == nil || current.TaxRequest.Status != taxStatusSubmitted {
+		return errors.New("canonical tax request not available")
+	}
+	request := *current.TaxRequest
 	request.SIIIssuance.ProcessedAt = &now
 	request.SIIIssuance.Status = status.State
 	request.SIIIssuance.Detail = status.Detail
@@ -90,6 +96,14 @@ func (a TaxSubmissionStatusApp) finish(ctx context.Context, queue record, status
 	} else if status.Approved() {
 		request.Status = taxStatusAccepted
 	}
+	publicRow, publicErr := a.Accounts.read(ctx, "TAX_PUBLIC#39#"+strconv.FormatInt(request.SIIIssuance.Folio, 10), "META")
+	if publicErr != nil || publicRow.PublicTaxDocument == nil || publicRow.PublicTaxDocument.Folio != request.SIIIssuance.Folio {
+		return errors.New("public tax projection not found")
+	}
+	publicDocument := *publicRow.PublicTaxDocument
+	publicDocument.IssuedByIndomito = true
+	publicDocument.SIIStatus = publicSIIStatus(request.Status, "")
+	publicDocument.SIIStatusUpdatedAt = now.Format(time.RFC3339Nano)
 	canonical, err := a.Accounts.put(record{PK: "TAX_REQUEST#" + request.RequestID, SK: "META", TaxRequest: &request, Status: request.Status, AccountID: request.AccountID, TripID: request.TripID}, "#status = :submitted", map[string]types.AttributeValue{":submitted": &types.AttributeValueMemberS{Value: taxStatusSubmitted}})
 	if err != nil {
 		return err
@@ -98,8 +112,12 @@ func (a TaxSubmissionStatusApp) finish(ctx context.Context, queue record, status
 	if err != nil {
 		return err
 	}
+	publicProjection, err := a.Accounts.put(record{PK: publicRow.PK, SK: publicRow.SK, PublicTaxDocument: &publicDocument, Status: request.Status}, "#status = :submitted", map[string]types.AttributeValue{":submitted": &types.AttributeValueMemberS{Value: taxStatusSubmitted}})
+	if err != nil {
+		return err
+	}
 	deleteSubmitted := types.TransactWriteItem{Delete: &types.Delete{TableName: &a.Accounts.Table, Key: key(queue.PK, queue.SK), ConditionExpression: aws.String("#status = :submitted"), ExpressionAttributeNames: map[string]string{"#status": "status"}, ExpressionAttributeValues: map[string]types.AttributeValue{":submitted": &types.AttributeValueMemberS{Value: taxStatusSubmitted}}}}
-	items := []types.TransactWriteItem{canonical, recorded, deleteSubmitted}
+	items := []types.TransactWriteItem{canonical, recorded, publicProjection, deleteSubmitted}
 	if request.Status == taxStatusRejected {
 		alert, putErr := a.Accounts.put(record{PK: "TAX_ALERT#REJECTED", SK: now.Format(time.RFC3339Nano) + "#" + request.RequestID, TaxRequest: &request, TaxRequestID: request.RequestID, TaxFolio: request.SIIIssuance.Folio, Status: "OPEN"}, "attribute_not_exists(pk)", nil)
 		if putErr != nil {

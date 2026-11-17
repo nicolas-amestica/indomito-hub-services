@@ -6,13 +6,14 @@ import (
 	"strings"
 	"time"
 
+	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
+	domain "ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
+
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
-	domain "ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
 )
 
 type ReceiptBackfillRequest struct {
@@ -46,13 +47,8 @@ func (a AdminApp) HandleReceiptBackfill(ctx context.Context, req events.APIGatew
 }
 
 func (a AdminApp) backfillReceipts(ctx context.Context, accountID string, input ReceiptBackfillRequest, audit domain.Audit) (ReceiptBackfillResult, error) {
-	account, err := a.Accounts.GetAccount(ctx, accountID)
-	if err != nil {
+	if _, err := a.Accounts.GetAccount(ctx, accountID); err != nil {
 		return ReceiptBackfillResult{}, err
-	}
-	member, err := a.Accounts.read(ctx, "TRIP#"+account.TripID, "MEMBER#"+accountID)
-	if err != nil || member.Roster == nil || strings.TrimSpace(member.Roster.Name) == "" || strings.TrimSpace(member.Roster.Document) == "" {
-		return ReceiptBackfillResult{}, domain.ErrInvalid
 	}
 	db, ok := a.Accounts.DB.(queryDatabase)
 	if !ok {
@@ -90,14 +86,14 @@ func (a AdminApp) backfillReceipts(ctx context.Context, accountID string, input 
 			continue
 		}
 		root.DocumentVersion = currentReceiptDocumentVersion
-		root.PassengerName = strings.TrimSpace(member.Roster.Name)
-		root.PassengerDocument = strings.TrimSpace(member.Roster.Document)
+		root.PassengerName = ""
+		root.PassengerDocument = ""
 		root.DocumentKey = ""
 		root.DocumentSHA256 = ""
 		root.Status = "PENDING_DOCUMENT"
 		root.DeliveryMode = "DOCUMENT_ONLY"
 		root.RetryAudit = &audit
-		rootWrite, _ := a.Accounts.put(root, "attribute_not_exists(documentVersion) OR documentVersion < :current", map[string]types.AttributeValue{":current": &types.AttributeValueMemberN{Value: "3"}})
+		rootWrite, _ := a.Accounts.put(root, "attribute_not_exists(documentVersion) OR documentVersion < :current", map[string]types.AttributeValue{":current": &types.AttributeValueMemberN{Value: "4"}})
 		jobWrite, _ := a.Accounts.put(record{PK: "JOB#" + audit.RecordedAt.Format(time.DateOnly), SK: "PENDING#" + projection.ReceiptID, ReceiptID: projection.ReceiptID, Status: "PENDING", DeliveryMode: "DOCUMENT_ONLY"}, "attribute_not_exists(pk)", nil)
 		commandWrite, _ := a.Accounts.put(record{PK: "COMMAND#" + commandID, SK: "META", ReceiptID: projection.ReceiptID, Status: "QUEUED", RetryAudit: &audit}, "attribute_not_exists(pk)", nil)
 		if _, writeErr := a.Accounts.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{rootWrite, jobWrite, commandWrite}}); writeErr != nil {

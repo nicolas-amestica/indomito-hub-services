@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-lambda-go/events"
 	"ind-hub-api-gox-sls-pri-gh/services/api-payment/providers"
+
+	"github.com/aws/aws-lambda-go/events"
 )
 
 func portalFixture(t *testing.T) (PortalApp, *transactionDB, *checkoutGatewayFake, events.APIGatewayV2HTTPRequest) {
@@ -27,7 +28,7 @@ func portalFixture(t *testing.T) (PortalApp, *transactionDB, *checkoutGatewayFak
 	}
 	req := events.APIGatewayV2HTTPRequest{Body: `{"email":"receipt@example.com","recaptchaToken":"synthetic-recaptcha-token-for-test"}`, Headers: map[string]string{"Idempotency-Key": "01ARZ3NDEKTSV4RRFFQ69G5FAW"}, RequestContext: events.APIGatewayV2HTTPRequestContext{HTTP: events.APIGatewayV2HTTPRequestContextHTTPDescription{Method: "POST"}, Authorizer: &events.APIGatewayV2HTTPRequestContextAuthorizerDescription{Lambda: map[string]interface{}{"paymentAccess": "passenger", "paymentAccountId": id, "paymentTripId": id, "paymentSessionId": id, "paymentCodeKey": code}}}}
 	gateway := &checkoutGatewayFake{}
-	return PortalApp{Accounts: s, Gateway: gateway, Recaptcha: captchaFake{}, URLs: testCheckoutURLs(), Now: time.Now, Stage: "dev"}, db, gateway, req
+	return PortalApp{Accounts: s, Gateway: gateway, Recaptcha: captchaFake{}, URLs: testCheckoutURLs(), Now: time.Now, CheckoutEnabled: true, Stage: "dev"}, db, gateway, req
 }
 
 type captchaFake struct{ reject bool }
@@ -169,6 +170,85 @@ func TestPortalAmbiguousCreationAndChangedEmail(t *testing.T) {
 	req.Body = `{"email":"other@example.com"}`
 	if resp := a.HandleCheckout(context.Background(), req); resp.StatusCode != 409 {
 		t.Fatalf("email changed %s", resp.Body)
+	}
+}
+
+func TestPortalCheckoutDisabledBlocksOnlyNewCharges(t *testing.T) {
+	a, db, gateway, req := portalFixture(t)
+	a.CheckoutEnabled = false
+	response := a.HandleCheckout(context.Background(), req)
+	if response.StatusCode != 409 || !strings.Contains(response.Body, "PAYMENT_CHECKOUT_DISABLED") || gateway.calls != 0 || db.commits != 0 {
+		t.Fatalf("disabled checkout created work: response=%s calls=%d commits=%d", response.Body, gateway.calls, db.commits)
+	}
+}
+
+func TestPortalCheckoutDisabledPreservesIdempotentAttemptRecovery(t *testing.T) {
+	a, db, gateway, req := portalFixture(t)
+	first := a.HandleCheckout(context.Background(), req)
+	if first.StatusCode != 200 {
+		t.Fatal(first.Body)
+	}
+	commits := db.commits
+	a.CheckoutEnabled = false
+	replay := a.HandleCheckout(context.Background(), req)
+	if replay.StatusCode != 200 || portalAttemptBody(t, replay).Status != "PENDING_PAYMENT" || gateway.calls != 1 || db.commits != commits {
+		t.Fatalf("existing attempt was not recovered: response=%s calls=%d commits=%d", replay.Body, gateway.calls, db.commits)
+	}
+}
+
+func TestCheckoutEnabledConfigurationFailsClosed(t *testing.T) {
+	for _, test := range []struct {
+		value string
+		want  bool
+		err   bool
+	}{
+		{value: "true", want: true},
+		{value: " TRUE ", want: true},
+		{value: "false", want: false},
+		{value: "", err: true},
+		{value: "enabled", err: true},
+	} {
+		t.Run(test.value, func(t *testing.T) {
+			t.Setenv("PAYMENTS_CHECKOUT_ENABLED", test.value)
+			got, err := checkoutEnabledFromEnvironment()
+			if got != test.want || (err != nil) != test.err {
+				t.Fatalf("got=%v err=%v", got, err)
+			}
+		})
+	}
+}
+
+func TestPortalAttemptReportsIndependentDocumentStates(t *testing.T) {
+	a, db, _, req := portalFixture(t)
+	ctx := context.Background()
+	created := portalAttemptBody(t, a.HandleCheckout(ctx, req))
+	verification := verifierFake{result: providers.VerifiedPayment{PaymentID: "abcdefghijkl", TransactionID: created.ID, ReceiverID: 123, Amount: "20000", Currency: "CLP", Status: "done", StatusDetail: "normal", ConciliationDate: time.Now()}}
+	if _, err := a.Accounts.ConfirmProviderCheckout(ctx, verification, created.ID, "abcdefghijkl", time.Now(), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	receiptID := paymentOperationID("khipu:abcdefghijkl")
+	receipt, err := a.Accounts.read(ctx, "RECEIPT#"+receiptID, "META")
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt.Status = "DELIVERY_FAILED"
+	receipt.DocumentKey = "receipts/" + receipt.Event.AccountID + "/" + receiptID + "/v4.pdf"
+	receipt.DocumentSHA256 = strings.Repeat("a", 64)
+	saveLookupRow(t, db, receipt)
+	tax, err := a.Accounts.read(ctx, "TAX_REQUEST#"+receiptID, "META")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tax.Status = taxStatusRejected
+	tax.TaxRequest.Status = taxStatusRejected
+	tax.TaxRequest.ReissuedBy = paymentOperationID("replacement")
+	tax.TaxRequest.DeliveryStatus = "FAILED_RETRYING"
+	saveLookupRow(t, db, tax)
+	req.RequestContext.HTTP.Method = "GET"
+	req.PathParameters = map[string]string{"id": created.ID}
+	view := portalAttemptBody(t, a.HandleAttempt(ctx, req))
+	if view.Status != "CONFIRMED" || !view.ReceiptReady || view.ReceiptStatus != "AVAILABLE" || view.ReceiptDeliveryStatus != "FAILED" || !view.ReceiptRecoveryAvailable || view.TaxDocumentStatus != "REISSUE_PENDING" || view.TaxDocumentDeliveryStatus != "FAILED_RETRYING" || !view.TaxDocumentRecoveryAvailable {
+		t.Fatalf("unexpected independent states: %+v", view)
 	}
 }
 

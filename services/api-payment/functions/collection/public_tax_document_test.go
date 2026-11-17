@@ -22,12 +22,27 @@ func TestPublicTaxDocumentVerificationRequiresExactFolioDateAndAmount(t *testing
 	var envelope struct {
 		Data PublicTaxDocument `json:"data"`
 	}
-	if json.Unmarshal([]byte(response.Body), &envelope) != nil || !envelope.Data.Authentic || envelope.Data.Folio != 381 || envelope.Data.TED == "" {
+	if json.Unmarshal([]byte(response.Body), &envelope) != nil || !envelope.Data.Authentic || !envelope.Data.IssuedByIndomito || envelope.Data.QueryStatus != "FOUND" || envelope.Data.SIIStatus != "PENDING" || envelope.Data.Folio != 381 || envelope.Data.TED == "" {
 		t.Fatalf("unexpected document: %+v", envelope.Data)
 	}
 	request.Body = `{"folio":"381","issueDate":"2026-11-02","amount":1}`
 	response, err = app.HandleTaxDocumentVerification(context.Background(), request)
 	if err != nil || json.Unmarshal([]byte(response.Body), &envelope) != nil || envelope.Data.Authentic {
 		t.Fatalf("mismatched amount leaked a document: %+v %v", envelope.Data, err)
+	}
+}
+
+func TestPublicTaxDocumentNeverInfersSIIAcceptance(t *testing.T) {
+	service, db := serviceFixture(t)
+	document := PublicTaxDocument{DocumentType: 39, Folio: 382, IssueDate: "2026-11-02", TotalAmount: 29800, SIIStatus: "REJECTED"}
+	saveLookupRow(t, db, record{PK: "TAX_PUBLIC#39#382", SK: "META", PublicTaxDocument: &document, Status: taxStatusRejected})
+	app := PublicApp{Accounts: service, LookupSecret: strings.Repeat("test-only-", 4)}
+	request := events.APIGatewayV2HTTPRequest{Body: `{"folio":"382","issueDate":"2026-11-02","amount":29800}`, RequestContext: events.APIGatewayV2HTTPRequestContext{HTTP: events.APIGatewayV2HTTPRequestContextHTTPDescription{Method: "POST", SourceIP: "198.51.100.5"}}}
+	response, err := app.HandleTaxDocumentVerification(context.Background(), request)
+	var envelope struct {
+		Data PublicTaxDocument `json:"data"`
+	}
+	if err != nil || json.Unmarshal([]byte(response.Body), &envelope) != nil || !envelope.Data.Authentic || envelope.Data.SIIStatus != "REJECTED" {
+		t.Fatalf("rejected document misrepresented: %+v err=%v", envelope.Data, err)
 	}
 }

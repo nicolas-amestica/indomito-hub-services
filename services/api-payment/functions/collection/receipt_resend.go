@@ -7,10 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
+
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
 )
 
 type ReceiptResendRequest struct {
@@ -110,7 +111,7 @@ func (a ReceiptsApp) enqueueResend(ctx context.Context, original record, body Re
 	now := a.Now().UTC()
 	date := now.Format(time.DateOnly)
 	rows := []record{
-		{PK: original.PK, SK: "DELIVERY#" + deliveryID, DeliveryID: deliveryID, ReceiptID: receiptID, AccountID: accountID, ReceiptEmail: body.Email, Fingerprint: hash, RequestedBy: actor, Event: original.Event, DocumentKey: original.DocumentKey, DocumentSHA256: original.DocumentSHA256, DocumentVersion: original.DocumentVersion, PassengerName: original.PassengerName, PassengerDocument: original.PassengerDocument, Status: "PENDING_DOCUMENT"},
+		{PK: original.PK, SK: "DELIVERY#" + deliveryID, DeliveryID: deliveryID, ReceiptID: receiptID, AccountID: accountID, ReceiptEmail: body.Email, Fingerprint: hash, RequestedBy: actor, Event: original.Event, DocumentVersion: currentReceiptDocumentVersion, Status: "PENDING_DOCUMENT"},
 		{PK: "JOB#" + date, SK: "PENDING#" + deliveryID, DeliveryID: deliveryID, ReceiptID: receiptID, Status: "PENDING"},
 	}
 	if oneTimeSK != "" {

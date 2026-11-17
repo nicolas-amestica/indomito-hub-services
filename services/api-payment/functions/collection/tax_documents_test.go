@@ -10,9 +10,10 @@ import (
 	"testing"
 	"time"
 
+	domain "ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
+
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	domain "ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
 )
 
 type taxStorageFake struct {
@@ -157,5 +158,28 @@ func TestCreateTaxDocumentRejectsInvalidOptionalDeliveryEmail(t *testing.T) {
 	response, err := (TaxDocumentsApp{Accounts: service, Now: func() time.Time { return time.Date(2026, 10, 30, 15, 0, 0, 0, time.UTC) }}).Handle(context.Background(), req)
 	if err != nil || response.StatusCode != 400 {
 		t.Fatalf("expected invalid email response, got %+v %v", response, err)
+	}
+}
+
+func TestReissueMarksOriginalPublicDocumentPending(t *testing.T) {
+	service, db := serviceFixture(t)
+	now := time.Date(2026, 11, 11, 12, 0, 0, 0, time.UTC)
+	originalID := approvedID
+	replacementID := paymentOperationID("tax-replacement")
+	original := TaxDocumentRequest{RequestID: originalID, Status: taxStatusRejected, Items: []TaxDocumentItem{{Description: "Cuota", Quantity: 1, UnitPrice: 20000}}, SIIIssuance: &SIIIssuance{Folio: 12}}
+	public := PublicTaxDocument{Folio: 12, IssueDate: "2026-11-10", TotalAmount: 20000, IssuedByIndomito: true, SIIStatus: "REJECTED"}
+	saveLookupRow(t, db, record{PK: "TAX_REQUEST#" + originalID, SK: "META", TaxRequest: &original, Status: taxStatusRejected})
+	saveLookupRow(t, db, record{PK: "TAX_PUBLIC#39#12", SK: "META", PublicTaxDocument: &public, Status: taxStatusRejected})
+	raw, _ := json.Marshal(ReissueTaxDocumentRequest{CommandID: replacementID})
+	req := events.APIGatewayV2HTTPRequest{Body: string(raw), PathParameters: map[string]string{"requestId": originalID, "action": "reemision"}, RequestContext: events.APIGatewayV2HTTPRequestContext{HTTP: events.APIGatewayV2HTTPRequestContextHTTPDescription{Method: "POST"}, Authorizer: &events.APIGatewayV2HTTPRequestContextAuthorizerDescription{Lambda: map[string]any{"userId": "operator", "paymentAccess": "admin"}}}}
+	response, err := (TaxDocumentsApp{Accounts: service, Now: func() time.Time { return now }}).Handle(context.Background(), req)
+	if err != nil || response.StatusCode != 202 {
+		t.Fatalf("reissue failed: %+v err=%v", response, err)
+	}
+	originalRow, _ := service.read(context.Background(), "TAX_REQUEST#"+originalID, "META")
+	replacementRow, _ := service.read(context.Background(), "TAX_REQUEST#"+replacementID, "META")
+	projection, _ := service.read(context.Background(), "TAX_PUBLIC#39#12", "META")
+	if originalRow.TaxRequest.ReissuedBy != replacementID || replacementRow.TaxRequest.ReissuesRequest != originalID || replacementRow.TaxRequest.Status != taxStatusReady || projection.PublicTaxDocument == nil || !projection.PublicTaxDocument.ReplacementPending || projection.PublicTaxDocument.SIIStatus != "REJECTED" {
+		t.Fatalf("traceability missing: original=%+v replacement=%+v public=%+v", originalRow.TaxRequest, replacementRow.TaxRequest, projection.PublicTaxDocument)
 	}
 }

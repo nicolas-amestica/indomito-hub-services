@@ -8,12 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
+
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
 )
 
 // ReceiptSigner crea enlaces temporales solo después de verificar pertenencia.
@@ -101,10 +102,10 @@ func (a ReceiptsApp) HandleList(ctx context.Context, req events.APIGatewayV2HTTP
 
 var receiptSHA = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
-const currentReceiptDocumentVersion int64 = 3
+const currentReceiptDocumentVersion int64 = 4
 
 func receiptDocumentVersion(row record) int64 {
-	if row.DocumentVersion == 2 || row.DocumentVersion == 3 {
+	if row.DocumentVersion >= 2 && row.DocumentVersion <= currentReceiptDocumentVersion {
 		return row.DocumentVersion
 	}
 	return 1

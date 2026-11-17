@@ -72,8 +72,10 @@ type taxPublicDocument struct {
 }
 
 type taxRequestProjection struct {
-	ReceiptID     string `dynamodbav:"receiptId"`
-	DeliveryEmail string `dynamodbav:"deliveryEmail"`
+	ReceiptID        string `dynamodbav:"receiptId"`
+	DeliveryEmail    string `dynamodbav:"deliveryEmail"`
+	DeliveryStatus   string `dynamodbav:"deliveryStatus"`
+	DeliveryAttempts int64  `dynamodbav:"deliveryAttempts"`
 }
 type taxRequestRow struct {
 	TaxRequest taxRequestProjection `dynamodbav:"taxRequest"`
@@ -128,6 +130,9 @@ func processTaxDelivery(ctx context.Context, job taxDeliveryJob, deps taxDeliver
 	if attributevalue.UnmarshalMap(requestItem.Item, &requestRow) != nil {
 		return errors.New("INVALID_TAX_REQUEST")
 	}
+	if requestRow.TaxRequest.DeliveryStatus == "FAILED" {
+		return recordTaxDeliveryState(ctx, deps, job, "FAILED", "DELIVERY_RETRY_LIMIT", key, sha, true)
+	}
 	deliveryEmail := requestRow.TaxRequest.DeliveryEmail
 	if deliveryEmail == "" && requestRow.TaxRequest.ReceiptID != "" {
 		receiptItem, getErr := deps.db.GetItem(ctx, &dynamodb.GetItemInput{TableName: &deps.table, Key: taxKey("RECEIPT#"+requestRow.TaxRequest.ReceiptID, "META"), ConsistentRead: aws.Bool(true)})
@@ -140,20 +145,71 @@ func processTaxDelivery(ctx context.Context, job taxDeliveryJob, deps taxDeliver
 		}
 		deliveryEmail = receipt.ReceiptEmail
 	}
-	if deliveryEmail != "" {
-		address, addressErr := mail.ParseAddress(deliveryEmail)
-		if addressErr != nil || address.Address != deliveryEmail || len(deliveryEmail) > 254 {
-			return errors.New("RECEIPT_EMAIL_MISSING")
-		}
-		concept := "Boleta electrónica"
-		if len(publicRow.PublicTaxDocument.Items) > 0 && strings.TrimSpace(publicRow.PublicTaxDocument.Items[0].Description) != "" {
-			concept = strings.TrimSpace(publicRow.PublicTaxDocument.Items[0].Description)
-		}
-		if err = deps.mail.sendTax(ctx, deliveryEmail, job.Folio, concept, document); err != nil {
-			return err
-		}
+	if deliveryEmail == "" {
+		return recordTaxDeliveryState(ctx, deps, job, "DOCUMENT_READY_NO_RECIPIENT", "", key, sha, true)
 	}
-	_, err = deps.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{TableName: &deps.table, Key: taxKey(job.PK, job.SK), ConditionExpression: aws.String("#status = :pending"), UpdateExpression: aws.String("SET #status = :sent, documentKey = :key, documentSha256 = :sha, sentAt = :at"), ExpressionAttributeNames: map[string]string{"#status": "status"}, ExpressionAttributeValues: map[string]types.AttributeValue{":pending": &types.AttributeValueMemberS{Value: "PENDING"}, ":sent": &types.AttributeValueMemberS{Value: "SENT"}, ":key": &types.AttributeValueMemberS{Value: key}, ":sha": &types.AttributeValueMemberS{Value: sha}, ":at": &types.AttributeValueMemberS{Value: deps.now().UTC().Format(time.RFC3339Nano)}}})
+	address, addressErr := mail.ParseAddress(deliveryEmail)
+	if addressErr != nil || address.Address != deliveryEmail || len(deliveryEmail) > 254 {
+		stateErr := recordTaxDeliveryState(ctx, deps, job, "FAILED", "INVALID_RECIPIENT", key, sha, false)
+		if stateErr != nil {
+			return fmt.Errorf("invalid tax recipient; record state: %w", stateErr)
+		}
+		return errors.New("RECEIPT_EMAIL_MISSING")
+	}
+	concept := "Boleta electrónica"
+	if len(publicRow.PublicTaxDocument.Items) > 0 && strings.TrimSpace(publicRow.PublicTaxDocument.Items[0].Description) != "" {
+		concept = strings.TrimSpace(publicRow.PublicTaxDocument.Items[0].Description)
+	}
+	if err = deps.mail.sendTax(ctx, deliveryEmail, job.Folio, concept, document); err != nil {
+		failureStatus := "FAILED_RETRYING"
+		if requestRow.TaxRequest.DeliveryAttempts >= 4 {
+			failureStatus = "FAILED"
+		}
+		stateErr := recordTaxDeliveryState(ctx, deps, job, failureStatus, "SMTP_NOT_ACCEPTED", key, sha, false)
+		if stateErr != nil {
+			return fmt.Errorf("send tax document: %v; record state: %w", err, stateErr)
+		}
+		return err
+	}
+	return recordTaxDeliveryState(ctx, deps, job, "SMTP_ACCEPTED", "", key, sha, true)
+}
+
+func recordTaxDeliveryState(ctx context.Context, deps taxDeliveryDependencies, job taxDeliveryJob, status, failure, documentKey, documentSHA string, complete bool) error {
+	now := deps.now().UTC().Format(time.RFC3339Nano)
+	values := map[string]types.AttributeValue{
+		":status":  &types.AttributeValueMemberS{Value: status},
+		":at":      &types.AttributeValueMemberS{Value: now},
+		":zero":    &types.AttributeValueMemberN{Value: "0"},
+		":one":     &types.AttributeValueMemberN{Value: "1"},
+		":failure": &types.AttributeValueMemberS{Value: failure},
+	}
+	_, err := deps.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                 &deps.table,
+		Key:                       taxKey("TAX_REQUEST#"+job.RequestID, "META"),
+		ConditionExpression:       aws.String("attribute_exists(pk)"),
+		UpdateExpression:          aws.String("SET taxRequest.deliveryStatus = :status, taxRequest.deliveryUpdatedAt = :at, taxRequest.deliveryLastError = :failure, taxRequest.deliveryAttempts = if_not_exists(taxRequest.deliveryAttempts, :zero) + :one"),
+		ExpressionAttributeValues: values,
+	})
+	if err != nil {
+		return fmt.Errorf("update tax delivery state: %w", err)
+	}
+	if !complete {
+		return nil
+	}
+	_, err = deps.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                &deps.table,
+		Key:                      taxKey(job.PK, job.SK),
+		ConditionExpression:      aws.String("#status = :pending"),
+		UpdateExpression:         aws.String("SET #status = :status, documentKey = :key, documentSha256 = :sha, deliveryStatus = :status, deliveryUpdatedAt = :at"),
+		ExpressionAttributeNames: map[string]string{"#status": "status"},
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":pending": &types.AttributeValueMemberS{Value: "PENDING"},
+			":status":  &types.AttributeValueMemberS{Value: status},
+			":key":     &types.AttributeValueMemberS{Value: documentKey},
+			":sha":     &types.AttributeValueMemberS{Value: documentSHA},
+			":at":      &types.AttributeValueMemberS{Value: now},
+		},
+	})
 	return err
 }
 

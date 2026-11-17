@@ -45,7 +45,7 @@
       "post": {
         "summary": "Consulta publica de una boleta electronica",
         "security": [],
-        "responses": { "200": { "description": "Resultado de la consulta" } }
+        "responses": { "200": { "description": "Coincidencia exacta con queryStatus, issuedByIndomito y siiStatus independiente: PENDING, ACCEPTED, ACCEPTED_WITH_REPAIRS, REJECTED o UNKNOWN. La respuesta puede incluir originalFolio, replacementFolio y replacementPending sin datos personales ni administrativos." }, "429": { "description": "Límite temporal de consultas" }, "503": { "description": "Consulta temporalmente no disponible; no implica rechazo" } }
       }
     },
     "/pagos/portal/checkout": {
@@ -56,7 +56,9 @@
           "200": {
             "description": "Intento de pago",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PortalAttemptResponse" } } }
-          }
+          },
+          "409": { "description": "PAYMENT_CHECKOUT_DISABLED cuando se impiden nuevos cobros. Los intentos existentes siguen consultables e idempotentes." },
+          "503": { "description": "Configuración o dependencia temporalmente no disponible; no se reserva un cobro nuevo." }
         }
       }
     },
@@ -125,7 +127,13 @@
               "status": { "type": "string" },
               "installmentNumber": { "type": "integer", "minimum": 1 },
               "paymentUrl": { "type": "string", "format": "uri" },
-              "receiptReady": { "type": "boolean" },
+              "receiptReady": { "type": "boolean", "deprecated": true, "description": "Compatibilidad: indica que el PDF del comprobante está disponible; no acredita envío." },
+              "receiptStatus": { "type": "string", "enum": ["PREPARING", "AVAILABLE"] },
+              "receiptDeliveryStatus": { "type": "string", "enum": ["PENDING", "SMTP_ACCEPTED", "FAILED_RETRYING", "FAILED", "NOT_REQUESTED", "UNKNOWN"] },
+              "receiptRecoveryAvailable": { "type": "boolean" },
+              "taxDocumentStatus": { "type": "string", "enum": ["PREPARING", "SUBMITTED", "ACCEPTED", "ACCEPTED_WITH_REPAIRS", "REJECTED", "REISSUE_PENDING", "UNKNOWN"] },
+              "taxDocumentDeliveryStatus": { "type": "string", "enum": ["PENDING", "SMTP_ACCEPTED", "DOCUMENT_READY_NO_RECIPIENT", "FAILED_RETRYING", "FAILED", "UNKNOWN"] },
+              "taxDocumentRecoveryAvailable": { "type": "boolean" },
               "lastCheckedAt": { "type": "string", "format": "date-time" }
             }
           }

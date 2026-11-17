@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-lambda-go/events"
 	domain "ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
+
+	"github.com/aws/aws-lambda-go/events"
 )
 
 func portalResendFixture(t *testing.T) (ReceiptsApp, *transactionDB, events.APIGatewayV2HTTPRequest, string) {
@@ -50,6 +51,14 @@ func TestPortalReceiptResendIsSessionBoundAndOneTime(t *testing.T) {
 	root, _ := a.Accounts.read(context.Background(), "RECEIPT#"+receiptID, "META")
 	if root.ReceiptEmail != "original@example.test" || root.Status != "SENT" {
 		t.Fatal("original receipt changed")
+	}
+	marker, err := a.Accounts.read(context.Background(), "RECEIPT#"+receiptID, "PORTAL_RESEND#"+approvedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copyRow, err := a.Accounts.read(context.Background(), "RECEIPT#"+receiptID, "DELIVERY#"+marker.DeliveryID)
+	if err != nil || copyRow.DocumentVersion != currentReceiptDocumentVersion || copyRow.PassengerName != "" || copyRow.PassengerDocument != "" || copyRow.DocumentKey != "" {
+		t.Fatalf("resend did not minimize identity: %+v err=%v", copyRow, err)
 	}
 	after, _ := a.Accounts.GetAccount(context.Background(), approvedID)
 	left, _ := json.Marshal(before)

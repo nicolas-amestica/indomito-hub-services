@@ -10,7 +10,8 @@
     "PAYMENTS_TABLE_NAME",
     "CONFIGURATIONS_TABLE_NAME",
     "PAYMENTS_BASE_URL",
-    "PAYMENTS_PORTAL_URL"
+    "PAYMENTS_PORTAL_URL",
+    "PAYMENTS_CHECKOUT_ENABLED"
   ],
   "functions": [
     {"name":"fn-obtener-sincronizacion-dte-recibidos-v1","entrypoint":"./cmd/fn-obtener-sincronizacion-dte-recibidos-v1"},

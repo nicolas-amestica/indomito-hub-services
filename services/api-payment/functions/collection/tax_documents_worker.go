@@ -8,11 +8,12 @@ import (
 	"strconv"
 	"time"
 
+	"ind-hub-api-gox-sls-pri-gh/services/api-payment/functions/sii"
+
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"ind-hub-api-gox-sls-pri-gh/services/api-payment/functions/sii"
 )
 
 type SIIConfigLoader interface {
@@ -143,6 +144,8 @@ func (a TaxDocumentWorkerApp) recordSubmission(ctx context.Context, request TaxD
 	request.SIIIssuance.SubmittedAt = &now
 	request.SIIIssuance.Status = taxStatusSubmitted
 	request.SIIIssuance.DocumentKey = fmt.Sprintf("tax-documents/39/%d.pdf", request.SIIIssuance.Folio)
+	request.DeliveryStatus = "PENDING"
+	request.DeliveryUpdatedAt = &now
 	canonical, err := a.Accounts.put(record{PK: "TAX_REQUEST#" + request.RequestID, SK: "META", TaxRequest: &request, Status: request.Status, AccountID: request.AccountID, TripID: request.TripID}, "#status = :pending", map[string]types.AttributeValue{":pending": &types.AttributeValueMemberS{Value: taxStatusIssuing}})
 	if err != nil {
 		return err
@@ -165,7 +168,35 @@ func (a TaxDocumentWorkerApp) recordSubmission(ctx context.Context, request TaxD
 	if err != nil {
 		return err
 	}
-	_, err = a.Accounts.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{canonical, deleteQueue, recorded, submitted, publicProjection, delivery}})
+	writes := []types.TransactWriteItem{canonical, deleteQueue, recorded, submitted, publicProjection, delivery}
+	if request.ReissuesRequest != "" {
+		originalRow, originalErr := a.Accounts.read(ctx, "TAX_REQUEST#"+request.ReissuesRequest, "META")
+		if originalErr != nil || originalRow.TaxRequest == nil || originalRow.TaxRequest.SIIIssuance == nil || originalRow.TaxRequest.SIIIssuance.Folio < 1 {
+			return errors.New("invalid original tax document")
+		}
+		originalFolio := originalRow.TaxRequest.SIIIssuance.Folio
+		publicDocument.OriginalFolio = originalFolio
+		publicProjection, err = a.Accounts.put(record{PK: "TAX_PUBLIC#39#" + strconv.FormatInt(publicDocument.Folio, 10), SK: "META", PublicTaxDocument: &publicDocument, Status: request.Status}, "attribute_not_exists(pk)", nil)
+		if err != nil {
+			return err
+		}
+		writes[4] = publicProjection
+		originalPublicRow, publicErr := a.Accounts.read(ctx, "TAX_PUBLIC#39#"+strconv.FormatInt(originalFolio, 10), "META")
+		if publicErr != nil || originalPublicRow.PublicTaxDocument == nil {
+			return errors.New("original public tax projection not found")
+		}
+		originalPublic := *originalPublicRow.PublicTaxDocument
+		originalPublic.ReplacementPending = false
+		originalPublic.ReplacementFolio = publicDocument.Folio
+		originalPublic.IssuedByIndomito = true
+		originalPublic.SIIStatus = "REJECTED"
+		originalUpdate, putErr := a.Accounts.put(record{PK: originalPublicRow.PK, SK: originalPublicRow.SK, PublicTaxDocument: &originalPublic, Status: taxStatusRejected}, "#status = :previous", map[string]types.AttributeValue{":previous": &types.AttributeValueMemberS{Value: originalPublicRow.Status}})
+		if putErr != nil {
+			return putErr
+		}
+		writes = append(writes, originalUpdate)
+	}
+	_, err = a.Accounts.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: writes})
 	return err
 }
 

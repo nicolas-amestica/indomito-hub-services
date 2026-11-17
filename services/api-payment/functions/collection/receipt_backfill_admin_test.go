@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	domain "ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
+
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 )
 
 func TestReceiptBackfillDryRunThenDocumentOnly(t *testing.T) {
@@ -30,7 +31,7 @@ func TestReceiptBackfillDryRunThenDocumentOnly(t *testing.T) {
 		t.Fatalf("apply=%+v %v", applied, err)
 	}
 	root, _ := s.read(context.Background(), "RECEIPT#"+id, "META")
-	if root.DocumentVersion != currentReceiptDocumentVersion || root.PassengerName != "Ana Prueba" || root.DeliveryMode != "DOCUMENT_ONLY" || root.Event.Amount != 20000 || root.DocumentKey != "" {
+	if root.DocumentVersion != currentReceiptDocumentVersion || root.PassengerName != "" || root.PassengerDocument != "" || root.DeliveryMode != "DOCUMENT_ONLY" || root.Event.Amount != 20000 || root.DocumentKey != "" {
 		t.Fatal("historical receipt was not safely upgraded")
 	}
 }

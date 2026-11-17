@@ -107,6 +107,26 @@ func TestReceiptV3ContainsPermanentVerificationCode(t *testing.T) {
 	}
 }
 
+func TestReceiptV4OmitsPassengerIdentity(t *testing.T) {
+	t.Setenv("RECEIPT_VERIFICATION_URL", "https://pagos.dev.girasindomito.cl/verificar-comprobante")
+	row := validReceiptRow()
+	row.DocumentVersion = 4
+	model, err := buildReceiptModel(row)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if model.PassengerName != "" || model.PassengerDocument != "" {
+		t.Fatal("v4 no debe incorporar identidad personal")
+	}
+	document, err := renderReceipt(model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if document.Key != "receipts/"+testReceiptID+"/"+testReceiptID+"/v4.pdf" {
+		t.Fatalf("invalid v4 document: %s", document.Key)
+	}
+}
+
 func TestProcessReceiptDoesNotDuplicateSentDelivery(t *testing.T) {
 	store := &fakeStore{row: validReceiptRow(), claimed: true}
 	docs := &fakeDocuments{}

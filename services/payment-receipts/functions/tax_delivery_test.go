@@ -3,6 +3,7 @@ package functions
 import (
 	"bytes"
 	"context"
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
@@ -17,8 +18,10 @@ import (
 )
 
 type taxDeliveryDBFake struct {
-	items   map[string]map[string]any
-	updates int
+	items    map[string]map[string]any
+	updates  int
+	statuses []string
+	keys     []string
 }
 
 func (f *taxDeliveryDBFake) GetItem(_ context.Context, input *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
@@ -32,8 +35,14 @@ func (f *taxDeliveryDBFake) Query(context.Context, *dynamodb.QueryInput, ...func
 	return &dynamodb.QueryOutput{}, nil
 }
 
-func (f *taxDeliveryDBFake) UpdateItem(context.Context, *dynamodb.UpdateItemInput, ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
+func (f *taxDeliveryDBFake) UpdateItem(_ context.Context, input *dynamodb.UpdateItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
 	f.updates++
+	if pk, ok := input.Key["pk"].(*types.AttributeValueMemberS); ok {
+		f.keys = append(f.keys, pk.Value)
+	}
+	if status, ok := input.ExpressionAttributeValues[":status"].(*types.AttributeValueMemberS); ok {
+		f.statuses = append(f.statuses, status.Value)
+	}
 	return &dynamodb.UpdateItemOutput{}, nil
 }
 
@@ -51,12 +60,13 @@ func (f *taxDeliveryObjectsFake) HeadObject(context.Context, *s3.HeadObjectInput
 type taxDeliveryMailerFake struct {
 	to    string
 	sends int
+	err   error
 }
 
 func (f *taxDeliveryMailerFake) sendTax(_ context.Context, to string, _ int64, _ string, _ []byte) error {
 	f.to = to
 	f.sends++
-	return nil
+	return f.err
 }
 
 func TestRenderTaxDocumentCreatesPDFWithElectronicStamp(t *testing.T) {
@@ -146,8 +156,8 @@ func TestProcessTaxDeliveryUsesOptionalRequestEmail(t *testing.T) {
 	mailer := &taxDeliveryMailerFake{}
 	deps := taxDeliveryDependencies{db: db, table: "payments", objects: objects, bucket: "documents", mail: mailer, now: func() time.Time { return time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC) }}
 	err := processTaxDelivery(context.Background(), taxDeliveryJob{PK: "TAX_JOB#2026-11-04", SK: "PENDING#" + requestID, RequestID: requestID, Folio: 87}, deps)
-	if err != nil || objects.writes != 1 || mailer.sends != 1 || mailer.to != "receptor@example.test" || db.updates != 1 {
-		t.Fatalf("unexpected delivery: err=%v writes=%d sends=%d to=%q updates=%d", err, objects.writes, mailer.sends, mailer.to, db.updates)
+	if err != nil || objects.writes != 1 || mailer.sends != 1 || mailer.to != "receptor@example.test" || db.updates != 2 || len(db.statuses) != 2 || db.statuses[0] != "SMTP_ACCEPTED" || db.statuses[1] != "SMTP_ACCEPTED" {
+		t.Fatalf("unexpected delivery: err=%v writes=%d sends=%d to=%q updates=%d statuses=%v", err, objects.writes, mailer.sends, mailer.to, db.updates, db.statuses)
 	}
 }
 
@@ -161,8 +171,38 @@ func TestProcessTaxDeliverySkipsEmailWhenOptionalAddressIsEmpty(t *testing.T) {
 	mailer := &taxDeliveryMailerFake{}
 	deps := taxDeliveryDependencies{db: db, table: "payments", objects: objects, bucket: "documents", mail: mailer, now: time.Now}
 	err := processTaxDelivery(context.Background(), taxDeliveryJob{PK: "TAX_JOB#2026-11-04", SK: "PENDING#" + requestID, RequestID: requestID, Folio: 87}, deps)
-	if err != nil || mailer.sends != 0 || db.updates != 1 {
-		t.Fatalf("unexpected empty-email delivery: err=%v sends=%d updates=%d", err, mailer.sends, db.updates)
+	if err != nil || mailer.sends != 0 || db.updates != 2 || len(db.statuses) != 2 || db.statuses[0] != "DOCUMENT_READY_NO_RECIPIENT" || db.statuses[1] != "DOCUMENT_READY_NO_RECIPIENT" {
+		t.Fatalf("unexpected empty-email delivery: err=%v sends=%d updates=%d statuses=%v", err, mailer.sends, db.updates, db.statuses)
+	}
+}
+
+func TestProcessTaxDeliveryRecordsSMTPFailureWithoutLosingDocument(t *testing.T) {
+	requestID := "01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	db := &taxDeliveryDBFake{items: map[string]map[string]any{
+		"TAX_PUBLIC#39#87/META":              {"publicTaxDocument": validTaxPublicDocument()},
+		"TAX_REQUEST#" + requestID + "/META": {"taxRequest": map[string]any{"deliveryEmail": "receptor@example.test"}},
+	}}
+	mailer := &taxDeliveryMailerFake{err: errors.New("smtp unavailable")}
+	deps := taxDeliveryDependencies{db: db, table: "payments", objects: &taxDeliveryObjectsFake{}, bucket: "documents", mail: mailer, now: time.Now}
+	err := processTaxDelivery(context.Background(), taxDeliveryJob{PK: "TAX_JOB#2026-11-04", SK: "PENDING#" + requestID, RequestID: requestID, Folio: 87}, deps)
+	if err == nil || mailer.sends != 1 || db.updates != 1 || len(db.statuses) != 1 || db.statuses[0] != "FAILED_RETRYING" || db.keys[0] != "TAX_REQUEST#"+requestID {
+		t.Fatalf("failure was not recorded safely: err=%v sends=%d updates=%d statuses=%v keys=%v", err, mailer.sends, db.updates, db.statuses, db.keys)
+	}
+}
+
+func TestProcessTaxDeliveryStopsAfterSMTPRetryLimit(t *testing.T) {
+	requestID := "01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	db := &taxDeliveryDBFake{items: map[string]map[string]any{
+		"TAX_PUBLIC#39#87/META": {"publicTaxDocument": validTaxPublicDocument()},
+		"TAX_REQUEST#" + requestID + "/META": {"taxRequest": map[string]any{
+			"deliveryEmail": "receptor@example.test", "deliveryAttempts": int64(4),
+		}},
+	}}
+	mailer := &taxDeliveryMailerFake{err: errors.New("smtp unavailable")}
+	deps := taxDeliveryDependencies{db: db, table: "payments", objects: &taxDeliveryObjectsFake{}, bucket: "documents", mail: mailer, now: time.Now}
+	err := processTaxDelivery(context.Background(), taxDeliveryJob{PK: "TAX_JOB#2026-11-04", SK: "PENDING#" + requestID, RequestID: requestID, Folio: 87}, deps)
+	if err == nil || len(db.statuses) != 1 || db.statuses[0] != "FAILED" {
+		t.Fatalf("retry limit was not recorded: err=%v statuses=%v", err, db.statuses)
 	}
 }
 

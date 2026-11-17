@@ -7,10 +7,11 @@ import (
 	"testing"
 	"time"
 
+	domain "ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
+
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	domain "ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
 )
 
 // transactionDB aplica las condiciones y todos los puts bajo el mismo bloqueo.
@@ -105,12 +106,19 @@ func (d *transactionDB) TransactWriteItems(ctx context.Context, in *dynamodb.Tra
 		}
 		if deletion := w.Delete; deletion != nil {
 			old := d.items[itemKey(deletion.Key)]
-			if deletion.ConditionExpression == nil || *deletion.ConditionExpression != "#status = :pending" || old == nil {
-				return nil, &types.TransactionCanceledException{}
+			if deletion.ConditionExpression == nil || old == nil {
+				return nil, errors.New("delete target missing or condition invalid")
+			}
+			expected := deletion.ExpressionAttributeValues[":pending"]
+			if *deletion.ConditionExpression == "#status = :submitted" {
+				expected = deletion.ExpressionAttributeValues[":submitted"]
+			} else if *deletion.ConditionExpression != "#status = :pending" {
+				return nil, errors.New("delete condition unsupported")
 			}
 			status, ok := old["status"].(*types.AttributeValueMemberS)
-			if !ok || status.Value != deletion.ExpressionAttributeValues[":pending"].(*types.AttributeValueMemberS).Value {
-				return nil, &types.TransactionCanceledException{}
+			expectedStatus, expectedOK := expected.(*types.AttributeValueMemberS)
+			if !ok || !expectedOK || status.Value != expectedStatus.Value {
+				return nil, errors.New("delete status mismatch")
 			}
 			continue
 		}
@@ -147,6 +155,19 @@ func (d *transactionDB) TransactWriteItems(ctx context.Context, in *dynamodb.Tra
 			}
 		case "#status = :pending":
 			if old == nil || old["status"].(*types.AttributeValueMemberS).Value != w.Put.ExpressionAttributeValues[":pending"].(*types.AttributeValueMemberS).Value {
+				return nil, &types.TransactionCanceledException{}
+			}
+		case "#status = :submitted":
+			if old == nil || old["status"].(*types.AttributeValueMemberS).Value != w.Put.ExpressionAttributeValues[":submitted"].(*types.AttributeValueMemberS).Value {
+				return nil, errors.New("submitted status mismatch")
+			}
+		case "#status = :previous":
+			if old == nil || old["status"].(*types.AttributeValueMemberS).Value != w.Put.ExpressionAttributeValues[":previous"].(*types.AttributeValueMemberS).Value {
+				return nil, &types.TransactionCanceledException{}
+			}
+		case "#status = :rejected AND attribute_not_exists(taxRequest.reissuedBy)":
+			var previous record
+			if old == nil || old["status"].(*types.AttributeValueMemberS).Value != w.Put.ExpressionAttributeValues[":rejected"].(*types.AttributeValueMemberS).Value || attributevalue.UnmarshalMap(old, &previous) != nil || previous.TaxRequest == nil || previous.TaxRequest.ReissuedBy != "" {
 				return nil, &types.TransactionCanceledException{}
 			}
 		case "attribute_not_exists(pk) OR #status = :failed":

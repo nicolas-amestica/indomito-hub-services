@@ -41,15 +41,15 @@ func buildReceiptModel(row receiptRow) (receiptModel, error) {
 		version = 1
 	}
 	_, dateErr := time.Parse(time.DateOnly, event.EffectiveDate)
-	if !allowed || !receiptIDPattern.MatchString(event.TripID) || (!group && !receiptIDPattern.MatchString(event.AccountID)) || event.Amount <= 0 || event.Amount > 1_000_000_000_000 || dateErr != nil || event.RecordedAt.IsZero() || (version != 1 && version != 2 && version != 3) {
+	if !allowed || !receiptIDPattern.MatchString(event.TripID) || (!group && !receiptIDPattern.MatchString(event.AccountID)) || event.Amount <= 0 || event.Amount > 1_000_000_000_000 || dateErr != nil || event.RecordedAt.IsZero() || version < 1 || version > 4 {
 		return receiptModel{}, errors.New("INVALID_RECEIPT")
 	}
 	name, document := strings.TrimSpace(row.PassengerName), strings.TrimSpace(row.PassengerDocument)
-	if version >= 2 && !group && (name == "" || document == "") {
+	if version >= 2 && version <= 3 && !group && (name == "" || document == "") {
 		return receiptModel{}, errors.New("INVALID_RECEIPT")
 	}
 	verificationURL := ""
-	if version == 3 {
+	if version >= 3 {
 		verificationURL = receiptVerificationURL()
 		if verificationURL == "" {
 			return receiptModel{}, errors.New("INVALID_RECEIPT_VERIFICATION_URL")
@@ -83,6 +83,8 @@ func renderReceipt(model receiptModel) (renderedDocument, error) {
 	label := "Cuenta del pasajero"
 	if model.GroupDeposit {
 		label, identity = "Alcance", "Grupo de pasajeros pagantes"
+	} else if model.Version >= 4 {
+		label, identity = "Cuenta del pasajero", "Terminada en "+model.AccountID[len(model.AccountID)-6:]
 	} else if model.Version >= 2 {
 		label, identity = "Pasajero", model.PassengerName+" · RUT "+model.PassengerDocument
 	}

@@ -10,22 +10,23 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"ind-hub-api-gox-sls-pri-gh/libs/lambdautil"
 	"ind-hub-api-gox-sls-pri-gh/libs/paymentaccess"
 	"ind-hub-api-gox-sls-pri-gh/libs/shared/apperr"
 	"ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
+
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
 // PublicApp consulta únicamente una participación; no comparte credenciales administrativas.
 type PublicApp struct {
-	Accounts      Service
-	LookupSecret  string
-	SessionSecret string
+	Accounts            Service
+	LookupSecret        string
+	SessionSecret       string
 	ConfigurationsTable string
 	// CheckoutEnabled se habilita únicamente desde configuración segura del backend.
 	// El valor cero mantiene el portal en modo consulta ante despliegues incompletos.
@@ -34,12 +35,16 @@ type PublicApp struct {
 }
 
 type publicLookupRequest struct {
-	RUT      string `json:"rut"`
-	TripCode string `json:"tripCode"`
+	RUT       string `json:"rut"`
+	TripCode  string `json:"tripCode"`
 	AccountID string `json:"accountId,omitempty"`
 }
 
-type MasterAccountOption struct { AccountID string `json:"accountId"`; TripID string `json:"tripId"`; Name string `json:"name"` }
+type MasterAccountOption struct {
+	AccountID string `json:"accountId"`
+	TripID    string `json:"tripId"`
+	Name      string `json:"name"`
+}
 
 // PublicInstallment excluye identidad, motivos internos de descuentos, banco y referencias de terceros.
 type PublicInstallment struct {
@@ -53,34 +58,79 @@ type PublicInstallment struct {
 
 // PublicAccount es una vista de consulta; esta etapa todavía no habilita checkout.
 type PublicAccount struct {
-	ReviewRequired   bool                `json:"reviewRequired"`
-	ReviewAttemptID  string              `json:"reviewAttemptId,omitempty"`
-	OpenAttemptID    string              `json:"openAttemptId,omitempty"`
-	Session          *PassengerSession   `json:"session,omitempty"`
-	Active           bool                `json:"active"`
-	Free             bool                `json:"free"`
-	CheckoutEnabled  bool                `json:"checkoutEnabled"`
-	RecaptchaSiteKey string              `json:"recaptchaSiteKey,omitempty"`
-	Installments     []PublicInstallment `json:"installments"`
-	Accounts        []MasterAccountOption `json:"accounts,omitempty"`
+	ReviewRequired   bool                  `json:"reviewRequired"`
+	ReviewAttemptID  string                `json:"reviewAttemptId,omitempty"`
+	OpenAttemptID    string                `json:"openAttemptId,omitempty"`
+	Session          *PassengerSession     `json:"session,omitempty"`
+	Active           bool                  `json:"active"`
+	Free             bool                  `json:"free"`
+	CheckoutEnabled  bool                  `json:"checkoutEnabled"`
+	RecaptchaSiteKey string                `json:"recaptchaSiteKey,omitempty"`
+	Installments     []PublicInstallment   `json:"installments"`
+	Accounts         []MasterAccountOption `json:"accounts,omitempty"`
 }
 
-type masterAccessConfig struct { Digest string `dynamodbav:"digest"`; Active bool `dynamodbav:"active"` }
+type masterAccessConfig struct {
+	Digest string `dynamodbav:"digest"`
+	Active bool   `dynamodbav:"active"`
+}
+
+func maskedPassengerName(value string) string {
+	parts := strings.Fields(value)
+	masked := make([]string, 0, len(parts))
+	for _, part := range parts {
+		runes := []rune(part)
+		if len(runes) == 0 {
+			continue
+		}
+		masked = append(masked, string(runes[0])+"•••")
+	}
+	if len(masked) == 0 {
+		return "Pasajero"
+	}
+	return strings.Join(masked, " ")
+}
 
 func (a PublicApp) masterOptions(ctx context.Context, code, rut string) ([]MasterAccountOption, error) {
 	code = strings.ToUpper(strings.TrimSpace(code))
-	if len(code) < 16 || len(code) > 64 || a.ConfigurationsTable == "" { return nil, ErrNotFound }
-	out, err := a.Accounts.DB.GetItem(ctx,&dynamodb.GetItemInput{TableName:aws.String(a.ConfigurationsTable),Key:key("CONFIGURATION","PAYMENT_MASTER_ACCESS"),ConsistentRead:aws.Bool(true)})
-	if err != nil || len(out.Item)==0 { return nil, ErrNotFound }
+	if len(code) < 16 || len(code) > 64 || a.ConfigurationsTable == "" {
+		return nil, ErrNotFound
+	}
+	out, err := a.Accounts.DB.GetItem(ctx, &dynamodb.GetItemInput{TableName: aws.String(a.ConfigurationsTable), Key: key("CONFIGURATION", "PAYMENT_MASTER_ACCESS"), ConsistentRead: aws.Bool(true)})
+	if err != nil || len(out.Item) == 0 {
+		return nil, ErrNotFound
+	}
 	var config masterAccessConfig
-	if attributevalue.UnmarshalMap(out.Item,&config)!=nil || !config.Active { return nil, ErrNotFound }
-	digest:=sha256.Sum256([]byte(code)); if config.Digest != hex.EncodeToString(digest[:]) { return nil, ErrNotFound }
-	rutKey,err:=paymentaccess.RUTKey(a.LookupSecret,rut);if err!=nil{return nil,ErrNotFound}
-	db,ok:=a.Accounts.DB.(queryDatabase);if !ok{return nil,errors.New("consulta no disponible")}
-	result,err:=db.Query(ctx,&dynamodb.QueryInput{TableName:&a.Accounts.Table,KeyConditionExpression:aws.String("pk = :pk AND begins_with(sk, :prefix)"),ExpressionAttributeValues:map[string]types.AttributeValue{":pk":&types.AttributeValueMemberS{Value:"ADMIN_"+rutKey},":prefix":&types.AttributeValueMemberS{Value:"ACCOUNT#"}},ConsistentRead:aws.Bool(true),Limit:aws.Int32(25)})
-	if err!=nil{return nil,err}
-	options:=make([]MasterAccountOption,0,len(result.Items));for _,raw:=range result.Items{var row record;if attributevalue.UnmarshalMap(raw,&row)==nil&&row.AccountID!=""&&row.TripID!=""{options=append(options,MasterAccountOption{AccountID:row.AccountID,TripID:row.TripID,Name:row.PassengerName})}}
-	if len(options)==0{return nil,ErrNotFound};return options,nil
+	if attributevalue.UnmarshalMap(out.Item, &config) != nil || !config.Active {
+		return nil, ErrNotFound
+	}
+	digest := sha256.Sum256([]byte(code))
+	if config.Digest != hex.EncodeToString(digest[:]) {
+		return nil, ErrNotFound
+	}
+	rutKey, err := paymentaccess.RUTKey(a.LookupSecret, rut)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	db, ok := a.Accounts.DB.(queryDatabase)
+	if !ok {
+		return nil, errors.New("consulta no disponible")
+	}
+	result, err := db.Query(ctx, &dynamodb.QueryInput{TableName: &a.Accounts.Table, KeyConditionExpression: aws.String("pk = :pk AND begins_with(sk, :prefix)"), ExpressionAttributeValues: map[string]types.AttributeValue{":pk": &types.AttributeValueMemberS{Value: "ADMIN_" + rutKey}, ":prefix": &types.AttributeValueMemberS{Value: "ACCOUNT#"}}, ConsistentRead: aws.Bool(true), Limit: aws.Int32(25)})
+	if err != nil {
+		return nil, err
+	}
+	options := make([]MasterAccountOption, 0, len(result.Items))
+	for _, raw := range result.Items {
+		var row record
+		if attributevalue.UnmarshalMap(raw, &row) == nil && row.AccountID != "" && row.TripID != "" {
+			options = append(options, MasterAccountOption{AccountID: row.AccountID, TripID: row.TripID, Name: maskedPassengerName(row.PassengerName)})
+		}
+	}
+	if len(options) == 0 {
+		return nil, ErrNotFound
+	}
+	return options, nil
 }
 
 func publicAccountView(account collection.Account, checkoutEnabled bool, recaptchaSiteKey ...string) PublicAccount {
@@ -215,9 +265,24 @@ func (a PublicApp) HandleLookup(ctx context.Context, req events.APIGatewayV2HTTP
 	var account collection.Account
 	masterOptions, masterErr := a.masterOptions(ctx, body.TripCode, body.RUT)
 	if masterErr == nil {
-		if body.AccountID == "" && len(masterOptions) > 1 { return lambdautil.SuccessResponseWithHeaders(200, PublicAccount{Accounts:masterOptions,Installments:[]PublicInstallment{}}, map[string]string{"cache-control":"no-store","referrer-policy":"no-referrer"}) }
-		selected:=body.AccountID;if selected==""{selected=masterOptions[0].AccountID};allowed:=false;for _,option:=range masterOptions{if option.AccountID==selected{allowed=true;break}};if !allowed{return lookupFailure(req,apperr.CodeResourceNotFound)}
-		account,err=a.Accounts.GetAccount(ctx,selected)
+		if body.AccountID == "" && len(masterOptions) > 1 {
+			return lambdautil.SuccessResponseWithHeaders(200, PublicAccount{Accounts: masterOptions, Installments: []PublicInstallment{}}, map[string]string{"cache-control": "no-store", "referrer-policy": "no-referrer"})
+		}
+		selected := body.AccountID
+		if selected == "" {
+			selected = masterOptions[0].AccountID
+		}
+		allowed := false
+		for _, option := range masterOptions {
+			if option.AccountID == selected {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return lookupFailure(req, apperr.CodeResourceNotFound)
+		}
+		account, err = a.Accounts.GetAccount(ctx, selected)
 	} else {
 		account, err = a.Resolve(ctx, body.TripCode, body.RUT)
 	}
@@ -232,7 +297,9 @@ func (a PublicApp) HandleLookup(ctx context.Context, req events.APIGatewayV2HTTP
 		codeKey, keyErr := paymentaccess.CodeKey(a.LookupSecret, body.TripCode)
 		if keyErr != nil {
 			approval, approvalErr := a.Accounts.read(ctx, "TRIP#"+account.TripID, "APPROVAL")
-			if approvalErr != nil || !passengerCodeKey.MatchString(approval.CodeKey) { return lookupFailure(req, apperr.CodeUpstreamServiceError) }
+			if approvalErr != nil || !passengerCodeKey.MatchString(approval.CodeKey) {
+				return lookupFailure(req, apperr.CodeUpstreamServiceError)
+			}
 			codeKey = approval.CodeKey
 		}
 		session, sessionErr := issuePassengerSession(a.SessionSecret, account.ID, account.TripID, codeKey, time.Now().UTC())

@@ -6,9 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-lambda-go/events"
 	domain "ind-hub-api-gox-sls-pri-gh/services/api-payment/domain/collection"
 	"ind-hub-api-gox-sls-pri-gh/services/api-payment/functions/sii"
+
+	"github.com/aws/aws-lambda-go/events"
 )
 
 type taxConfigFake struct{ credentials sii.Credentials }
@@ -94,6 +95,34 @@ func TestTaxDocumentWorkerStartsAtNewCAFRangeAfterRotation(t *testing.T) {
 	}
 	if len(issuer.folios) != 1 || issuer.folios[0] != 31 {
 		t.Fatalf("expected first folio 31 from rotated CAF, got %v", issuer.folios)
+	}
+}
+
+func TestTaxDocumentReissueLinksPublicFolios(t *testing.T) {
+	service, db := serviceFixture(t)
+	now := time.Date(2026, 11, 12, 12, 0, 0, 0, time.UTC)
+	originalID := paymentOperationID("original-tax")
+	replacementID := paymentOperationID("replacement-tax")
+	original := TaxDocumentRequest{RequestID: originalID, Status: taxStatusRejected, SIIIssuance: &SIIIssuance{Folio: 11}, ReissuedBy: replacementID}
+	replacement := TaxDocumentRequest{RequestID: replacementID, Status: taxStatusIssuing, RequestedAt: now.Add(-time.Minute), ReissuesRequest: originalID, SIIIssuance: &SIIIssuance{Folio: 22}}
+	queueSK := replacement.RequestedAt.Format(time.RFC3339Nano) + "#" + replacementID
+	for _, row := range []record{
+		{PK: "TAX_REQUEST#" + originalID, SK: "META", TaxRequest: &original, Status: taxStatusRejected},
+		{PK: "TAX_PUBLIC#39#11", SK: "META", PublicTaxDocument: &PublicTaxDocument{Folio: 11, SIIStatus: "REJECTED", ReplacementPending: true}, Status: taxStatusRejected},
+		{PK: "TAX_REQUEST#" + replacementID, SK: "META", TaxRequest: &replacement, Status: taxStatusIssuing},
+		{PK: "TAX_QUEUE#PENDING", SK: queueSK, TaxRequest: &replacement, Status: taxStatusReady},
+	} {
+		saveLookupRow(t, db, row)
+	}
+	public := PublicTaxDocument{Folio: 22, IssueDate: "2026-11-12", TotalAmount: 20000, SIIStatus: "PENDING", IssuedByIndomito: true}
+	app := TaxDocumentWorkerApp{Accounts: service}
+	if err := app.recordSubmission(context.Background(), replacement, sii.Submission{TrackID: "track-22"}, public, now); err != nil {
+		t.Fatalf("record replacement: %v", err)
+	}
+	newProjection, _ := service.read(context.Background(), "TAX_PUBLIC#39#22", "META")
+	oldProjection, _ := service.read(context.Background(), "TAX_PUBLIC#39#11", "META")
+	if newProjection.PublicTaxDocument == nil || newProjection.PublicTaxDocument.OriginalFolio != 11 || oldProjection.PublicTaxDocument == nil || oldProjection.PublicTaxDocument.ReplacementFolio != 22 || oldProjection.PublicTaxDocument.ReplacementPending {
+		t.Fatalf("public folio chain missing: original=%+v replacement=%+v", oldProjection.PublicTaxDocument, newProjection.PublicTaxDocument)
 	}
 }
 

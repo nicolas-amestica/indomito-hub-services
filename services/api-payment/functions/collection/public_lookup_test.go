@@ -10,10 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"ind-hub-api-gox-sls-pri-gh/libs/paymentaccess"
+
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"ind-hub-api-gox-sls-pri-gh/libs/paymentaccess"
 )
 
 func lookupFixture(t *testing.T) (PublicApp, *transactionDB) {
@@ -43,6 +44,16 @@ func saveLookupRow(t *testing.T, db *transactionDB, row record) {
 }
 func lookupRequest(body string) events.APIGatewayV2HTTPRequest {
 	return events.APIGatewayV2HTTPRequest{Body: body, RequestContext: events.APIGatewayV2HTTPRequestContext{HTTP: events.APIGatewayV2HTTPRequestContextHTTPDescription{Method: "POST", SourceIP: "192.0.2.1"}}}
+}
+
+func TestMaskedPassengerNameDoesNotExposeFullIdentity(t *testing.T) {
+	masked := maskedPassengerName("María José Pérez Soto")
+	if masked != "M••• J••• P••• S•••" || strings.Contains(masked, "María") || strings.Contains(masked, "Pérez") {
+		t.Fatalf("unexpected masked name: %q", masked)
+	}
+	if maskedPassengerName("  ") != "Pasajero" {
+		t.Fatal("empty names must use a neutral label")
+	}
 }
 
 func TestPublicLookupOnlyExposesInstallments(t *testing.T) {
