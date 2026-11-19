@@ -1,0 +1,27 @@
+{
+  "name": "api-analytics",
+  "localPort": 8098,
+  "localEntrypoint": "./cmd/local-api",
+  "defaultArtifactDir": ".serverless-artifacts",
+  "requiredEnvironment": [
+    "APP_NAME",
+    "APP_STAGE",
+    "APP_REGION",
+    "PROGRAMS_TABLE_NAME",
+    "PAYMENTS_TABLE_NAME"
+  ],
+  "functions": [
+    {
+      "name": "fn-listar-balance-v1",
+      "entrypoint": "./cmd/fn-listar-balance-v1"
+    },
+    {
+      "name": "fn-obtener-balance-v1",
+      "entrypoint": "./cmd/fn-obtener-balance-v1"
+    },
+    {
+      "name": "fn-guardar-balance-v1",
+      "entrypoint": "./cmd/fn-guardar-balance-v1"
+    }
+  ]
+}

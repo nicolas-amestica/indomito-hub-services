@@ -1,0 +1,5 @@
+{
+  "code": "CONFLICT",
+  "message": "No fue posible completar la operación de analítica.",
+  "traceId": "request-id-de-ejemplo"
+}

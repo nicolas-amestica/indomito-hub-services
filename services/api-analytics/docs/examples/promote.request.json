@@ -1,0 +1,8 @@
+{
+  "commandId": "01J00000000000000000000001",
+  "version": 1,
+  "action": "PROMOTE",
+  "scenarioId": "01J00000000000000000000000",
+  "reason": "Ejemplo ficticio de creación manual",
+  "budget": null
+}

@@ -1,0 +1,1088 @@
+{
+  "paths": {
+    "/analitica/giras": {
+      "get": {
+        "summary": "Catálogo completo de viajes aprobados del período documental, paginado",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Envelope con datos, no-store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/AnalyticsRow"
+                          }
+                        },
+                        "nextCursor": {
+                          "type": "string"
+                        },
+                        "from": {
+                          "type": "string",
+                          "format": "date"
+                        },
+                        "to": {
+                          "type": "string",
+                          "format": "date"
+                        },
+                        "asOf": {
+                          "type": "string",
+                          "format": "date"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrada inválida"
+          },
+          "401": {
+            "description": "Sesión requerida"
+          },
+          "403": {
+            "description": "Permiso de analítica requerido"
+          },
+          "404": {
+            "description": "Viaje no encontrado"
+          },
+          "409": {
+            "description": "Versión o comando en conflicto"
+          },
+          "502": {
+            "description": "Dependencia no disponible. No interpretar como cero; reintentar con el mismo comando y versión si una escritura tuvo respuesta incierta."
+          }
+        },
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^20[0-9]{2}$"
+            },
+            "description": "Período documental, independiente del año de salida."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 1500
+            },
+            "description": "Cursor opaco nextCursor de la página anterior. Procesar hasta que sea vacío."
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Fecha civil, rango máximo de 12 meses. Por defecto inicio del año y hoy en America/Santiago."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Fecha civil, rango máximo de 12 meses. Por defecto inicio del año y hoy en America/Santiago."
+          }
+        ],
+        "operationId": "listTripBalances",
+        "tags": [
+          "Analítica"
+        ],
+        "description": "Página de hasta cinco contratos; procesa nextCursor hasta vacío. La respuesta excluye el contenido de escenarios alternativos, disponible bajo demanda en detalle. Los vencimientos y cobros se agrupan por fecha y los movimientos bancarios por día."
+      }
+    },
+    "/analitica/giras/{id-viaje}": {
+      "get": {
+        "summary": "Presupuesto, revisiones y posición operativa agregada",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Envelope con datos, no-store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "row": {
+                          "$ref": "#/components/schemas/AnalyticsRow"
+                        },
+                        "revisions": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/AnalyticsRevision"
+                          }
+                        },
+                        "from": {
+                          "type": "string",
+                          "format": "date"
+                        },
+                        "to": {
+                          "type": "string",
+                          "format": "date"
+                        },
+                        "asOf": {
+                          "type": "string",
+                          "format": "date"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrada inválida"
+          },
+          "401": {
+            "description": "Sesión requerida"
+          },
+          "403": {
+            "description": "Permiso de analítica requerido"
+          },
+          "404": {
+            "description": "Viaje no encontrado"
+          },
+          "409": {
+            "description": "Versión o comando en conflicto"
+          },
+          "502": {
+            "description": "Dependencia no disponible. No interpretar como cero; reintentar con el mismo comando y versión si una escritura tuvo respuesta incierta."
+          }
+        },
+        "parameters": [
+          {
+            "name": "id-viaje",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Fecha civil, rango máximo de 12 meses. Por defecto inicio del año y hoy en America/Santiago."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Fecha civil, rango máximo de 12 meses. Por defecto inicio del año y hoy en America/Santiago."
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Revisión histórica; devuelve presupuesto histórico con posición operativa actual claramente separada."
+          }
+        ],
+        "operationId": "getTripBalance",
+        "tags": [
+          "Analítica"
+        ]
+      }
+    },
+    "/analitica/giras/{id-viaje}/presupuesto": {
+      "put": {
+        "summary": "Guarda borrador, escenario, aprobación o promoción versionada",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Envelope con datos, no-store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AnalyticsState"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrada inválida"
+          },
+          "401": {
+            "description": "Sesión requerida"
+          },
+          "403": {
+            "description": "Permiso de analítica requerido"
+          },
+          "404": {
+            "description": "Viaje no encontrado"
+          },
+          "409": {
+            "description": "Versión o comando en conflicto"
+          },
+          "502": {
+            "description": "Dependencia no disponible. No interpretar como cero; reintentar con el mismo comando y versión si una escritura tuvo respuesta incierta."
+          }
+        },
+        "parameters": [
+          {
+            "name": "id-viaje",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyticsCommand"
+              }
+            }
+          }
+        },
+        "operationId": "saveTripBudget",
+        "tags": [
+          "Analítica"
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnalyticsCategory": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "AnalyticsAllocation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "supplierId",
+          "amount"
+        ],
+        "properties": {
+          "supplierId": {
+            "type": "string",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+          },
+          "amount": {
+            "type": "number"
+          }
+        }
+      },
+      "AnalyticsTier": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "from",
+          "unitPrice"
+        ],
+        "properties": {
+          "from": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "unitPrice": {
+            "type": "number"
+          }
+        }
+      },
+      "AnalyticsLine": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "description",
+          "categoryId",
+          "supplierId",
+          "chargeType",
+          "basis",
+          "quantity",
+          "unitPrice",
+          "currency",
+          "rate",
+          "rateSource",
+          "rateDate",
+          "buffer",
+          "days",
+          "nights",
+          "minimum",
+          "capacity",
+          "included",
+          "state",
+          "note",
+          "tiers",
+          "allocations"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 250
+          },
+          "categoryId": {
+            "type": "string"
+          },
+          "supplierId": {
+            "type": "string"
+          },
+          "chargeType": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "per_passenger",
+              "per_passenger_night",
+              "per_day",
+              "per_passenger_day",
+              "crew"
+            ]
+          },
+          "basis": {
+            "type": "string",
+            "enum": [
+              "total",
+              "paying",
+              "free",
+              "participants",
+              "units"
+            ]
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "unitPrice": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000.0
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "CLP",
+              "USD",
+              "BRL"
+            ]
+          },
+          "rate": {
+            "type": "number",
+            "exclusiveMinimum": true,
+            "minimum": 0,
+            "maximum": 1000000.0
+          },
+          "rateSource": {
+            "type": "string"
+          },
+          "rateDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "buffer": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000.0
+          },
+          "days": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 365
+          },
+          "nights": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 365
+          },
+          "minimum": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "capacity": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "included": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "estimated",
+              "quoted",
+              "committed",
+              "confirmed"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "tiers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsTier"
+            },
+            "maxItems": 30
+          },
+          "allocations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsAllocation"
+            },
+            "maxItems": 30
+          },
+          "providerName": {
+            "type": "string",
+            "maxLength": 150,
+            "description": "Proveedor cotizado opcional. No define categorías ni crea compromisos."
+          }
+        }
+      },
+      "AnalyticsFlow": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "date",
+          "description",
+          "amount"
+        ],
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "AnalyticsSource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "id",
+          "version",
+          "date"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "contract",
+              "quotation"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          }
+        }
+      },
+      "AnalyticsTaxes": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "vatRate",
+          "crewWithholdingRate",
+          "source",
+          "costBasis"
+        ],
+        "properties": {
+          "vatRate": {
+            "type": "number"
+          },
+          "crewWithholdingRate": {
+            "type": "number"
+          },
+          "source": {
+            "type": "string"
+          },
+          "costBasis": {
+            "type": "string",
+            "enum": [
+              "net"
+            ]
+          }
+        }
+      },
+      "AnalyticsBudget": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "totalPassengers",
+          "freePassengers",
+          "days",
+          "nights",
+          "pricePerPayer",
+          "discount",
+          "contingency",
+          "targetMode",
+          "target",
+          "source",
+          "taxes",
+          "categories",
+          "lines",
+          "flows",
+          "forecastComplete"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "totalPassengers": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "freePassengers": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 999
+          },
+          "days": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "maximum": 365
+          },
+          "nights": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 365
+          },
+          "pricePerPayer": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "discount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "contingency": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "targetMode": {
+            "type": "string",
+            "enum": [
+              "amount",
+              "margin"
+            ]
+          },
+          "target": {
+            "type": "number"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AnalyticsSource"
+          },
+          "taxes": {
+            "$ref": "#/components/schemas/AnalyticsTaxes"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsCategory"
+            },
+            "minItems": 1,
+            "maxItems": 40
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsLine"
+            },
+            "maxItems": 120
+          },
+          "flows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsFlow"
+            },
+            "maxItems": 240
+          },
+          "forecastComplete": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AnalyticsAudit": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "actor",
+          "at",
+          "reason",
+          "action"
+        ],
+        "properties": {
+          "actor": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          }
+        }
+      },
+      "AnalyticsState": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "current",
+          "baseline",
+          "scenarios",
+          "audit"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "current": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AnalyticsBudget"
+              }
+            ],
+            "nullable": true
+          },
+          "baseline": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AnalyticsBudget"
+              }
+            ],
+            "nullable": true
+          },
+          "scenarios": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/AnalyticsBudget"
+            }
+          },
+          "audit": {
+            "$ref": "#/components/schemas/AnalyticsAudit"
+          }
+        }
+      },
+      "AnalyticsCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "commandId",
+          "version",
+          "action",
+          "scenarioId",
+          "reason",
+          "budget"
+        ],
+        "properties": {
+          "commandId": {
+            "type": "string",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "SAVE",
+              "SCENARIO",
+              "APPROVE",
+              "PROMOTE"
+            ]
+          },
+          "scenarioId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 500
+          },
+          "budget": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AnalyticsBudget"
+              }
+            ],
+            "nullable": true
+          }
+        },
+        "description": "version compara la revisión vigente; commandId se reutiliza solo para reintentar la misma intención. APPROVE/PROMOTE requieren confirmación explícita. PUT no modifica operaciones de pagos."
+      },
+      "AnalyticsRevision": {
+        "type": "object",
+        "required": [
+          "version",
+          "audit"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer"
+          },
+          "audit": {
+            "$ref": "#/components/schemas/AnalyticsAudit"
+          }
+        }
+      },
+      "AnalyticsTrip": {
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "status",
+          "institutionName",
+          "destination",
+          "period",
+          "content",
+          "rosterCount",
+          "quantityConsistent"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "institutionName": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string"
+          },
+          "period": {
+            "type": "string"
+          },
+          "rosterCount": {
+            "type": "integer"
+          },
+          "quantityConsistent": {
+            "type": "boolean"
+          },
+          "content": {
+            "type": "object",
+            "description": "Datos mínimos: institution.course, trip.departureDate/days/nights y payments.totalPassengers (PAGANTES), freePassengers, totalGroup y pricePerPerson. No incluye nómina ni RUT."
+          },
+          "programReference": {
+            "type": "object",
+            "nullable": true,
+            "description": "Snapshot histórico de cotización aprobado; solo en detalle, nunca en listado."
+          }
+        }
+      },
+      "AnalyticsFinance": {
+        "type": "object",
+        "nullable": true,
+        "description": "Posición ACTUAL y movimientos del rango. null si no hay puesta en marcha o falló una consulta; issue explica el alcance. Opening/closing son caja registrada, no saldos bancarios históricos importados.",
+        "properties": {
+          "position": {
+            "type": "object",
+            "properties": {
+              "receivable": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "depositReceivable": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "installmentReceivable": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "appliedReceipts": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "unappliedReceipts": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "discounts": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "cancelled": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "refundPayable": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "refunded": {
+                "type": "integer",
+                "format": "int64"
+              }
+            }
+          },
+          "overdue": {
+            "type": "integer"
+          },
+          "aging": {
+            "type": "array",
+            "minItems": 4,
+            "maxItems": 4,
+            "items": {
+              "type": "integer"
+            }
+          },
+          "suppliers": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "scheduled": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "original": {
+                  "type": "integer"
+                },
+                "pending": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "receiptHistory": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "amount": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "historyComplete": {
+            "type": "boolean"
+          },
+          "opening": {
+            "type": "integer"
+          },
+          "closing": {
+            "type": "integer"
+          },
+          "inflows": {
+            "type": "integer"
+          },
+          "outflows": {
+            "type": "integer"
+          },
+          "actualFees": {
+            "type": "integer"
+          },
+          "activePassengers": {
+            "type": "integer"
+          },
+          "freePassengers": {
+            "type": "integer"
+          },
+          "contractedSale": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Posición contractual operativa vigente: cobros aplicados + cuentas por cobrar − devoluciones aprobadas por bajas. No ingreso contable ni caja."
+          },
+          "cashDays": {
+            "type": "array",
+            "description": "Totales bancarios diarios, calculados en servidor sin entregar cuentas ni eventos personales. El neto no equivale a utilidad.",
+            "items": {
+              "type": "object",
+              "required": [
+                "date",
+                "inflows",
+                "outflows"
+              ],
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "inflows": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "outflows": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      },
+      "AnalyticsRow": {
+        "type": "object",
+        "required": [
+          "trip",
+          "state",
+          "finance",
+          "issue"
+        ],
+        "properties": {
+          "trip": {
+            "$ref": "#/components/schemas/AnalyticsTrip"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AnalyticsState"
+          },
+          "finance": {
+            "$ref": "#/components/schemas/AnalyticsFinance"
+          },
+          "issue": {
+            "type": "string"
+          },
+          "financeStatus": {
+            "type": "string",
+            "enum": [
+              "AVAILABLE",
+              "NOT_ENABLED",
+              "UNAVAILABLE"
+            ]
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}

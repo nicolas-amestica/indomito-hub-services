@@ -1,0 +1,65 @@
+{
+  "commandId": "01J00000000000000000000000",
+  "version": 0,
+  "action": "SAVE",
+  "scenarioId": "",
+  "reason": "Ejemplo ficticio de creación manual",
+  "budget": {
+    "name": "DATOS FICTICIOS — presupuesto manual",
+    "totalPassengers": 32,
+    "freePassengers": 2,
+    "days": 5,
+    "nights": 3,
+    "pricePerPayer": 119000,
+    "discount": 0,
+    "contingency": 5,
+    "targetMode": "margin",
+    "target": 20,
+    "source": {
+      "kind": "manual",
+      "id": "01J00000000000000000000000",
+      "version": "1",
+      "date": "2026-11-18"
+    },
+    "taxes": {
+      "vatRate": 19,
+      "crewWithholdingRate": 15.25,
+      "source": "Parámetros ficticios del ejemplo, no configuración vigente",
+      "costBasis": "net"
+    },
+    "categories": [
+      {
+        "id": "01J00000000000000000000000",
+        "name": "Transporte"
+      }
+    ],
+    "lines": [
+      {
+        "id": "01J00000000000000000000000",
+        "description": "Bus de ejemplo ficticio",
+        "categoryId": "01J00000000000000000000000",
+        "supplierId": "",
+        "chargeType": "fixed",
+        "basis": "total",
+        "quantity": 1,
+        "unitPrice": 700000,
+        "currency": "CLP",
+        "rate": 1,
+        "rateSource": "CLP sin conversión",
+        "rateDate": "2026-11-18",
+        "buffer": 0,
+        "days": 5,
+        "nights": 0,
+        "minimum": 0,
+        "capacity": 0,
+        "included": true,
+        "state": "estimated",
+        "note": "Ejemplo, no datos reales",
+        "tiers": [],
+        "allocations": []
+      }
+    ],
+    "flows": [],
+    "forecastComplete": false
+  }
+}
