@@ -128,7 +128,7 @@ func TestPortalReviewBlocksNewCheckoutAndExistingLink(t *testing.T) {
 }
 
 func TestPortalRejectsClientAmountsAndUnauthorizedAccess(t *testing.T) {
-	for _, scenario := range []string{"amount", "account", "email", "captcha", "key", "unsigned", "revoked"} {
+	for _, scenario := range []string{"amount", "account", "email", "incompleteDomain", "captcha", "key", "unsigned", "revoked"} {
 		t.Run(scenario, func(t *testing.T) {
 			a, db, gateway, req := portalFixture(t)
 			switch scenario {
@@ -136,6 +136,8 @@ func TestPortalRejectsClientAmountsAndUnauthorizedAccess(t *testing.T) {
 				req.Body = `{"email":"receipt@example.com","amount":1}`
 			case "account":
 				req.Body = `{"email":"receipt@example.com","accountId":"other"}`
+			case "incompleteDomain":
+				req.Body = `{"email":"ana.perez@gmail","recaptchaToken":"synthetic-recaptcha-token-for-test"}`
 			case "email":
 				req.Body = `{"email":"invalid"}`
 			case "captcha":

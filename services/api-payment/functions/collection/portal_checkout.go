@@ -80,7 +80,8 @@ func (a PortalApp) HandleCheckout(ctx context.Context, req events.APIGatewayV2HT
 		return portalFailure(400)
 	}
 	address, err := mail.ParseAddress(body.Email)
-	if err != nil || address.Address != body.Email || len(body.Email) > 254 {
+	_, domainPart, _ := strings.Cut(body.Email, "@")
+	if err != nil || address.Address != body.Email || len(body.Email) > 254 || !strings.Contains(domainPart, ".") {
 		return portalFailure(400)
 	}
 	requestID := ""
