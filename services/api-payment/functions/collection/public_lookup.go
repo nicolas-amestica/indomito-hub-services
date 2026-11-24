@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"math"
 	"net/netip"
 	"strconv"
 	"strings"
@@ -97,7 +99,10 @@ func (a PublicApp) masterOptions(ctx context.Context, code, rut string) ([]Maste
 		return nil, ErrNotFound
 	}
 	out, err := a.Accounts.DB.GetItem(ctx, &dynamodb.GetItemInput{TableName: aws.String(a.ConfigurationsTable), Key: key("CONFIGURATION", "PAYMENT_MASTER_ACCESS"), ConsistentRead: aws.Bool(true)})
-	if err != nil || len(out.Item) == 0 {
+	if err != nil {
+		return nil, err
+	}
+	if len(out.Item) == 0 {
 		return nil, ErrNotFound
 	}
 	var config masterAccessConfig
@@ -262,7 +267,96 @@ func (a PublicApp) HandleLookup(ctx context.Context, req events.APIGatewayV2HTTP
 	if err = a.consumeAttempt(ctx, "lookup-pair:v1", identity, 5, time.Now().UTC()); err != nil {
 		return lookupFailure(req, apperr.CodeForbidden)
 	}
+	if _, err := paymentaccess.RUTKey(a.LookupSecret, body.RUT); err != nil {
+		return lookupFailure(req, apperr.CodeResourceNotFound)
+	}
+	rut := strings.SplitN(identity, ":", 2)[0]
+	digest, err := paymentaccess.Digest(a.LookupSecret, "lookup-rut:v1", rut)
+	if err != nil {
+		return lookupFailure(req, apperr.CodeUpstreamServiceError)
+	}
+	return a.lookupWithCooldown(ctx, req, body, "RATE#"+digest)
+}
+
+func (a PublicApp) lookupWithCooldown(ctx context.Context, req events.APIGatewayV2HTTPRequest, body publicLookupRequest, pk string) (events.APIGatewayV2HTTPResponse, error) {
+	const sk = "LOOKUP_FAILURES"
+	var response events.APIGatewayV2HTTPResponse
+	for retry := 0; retry < 5; retry++ {
+		row, err := a.Accounts.read(ctx, pk, sk)
+		missing := errors.Is(err, ErrNotFound)
+		if err != nil && !missing {
+			break
+		}
+		now := time.Now()
+		if row.RetryNotBefore > now.UnixMilli() {
+			return lookupCooldown(req, row.RetryNotBefore, now)
+		}
+		if response.StatusCode == 0 {
+			response, err = a.resolveLookup(ctx, req, body)
+			if err != nil || (response.StatusCode != 200 && response.StatusCode != 404) {
+				return response, err
+			}
+		}
+		now = time.Now()
+		active := row.ExpiresAt > now.Unix()
+		if response.StatusCode == 200 && !active {
+			return response, nil
+		}
+		condition := "attribute_not_exists(pk)"
+		var values map[string]types.AttributeValue
+		if !missing {
+			condition = "#version = :previous"
+			values = versionValue(row.Version)
+		}
+		next := record{PK: pk, SK: sk, Version: row.Version + 1, ExpiresAt: now.Unix()}
+		if response.StatusCode == 404 {
+			if active {
+				next.Count = row.Count
+			}
+			next.Count++
+			next.ExpiresAt = now.Add(15 * time.Minute).Unix()
+			switch {
+			case next.Count == 3:
+				next.RetryNotBefore = now.Add(time.Minute).UnixMilli()
+			case next.Count >= 4:
+				next.RetryNotBefore = now.Add(5 * time.Minute).UnixMilli()
+			}
+		}
+		write, err := a.Accounts.put(next, condition, values)
+		if err != nil {
+			break
+		}
+		_, err = a.Accounts.DB.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{write}})
+		if err == nil {
+			if next.RetryNotBefore > 0 {
+				return lookupCooldown(req, next.RetryNotBefore, now)
+			}
+			return response, nil
+		}
+		var conflict *types.TransactionCanceledException
+		if !errors.As(err, &conflict) {
+			break
+		}
+	}
+	return lookupFailure(req, apperr.CodeUpstreamServiceError)
+}
+
+func lookupCooldown(req events.APIGatewayV2HTTPRequest, until int64, now time.Time) (events.APIGatewayV2HTTPResponse, error) {
+	seconds := int(math.Ceil(float64(until-now.UnixMilli()) / 1000))
+	response, err := lookupFailure(req, apperr.CodeForbidden)
+	body, marshalErr := json.Marshal(map[string]int{"retryAfterSeconds": seconds})
+	if marshalErr != nil || err != nil {
+		return response, errors.Join(err, marshalErr)
+	}
+	response.StatusCode = 429
+	response.Headers["Retry-After"] = strconv.Itoa(seconds)
+	response.Body = string(body)
+	return response, nil
+}
+
+func (a PublicApp) resolveLookup(ctx context.Context, req events.APIGatewayV2HTTPRequest, body publicLookupRequest) (events.APIGatewayV2HTTPResponse, error) {
 	var account collection.Account
+	var err error
 	masterOptions, masterErr := a.masterOptions(ctx, body.TripCode, body.RUT)
 	if masterErr == nil {
 		if body.AccountID == "" && len(masterOptions) > 1 {
@@ -283,8 +377,10 @@ func (a PublicApp) HandleLookup(ctx context.Context, req events.APIGatewayV2HTTP
 			return lookupFailure(req, apperr.CodeResourceNotFound)
 		}
 		account, err = a.Accounts.GetAccount(ctx, selected)
-	} else {
+	} else if errors.Is(masterErr, ErrNotFound) {
 		account, err = a.Resolve(ctx, body.TripCode, body.RUT)
+	} else {
+		return lookupFailure(req, apperr.CodeUpstreamServiceError)
 	}
 	if err != nil {
 		if !errors.Is(err, ErrNotFound) {

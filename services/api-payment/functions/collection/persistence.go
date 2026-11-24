@@ -97,6 +97,7 @@ type record struct {
 	TripID               string                         `dynamodbav:"tripId,omitempty"`
 	AccountID            string                         `dynamodbav:"accountId,omitempty"`
 	Count                int64                          `dynamodbav:"count,omitempty"`
+	RetryNotBefore       int64                          `dynamodbav:"retryNotBefore,omitempty"`
 	ExpiresAt            int64                          `dynamodbav:"expiresAt,omitempty"`
 	Startup              *collection.Startup            `dynamodbav:"startup,omitempty"`
 	PK                   string                         `dynamodbav:"pk"`

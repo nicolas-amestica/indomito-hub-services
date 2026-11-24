@@ -270,3 +270,35 @@ func TestIPv6NetworkAndMissingSourceIP(t *testing.T) {
 		t.Fatal("trusted attacker-controlled forwarded IP")
 	}
 }
+
+func TestPublicLookupCooldownAcrossNetworks(t *testing.T) {
+	app, db := lookupFixture(t)
+	ctx := context.Background()
+	for i, code := range []string{"ZZ23CD", "ZY23CD", "ZX23CD", "AB23CD"} {
+		req := lookupRequest(`{"rut":"12.345.678-5","tripCode":"` + code + `"}`)
+		req.RequestContext.HTTP.SourceIP = "192.0.2." + string(rune('1'+i))
+		response, err := app.HandleLookup(ctx, req)
+		want := 404
+		if i >= 2 {
+			want = 429
+		}
+		if err != nil || response.StatusCode != want {
+			t.Fatalf("lookup %d: got %d, want %d, err=%v", i+1, response.StatusCode, want, err)
+		}
+	}
+	digest, err := paymentaccess.Digest(app.LookupSecret, "lookup-rut:v1", "123456785")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pk := "RATE#" + digest
+	row, err := app.Accounts.read(ctx, pk, "LOOKUP_FAILURES")
+	if err != nil || row.Count != 3 || row.ExpiresAt <= time.Now().Unix() {
+		t.Fatalf("unexpected counter after blocked request: %+v, %v", row, err)
+	}
+	row.RetryNotBefore = time.Now().Add(-time.Second).UnixMilli()
+	saveLookupRow(t, db, row)
+	response, err := app.HandleLookup(ctx, lookupRequest(`{"rut":"12345678-5","tripCode":"ZW23CD"}`))
+	if err != nil || response.StatusCode != 429 || response.Headers["Retry-After"] != "300" {
+		t.Fatalf("fourth failure: status=%d headers=%v err=%v", response.StatusCode, response.Headers, err)
+	}
+}
